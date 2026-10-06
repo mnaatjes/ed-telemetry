@@ -148,38 +148,74 @@ packages/
 
 ---
 
-## 5. Automated CI Verification Pipeline Specification
+## 5. Verification Architecture & Automated Pipeline Specification
 
-Continuous Integration (`.github/workflows/ci.yml`) executes four discrete quality gates across Ubuntu and Windows:
+Verification is architected as a two-tier quality control system: **Tier 1 (Shift-Left Pre-Commit Git Hooks)** for instant feedback during local development, and **Tier 2 (Continuous Integration Quality Gates)** for authoritative multi-platform verification in GitHub Actions.
 
 ```mermaid
-flowchart LR
-    G1["Gate 1: Ruff<br/>(Lint & Format)"] --> G2["Gate 2: Import-Linter<br/>(Boundary Contracts)"]
-    G2 --> G3["Gate 3: Mypy<br/>(Strict Types)"]
-    G3 --> G4["Gate 4: Pytest<br/>(Headless Harness)"]
+flowchart TD
+    subgraph Tier1["Tier 1: Local Developer Environment (pre-commit)"]
+        direction LR
+        P1["File Hygiene<br/>(Whitespace, EOF, YAML/TOML)"] --> P2["Ruff Check<br/>(--fix)"]
+        P2 --> P3["Ruff Format<br/>(AST Reformat)"]
+    end
+
+    subgraph Tier2["Tier 2: GitHub Actions CI (Authoritative Gates)"]
+        direction LR
+        G1["Gate 1: Ruff<br/>(Lint & Format Check)"] --> G2["Gate 2: Mypy<br/>(Strict Static Types)"]
+        G2 --> G3["Gate 3: Import-Linter<br/>(Boundary Invariants)"]
+        G3 --> G4["Gate 4: Pytest & Smoke<br/>(Headless Harness)"]
+    end
+
+    Tier1 -.->|git push| Tier2
 ```
 
-### 5.1 Gate 1: Ruff Lint & Format
-* Command: `ruff check . && ruff format --check .`
-* Rules: Enforces PEP 8, import sorting (`I001`), bug detection (`B`), and modern Python 3.11+ idioms across the entire repository.
+### 5.1 Tier 1: Local `pre-commit` Hooks Specification
 
-### 5.2 Gate 2: Architectural Boundary Verification (`import-linter`)
+`pre-commit` executes sub-second validation prior to git commit creation, ensuring that no unformatted code or syntax errors enter the git tree:
+
+* **Configuration Target:** `.pre-commit-config.yaml` at repository root.
+* **Included Hooks:**
+  1. `pre-commit-hooks`: `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-toml`, `check-added-large-files`.
+  2. `ruff-pre-commit`:
+     - `ruff` (with `--fix` to automatically correct fixable lint violations).
+     - `ruff-format` (to reformat Python source files).
+* **Installation & Invocation:**
+  - Setup: `pip install -e .[dev] && pre-commit install`
+  - Manual execution across all files: `pre-commit run --all-files`
+* **Exclusions from Pre-Commit:** `mypy`, `import-linter`, and `pytest` are intentionally excluded from `pre-commit` to prevent local commit latency. For instructions on executing these slower checks locally prior to push, consult the Diátaxis guide: [`docs/how-to/verify_architecture_and_test_locally.md`](../../docs/how-to/verify_architecture_and_test_locally.md).
+
+### 5.2 Tier 2: Continuous Integration Gates (`.github/workflows/ci.yml`)
+
+The CI workflow executes four discrete quality gates across Ubuntu runners (and Windows test matricies):
+
+#### 5.2.1 Gate 1: Ruff Lint & Format Verification
+* Commands:
+  - `ruff check packages tests`
+  - `ruff format --check packages tests`
+* Rules: Enforces PEP 8, import sorting (`I001`), bug detection (`B`), and modern Python 3.11+ idioms across the monorepo.
+
+#### 5.2.2 Gate 2: Mypy Static Type Analysis
+* Command: `mypy`
+* Configuration (`pyproject.toml`):
+  - `packages = ["ed_domain", "ed_watcher", "ed_egress", "ed_sdk", "ed_app"]`
+  - `strict = true`, `warn_return_any = true`, `warn_unused_configs = true`.
+  - Requires `py.typed` markers in all packages.
+
+#### 5.2.3 Gate 3: Architectural Boundary Verification (`import-linter`)
 * Command: `lint-imports`
 * Contracts configured in `pyproject.toml`:
-  - **Contract 1 (Layers):** `ed_app` $\to$ `ed_watcher`, `ed_egress` $\to$ `ed_domain`. (Forbids reverse imports).
-  - **Contract 2 (Independence):** `ed_watcher` and `ed_egress` are independent (may not import each other).
-  - **Contract 3 (Domain Purity):** `ed_domain` is forbidden from importing external I/O libraries (`httpx`, `watchdog`, `tkinter`).
-  - **Contract 4 (SDK Isolation):** Production runtime packages may not import `ed_sdk`.
+  - **Contract 1 (Invariant A - Domain Purity):** `ed_domain` is forbidden from importing external I/O libraries (`httpx`, `watchdog`, `tkinter`, `socket`, `requests`, `http`, `urllib`) or sibling packages (`ed_watcher`, `ed_egress`, `ed_app`, `ed_sdk`).
+  - **Contract 2 (Invariant B - SDK Isolation):** Production runtime packages (`ed_domain`, `ed_watcher`, `ed_egress`, `ed_app`) are strictly forbidden from importing `ed_sdk`.
+  - **Contract 3 (Layered Boundaries):** `ed_app` $\to$ `ed_watcher | ed_egress` $\to$ `ed_domain`. (Forbids reverse upward imports).
 
-### 5.3 Gate 3: Mypy Static Type Analysis
-* Command: `mypy packages/ tests/`
-* Configuration: Enforces strict type annotations, verifying that stub adapters satisfy abstract Port protocols.
-
-### 5.4 Gate 4: Headless Pytest Suite
-* Command: `pytest tests/`
-* Scope:
-  - `tests/unit/test_bootstrap.py`: Asserts that `build_engine()` constructs a valid `TelemetryEngine` without side-effects.
-  - `tests/unit/test_imports.py`: Asserts that `ed_domain` can be imported cleanly without external dependencies.
+#### 5.2.4 Gate 4: Headless Pytest Suite & CLI Smoke Test
+* Commands:
+  - `pytest -v`
+  - `python -m ed_app`
+* Verification:
+  - `tests/unit/test_bootstrap.py`: Verifies that `build_engine()` constructs a valid `TelemetryEngine` with zero background side-effects.
+  - Smoke test: Runs the composition root startup and shutdown cleanly.
   - **Zero Display Shims:** Tests must execute in standard headless terminals without `xvfb`.
 
 ---
