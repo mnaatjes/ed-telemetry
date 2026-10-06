@@ -108,6 +108,10 @@ tag_name = "v{new_version}"
 tag_message = "Release: v{new_version}"
 commit = true
 message = "Release: v{new_version}"
+allow_shell_hooks = true
+setup_hooks = [
+    "python3 scripts/guard_release_branch.py",
+]
 
 [[tool.bumpversion.files]]
 filename = "pyproject.toml"
