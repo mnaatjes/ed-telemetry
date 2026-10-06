@@ -10,5 +10,110 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "import-linter>=2.0",
+    "bump-my-version>=0.20.0",
+]
+
+[project.scripts]
+ed-telemetry = "ed_app.cli.main:main"
+
 [tool.setuptools.packages.find]
 where = ["packages"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+packages = ["ed_domain", "ed_watcher", "ed_egress", "ed_sdk", "ed_app"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["packages"]
+
+[tool.importlinter]
+include_external_packages = true
+root_packages = [
+    "ed_domain",
+    "ed_watcher",
+    "ed_egress",
+    "ed_sdk",
+    "ed_app",
+]
+
+[[tool.importlinter.contracts]]
+name = "Invariant A: Domain package must remain purely decoupled"
+type = "forbidden"
+source_modules = ["ed_domain"]
+forbidden_modules = [
+    "ed_watcher",
+    "ed_egress",
+    "ed_app",
+    "ed_sdk",
+    "watchdog",
+    "tkinter",
+    "socket",
+    "http",
+    "urllib",
+    "requests",
+    "httpx",
+]
+
+[[tool.importlinter.contracts]]
+name = "Invariant B: SDK forbidden in production packages"
+type = "forbidden"
+source_modules = [
+    "ed_domain",
+    "ed_watcher",
+    "ed_egress",
+    "ed_app",
+]
+forbidden_modules = ["ed_sdk"]
+
+[[tool.importlinter.contracts]]
+name = "Layered Architecture Boundaries"
+type = "layers"
+layers = [
+    "ed_app",
+    "ed_watcher | ed_egress",
+    "ed_domain",
+]
+
+[tool.bumpversion]
+current_version = "0.1.0"
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
+serialize = ["{major}.{minor}.{patch}"]
+search = "{current_version}"
+replace = "{new_version}"
+regex = false
+ignore_missing_version = false
+tag = true
+sign_tags = false
+tag_name = "v{new_version}"
+tag_message = "Release: v{new_version}"
+commit = true
+message = "Release: v{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "v{current_version}"
+replace = "v{new_version}"
