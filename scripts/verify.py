@@ -9,6 +9,7 @@ Executes Tier 2 checks sequentially:
 5. Pytest test suite
 6. CLI composition root smoke test
 """
+
 from __future__ import annotations
 
 import subprocess

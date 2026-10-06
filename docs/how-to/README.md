@@ -10,4 +10,3 @@ last_updated_at: "2026-10-06"
 Problem-oriented, task-focused practical runbooks and operational procedures for operators and integrators.
 
 * [How to Verify Architecture and Run Tests Locally](verify_architecture_and_test_locally.md)
-

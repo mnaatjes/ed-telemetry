@@ -18,7 +18,7 @@ related_rfcs: []
 ## 1. Introduction and Architectural Motivation
 
 ### 1.1 Scope Lock & Anti-Bloat Principle
-This Software Design Document (SDD) governs strictly the **foundational architectural baseline, package boundary enforcement, minimal walking skeleton, and CI verification pipeline** of the `ed-telemetry` project. 
+This Software Design Document (SDD) governs strictly the **foundational architectural baseline, package boundary enforcement, minimal walking skeleton, and CI verification pipeline** of the `ed-telemetry` project.
 
 In strict adherence to our anti-bloat policy:
 * This design deliberately contains **zero domain feature specifications, zero external API endpoints, and zero live game data models**.

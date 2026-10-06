@@ -9,7 +9,7 @@ tags: ["architecture", "adr", "vision", "operational-concept", "hexagonal", "ci"
 
 ## 1. Context and Problem Statement
 
-Legacy community tooling for Elite Dangerous (such as EDMarketConnector) evolved as a desktop-first monolithic application. In those codebases, user interfaces, operating system quirks, background file watchers, and network transmitters were tightly commingled in flat root scripts with circular import loops. 
+Legacy community tooling for Elite Dangerous (such as EDMarketConnector) evolved as a desktop-first monolithic application. In those codebases, user interfaces, operating system quirks, background file watchers, and network transmitters were tightly commingled in flat root scripts with circular import loops.
 
 This architectural entanglement caused three fatal defects:
 1. **Inflexible Delivery:** The application could not be operated as a headless background daemon, local REST server, or AI agent tool without modifying GUI code.
