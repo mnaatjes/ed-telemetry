@@ -39,6 +39,7 @@ To test polymorphism and dependency inversion without domain bloat, define minim
 # packages/ed_domain/ports/watcher.py
 from abc import ABC, abstractmethod
 
+
 class WatcherPort(ABC):
     @abstractmethod
     def start(self) -> None: ...
@@ -50,6 +51,7 @@ class WatcherPort(ABC):
 # packages/ed_domain/ports/egress.py
 from abc import ABC, abstractmethod
 
+
 class EgressPort(ABC):
     @abstractmethod
     def transmit(self, payload: dict) -> bool: ...
@@ -60,6 +62,7 @@ class EgressPort(ABC):
 # packages/ed_domain/engine.py
 from ed_domain.ports.watcher import WatcherPort
 from ed_domain.ports.egress import EgressPort
+
 
 class TelemetryEngine:
     def __init__(self, watcher: WatcherPort, transmitters: list[EgressPort]) -> None:
@@ -86,6 +89,7 @@ class TelemetryEngine:
 from ed_domain.engine import TelemetryEngine
 from ed_watcher.watcher import JournalWatcher
 from ed_egress.transmitter import NullTransmitter
+
 
 def build_engine() -> TelemetryEngine:
     """Composition Root: Wires stub adapters into the core engine."""
