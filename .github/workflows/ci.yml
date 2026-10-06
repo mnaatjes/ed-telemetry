@@ -29,23 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run Ruff Lint and Formatting Check
+      - name: Execute Tier 2 Quality Gates (verify.py)
         run: |
-          ruff check packages tests
-          ruff format --check packages tests
-
-      - name: Run Mypy Static Type Analysis
-        run: |
-          mypy
-
-      - name: Enforce Architecture Invariants (Import Linter)
-        run: |
-          lint-imports
-
-      - name: Run Pytest Suite
-        run: |
-          pytest -v
-
-      - name: Smoke Test CLI Executable
-        run: |
-          python -m ed_app
+          python scripts/verify.py

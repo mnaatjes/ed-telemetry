@@ -116,9 +116,51 @@ ed-telemetry baseline verified: engine started successfully
 
 ---
 
-## 4. Run the Full Local CI Suite in One Command
+## 4. Run the Full Quality Gate Suite in One Command (Preferred)
 
-To simulate the exact checks executed by GitHub Actions before opening a Pull Request:
+The canonical way to execute all Tier 2 quality gates locally—mirroring continuous integration identically across Linux, macOS, and native Windows—is via the orchestrator script:
+
+```bash
+python scripts/verify.py
+```
+
+Expected output:
+```text
+============================================================
+Executing Tier 2 Quality Gates
+============================================================
+
+[RUNNING] Ruff Lint...
+...
+[PASSED] Ruff Lint
+
+[RUNNING] Ruff Format Check...
+...
+[PASSED] Ruff Format Check
+
+[RUNNING] Mypy Static Typing...
+...
+[PASSED] Mypy Static Typing
+
+[RUNNING] Import Linter Boundaries...
+...
+[PASSED] Import Linter Boundaries
+
+[RUNNING] Pytest Suite...
+...
+[PASSED] Pytest Suite
+
+[RUNNING] CLI Smoke Test...
+ed-telemetry baseline verified: engine started successfully
+[PASSED] CLI Smoke Test
+
+============================================================
+All Tier 2 Quality Gates Passed Successfully!
+============================================================
+```
+
+### 4.1 Manual Chained Invocation (Alternative)
+If preferred, you can also execute the individual commands chained together in a POSIX shell:
 
 ```bash
 ruff check packages tests && \
