@@ -93,20 +93,28 @@ The codebase is partitioned into five isolated packages under `packages/`:
 
 | Package Path | Architectural Role | Responsibilities | Strict Import Boundary Rules |
 | :--- | :--- | :--- | :--- |
-| `packages/ed_domain/` | **The Core Domain & Ports** | Pure data models, journal event schemas, game enums, and abstract port interfaces (`abc.ABC`). | **Zero dependencies.** May NOT import `ed_watcher`, `ed_egress`, `ed_sdk`, or `ed_app`. |
+| `packages/ed_domain/` | **The Core Domain & Ports** | Pure data models, journal event schemas, game enums, and abstract port interfaces (`abc.ABC`). | **Zero dependencies.** May NOT import `ed_watcher`, `ed_egress`, `ed_sdk`, or `ed_app`. Forbidden from importing network, filesystem monitor, or GUI libraries. |
 | `packages/ed_watcher/` | **Inbound (Driven) Adapter** | Watches `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous\` for Journal updates. | May import `ed_domain`. May NOT import `ed_egress`, `ed_app`, or `ed_sdk`. |
 | `packages/ed_egress/` | **Outbound (Driven) Adapter** | HTTP transmitters sending validated payloads to EDDN, Inara, and EDSM. | May import `ed_domain`. May NOT import `ed_watcher`, `ed_app`, or `ed_sdk`. |
-| `packages/ed_sdk/` | **Testing Harness** | `MockJournalWriter`, deterministic event generators, and test fixtures. | May import `ed_domain`. Used strictly in test suites and third-party extension SDKs. |
-| `packages/ed_app/` | **Driving Adapters & Bootstrapper** | Hosts `bootstrap.py` (Composition Root), CLI (`cli/`), FastAPI REST (`api/`), MCP (`mcp/`), and UI (`ui/`). | **The only package authorized to import and wire all other packages together.** |
+| `packages/ed_sdk/` | **Testing Harness** | `MockJournalWriter`, deterministic event generators, and test fixtures. | May import `ed_domain`. Used strictly in test suites and third-party extension SDKs. Forbidden in production runtime packages. |
+| `packages/ed_app/` | **Driving Adapters & Bootstrapper** | Hosts `bootstrap.py` (Composition Root), CLI (`cli/`), FastAPI REST (`api/`), MCP (`mcp/`), and UI (`ui/`). | **The only package authorized to import and wire all other packages together.** May NOT import `ed_sdk`. |
+
+### 5.1 Machine-Enforceable Boundary Invariants
+1. **Invariant A (Pure Domain I/O Isolation):** `ed_domain` must remain 100% pure computational logic. It is strictly forbidden from importing standard library or third-party network (`socket`, `http`, `urllib`, `requests`, `httpx`), filesystem monitors (`watchdog`), or graphical frameworks (`tkinter`).
+2. **Invariant B (SDK Production Isolation):** Production runtime packages (`ed_watcher`, `ed_egress`, `ed_app`) are strictly forbidden from importing `ed_sdk`. The testing SDK exists solely for test execution (`tests/`) and downstream external plugin testing.
 
 ---
 
 ## 6. CI-Enforced Architecture & Bootstrapping Gates
 
-To guarantee that circular dependency loops, import violations, and coupling traps never enter the repository, the Continuous Integration (CI) pipeline will enforce three automated architecture quality gates:
+To guarantee that circular dependency loops, import violations, and coupling traps never enter the repository, the Continuous Integration (CI) pipeline will enforce four automated architecture quality gates:
 
-### 6.1 Gate 1: Automated Import Boundary Enforcement (`import-linter` / `pytest-archon`)
-The CI workflow will execute an architectural linter on every commit and pull request. If any package violates the import contracts in Section 5 (e.g., if `ed_domain` attempts to import `ed_watcher`, or if `ed_watcher` imports `ed_egress`), **the CI build will immediately fail with an exit code 1**.
+### 6.1 Gate 1: Automated Import Boundary & Invariant Enforcement (`import-linter`)
+The CI workflow will execute `import-linter` on every commit and pull request against the contracts defined in Section 5 and Section 5.1:
+* Fails if `ed_domain` imports any sibling package OR any I/O library (`httpx`, `watchdog`, `tkinter`).
+* Fails if `ed_watcher` or `ed_egress` imports each other or `ed_app`.
+* Fails if any production package imports `ed_sdk`.
+* Fails if any package creates circular dependency loops.
 
 ### 6.2 Gate 2: Clean Bootstrapping Isolation Tests
 The CI suite will include dedicated tests verifying the Composition Root in `packages/ed_app/bootstrap.py`:
@@ -117,6 +125,7 @@ The CI suite will include dedicated tests verifying the Composition Root in `pac
 ### 6.3 Gate 3: Headless Verification Guarantee
 The CI suite will execute all tests across Linux and Windows without virtual display workarounds (`xvfb`):
 * `ed_domain`, `ed_watcher`, `ed_egress`, `ed_sdk`, `ed_app/cli`, `ed_app/api`, and `ed_app/mcp` must pass 100% of their test suites headlessly in standard terminal environments.
+
 
 ---
 
