@@ -1,0 +1,28 @@
+---
+title: "Software Design Documents Governance and Index"
+tags: ["architecture", "designs", "sdd", "governance"]
+created_at: "2026-10-06"
+last_updated_at: "2026-10-06"
+---
+
+# Software Design Documents Governance and Index
+
+Governed by IEEE 1016-2009 (Systems Design—Software Design Descriptions) and Google Design Doc standards.
+
+---
+
+## 1. Quality Invariants
+
+1. **Pre-Implementation Requirement:** An SDD must be drafted, reviewed, and approved before implementing non-trivial subsystems.
+2. **The Vacation Test:** Must be sufficiently detailed for an independent engineer to build and verify the subsystem without consulting the author.
+3. **The Skeptic Test:** Rigorously justify why the subsystem is required.
+4. **Mandatory Visual Models:** Must include at least two Mermaid diagrams (Structural Component/Class diagram and Dynamic Sequence/Activity diagram).
+5. **PR Sequencing:** Must outline phased PR milestones with verification criteria.
+
+---
+
+## 2. Registered Designs
+
+| ID | Title | Status | Date | Related ADRs |
+| :---: | :--- | :---: | :---: | :--- |
+| *(None)* | *Awaiting first formal design* | — | — | — |

@@ -1,0 +1,26 @@
+---
+title: "Architectural Decision Records Governance and Index"
+tags: ["architecture", "adr", "governance", "index"]
+created_at: "2026-10-06"
+last_updated_at: "2026-10-06"
+---
+
+# Architectural Decision Records Governance and Index
+
+Governed by Markdown Architectural Decision Records (MADR 3.0).
+
+---
+
+## 1. Principles & Quality Invariants
+
+1. **Immutable Historical Record:** Once committed and marked `Accepted`, an ADR is never deleted or altered to reflect new designs.
+2. **Supersedence Rule:** Reversals or migrations must be recorded as a new sequential ADR explicitly citing `supersedes: ["architecture/adr/NNNN_...md"]`.
+3. **Sequential Naming:** `NNNN_descriptive_slug.md` (zero-padded 4-digit index).
+
+---
+
+## 2. Decision Log
+
+| Index | Title | Status | Date | Supersedes |
+| :---: | :--- | :---: | :---: | :--- |
+| *(None)* | *Awaiting first formal record* | — | — | — |
