@@ -4,4 +4,6 @@ from ed_domain.engine import TelemetryEngine
 from ed_domain.ports.egress import EgressPort
 from ed_domain.ports.watcher import WatcherPort
 
-__all__ = ["TelemetryEngine", "WatcherPort", "EgressPort"]
+__version__ = "0.1.0"
+
+__all__ = ["TelemetryEngine", "WatcherPort", "EgressPort", "__version__"]
