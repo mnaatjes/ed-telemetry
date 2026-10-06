@@ -1,4 +1,4 @@
-"""Unit tests for composition root bootstrapping."""
+import threading
 
 from ed_app.bootstrap import build_engine
 from ed_domain.engine import TelemetryEngine
@@ -16,6 +16,13 @@ def test_build_engine_instantiation() -> None:
     assert len(engine.egress_ports) >= 1
     for egress in engine.egress_ports:
         assert isinstance(egress, EgressPort)
+
+
+def test_build_engine_side_effect_freedom() -> None:
+    """Verify that building the engine spawns no background threads."""
+    initial_threads = threading.active_count()
+    _ = build_engine()
+    assert threading.active_count() == initial_threads
 
 
 def test_engine_lifecycle_smoke() -> None:
