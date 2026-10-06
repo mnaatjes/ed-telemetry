@@ -2,13 +2,13 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, feat/*, fix/*, docs/*]
+    branches: [main, develop]
   pull_request:
     branches: [main, develop]
 
 jobs:
   verify:
-    name: Lint, Type Check, Invariants, and Tests
+    name: Quality Gates (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
