@@ -1,1 +1,5 @@
-"""Headless Elite Dangerous journal log file watcher and stream listener."""
+"""Journal watcher adapter package."""
+
+from ed_watcher.watcher import JournalWatcher
+
+__all__ = ["JournalWatcher"]

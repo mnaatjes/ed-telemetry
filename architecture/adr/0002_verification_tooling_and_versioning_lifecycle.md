@@ -41,7 +41,7 @@ Chosen Option: **PEP 621 Standard Dependencies, Dedicated CI Tooling Stack, and 
 * **Base Runtime (`dependencies`):** Restricted strictly to minimal, lightweight core libraries required for headless domain parsing and transmission (e.g. `pydantic`, `watchdog`, `httpx`).
 * **Optional Feature Groups (`[project.optional-dependencies]`):**
   - `server`: Libraries required for network serving and AI integration (`fastapi`, `uvicorn`, `mcp`).
-  - `dev`: Complete engineering toolchain (`pytest`, `ruff`, `mypy`, `import-linter`, `bump-my-version`).
+  - `dev`: Complete engineering toolchain (`pytest`, `ruff`, `mypy`, `import-linter`, `bump-my-version`, `pre-commit`).
 * **Installation Workflows:**
   - Headless/CLI User: `pip install .`
   - Web/API User: `pip install .[server]`
@@ -49,9 +49,23 @@ Chosen Option: **PEP 621 Standard Dependencies, Dedicated CI Tooling Stack, and 
 
 ---
 
-## 5. Mandatory Verification Tooling Stack
+## 5. Mandatory Verification Tooling Stack & Two-Tier Execution Strategy
 
-The CI pipeline executes four mandatory quality gates:
+To balance rapid developer velocity with strict architectural enforcement, verification tooling is partitioned across two distinct execution tiers: **Tier 1 (Local `pre-commit` Git Hooks)** and **Tier 2 (Continuous Integration Gates)**.
+
+### 5.1 Verification Tiering Matrix
+
+| Tool | Tier 1: Local `pre-commit` (Sub-second) | Tier 2: GitHub Actions CI (Authoritative) | Rationale & Responsibility |
+| :--- | :---: | :---: | :--- |
+| **`pre-commit-hooks`** | Yes | Optional | Standard file hygiene: trailing whitespace, end-of-file fixers, YAML/TOML syntax validation. |
+| **`ruff check`** | Yes (`--fix`) | Yes | Fast linting, import sorting (`I001`), and syntax rule verification. |
+| **`ruff format`** | Yes | Yes (`--check`) | Deterministic AST code formatting. |
+| **`mypy`** | No | Yes | Strict static type validation across all 5 packages. Excluded from `pre-commit` to prevent local hook lag. |
+| **`import-linter`** | No | Yes | Mathematical enforcement of Invariants A & B and layered architecture. Requires editable install. |
+| **`pytest`** | No | Yes | Headless unit and lifecycle test execution. Excluded from `pre-commit` to allow fast micro-commits. |
+| **CLI Smoke Test** | No | Yes | Verifies `python -m ed_app` composition root instantiation without side effects. |
+
+### 5.2 Verification Tool Roles in CI
 
 | Tool | Role in Verification Gate | Mandatory Rules Enforced |
 | :--- | :--- | :--- |
@@ -59,6 +73,20 @@ The CI pipeline executes four mandatory quality gates:
 | **`ruff`** | **Linting & Code Formatting** | Enforces PEP 8, import sorting (`I001`), bug detection (`B`), and modern Python 3.11+ syntax idioms. |
 | **`mypy`** | **Type & Port Contract Gate** | Strict static type validation across `packages/`. Validates that concrete adapters strictly satisfy `ed_domain.ports` interfaces. |
 | **`pytest`** | **Behavioral & Bootstrap Gate** | Executes headless unit tests (`tests/unit/`), integration workflows (`tests/integration/`), and side-effect-free bootstrap verification. |
+
+### 5.3 Single-Command Orchestrator (`scripts/verify.py`)
+
+To eliminate divergence between local developer checks and CI, a standard Python script (`scripts/verify.py`) serves as the single source of truth for Tier 2 gate execution:
+* **Portability Guarantee:** Built purely with Python standard library (`subprocess`, `sys`), guaranteeing seamless execution across Linux, macOS, and native Windows without requiring bash, WSL, or task runner dependencies.
+* **Shared Invocations:** Executed identically on developer machines (`python scripts/verify.py`) and inside CI job definitions (`.github/workflows/ci.yml`).
+* **Sequential Halt:** Executes quality gates sequentially and halts immediately upon the first failure, reporting clear failure diagnostics and preserving exit codes.
+
+### 5.4 On-Demand AST Dependency Graph Inspection (`scripts/print_dependency_graph.py`)
+
+To provide developers and maintainers with real-time architectural visibility without committing noisy, auto-generated dependency trees to source control:
+* **Tooling Standard:** Uses `grimp` (the AST graph engine underlying `import-linter`) to parse the active package tree in memory.
+* **Output:** Generates a human-readable, formatted terminal view of module import directions, downstream dependencies, and invariant compliance on demand.
+* **Documentation Policy:** Documented in Diátaxis How-To runbooks (`docs/how-to/`), eliminating redundant graph documents in `docs/` and `architecture/`.
 
 ---
 

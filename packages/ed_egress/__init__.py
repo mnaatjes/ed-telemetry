@@ -1,1 +1,5 @@
-"""Outbound telemetry adapters for third-party services (EDDN, Inara, EDSM)."""
+"""Outbound egress adapters package."""
+
+from ed_egress.transmitter import NullTransmitter
+
+__all__ = ["NullTransmitter"]
