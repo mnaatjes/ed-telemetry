@@ -7,7 +7,8 @@ created_at: "2026-10-06"
 last_updated_at: "2026-10-06"
 related_adrs: [
   "architecture/adr/0001_architectural_vision_and_operational_concept.md",
-  "architecture/adr/0002_verification_tooling_and_versioning_lifecycle.md"
+  "architecture/adr/0002_verification_tooling_and_versioning_lifecycle.md",
+  "architecture/adr/0003_minimal_walking_skeleton_and_bootstrap_contract.md"
 ]
 related_rfcs: []
 ---
@@ -16,21 +17,27 @@ related_rfcs: []
 
 ## 1. Introduction and Architectural Motivation
 
-### 1.1 Context and Problem Statement
-Legacy community tooling for Elite Dangerous evolved as desktop-first monolithic applications where user interfaces, operating system hooks, background file monitors, and network transmitters were tightly commingled. This architecture prohibited headless execution, prevented automated CI verification without display shims (`xvfb`), caused circular import loops, and created extreme cognitive friction.
+### 1.1 Scope Lock & Anti-Bloat Principle
+This Software Design Document (SDD) governs strictly the **foundational architectural baseline, package boundary enforcement, minimal walking skeleton, and CI verification pipeline** of the `ed-telemetry` project. 
+
+In strict adherence to our anti-bloat policy:
+* This design deliberately contains **zero domain feature specifications, zero external API endpoints, and zero live game data models**.
+* All functional telemetry models (Pydantic schemas, event parsing, EDDN payloads, and CAPI adapters) are deferred to dedicated SDDs during the Construction phase.
 
 ### 1.2 The Skeptic Test (Why This Architecture?)
-A modular monorepo governed by Ports & Adapters (Hexagonal Architecture) is chosen over multi-repo micro-packages and monolithic flat scripts because:
-1. **Multi-Repo Administrative Overhead:** Polyrepos introduce versioning choreography (tagging and releasing 5 separate PyPI packages for every game update), creating high cognitive friction and dependency desynchronization.
-2. **Monolithic Entanglement:** Flat root scripts cause import loops and prevent headless deployments.
-3. **The Hexagonal Advantage:** Partitioning packages into pure domain, isolated driven adapters, and a unified application driving package allows all 4 personas (CLI, REST API, MCP Server, UI) to drive the identical core engine without duplicate logic.
+Establishing this architectural baseline before writing feature code is required because:
+1. It eliminates the circular import traps and accidental coupling that plagued legacy EDMC by verifying dependency directions mathematically in CI.
+2. The Composition Root (`packages/ed_app/bootstrap.py`) guarantees that concrete adapters are decoupled from the core engine, allowing side-effect-free testing and headless execution.
+3. It validates that all package entrypoints can be imported without display shims (`xvfb`) or external network dependencies.
 
 ### 1.3 The Vacation Test
-This specification details the package directory structure, import dependency matrix, composition root bootstrapping factory, automated CI architecture gates, and release lifecycle such that any independent engineer can implement and verify the foundational baseline without ambiguity.
+This specification details the package directory layout, boundary contracts, stub ports, composition root bootstrapper, and CI pipeline gates such that any independent engineer can implement, execute, and verify the baseline test suite without ambiguity.
 
 ---
 
 ## 2. Structural Component Model (Mermaid)
+
+The model below reflects the reduced architectural baseline and walking skeleton contracts:
 
 ```mermaid
 classDiagram
@@ -39,47 +46,39 @@ classDiagram
     namespace Packages {
         class EdDomain {
             <<package: ed_domain>>
-            +models: TelemetryEvent, CmdrStatus
-            +enums: GameMode, UIFocus
-            +ports: WatcherPort, EgressPort
+            +WatcherPort (interface)
+            +EgressPort (interface)
+            +TelemetryEngine
         }
 
         class EdWatcher {
             <<package: ed_watcher>>
-            +JournalWatcher
-            +FilePollStrategy
-            +WatchdogStrategy
+            +JournalWatcher (stub)
         }
 
         class EdEgress {
             <<package: ed_egress>>
-            +EDDNTransmitter
-            +InaraTransmitter
-            +EDSMTransmitter
+            +NullTransmitter (stub)
         }
 
         class EdSdk {
             <<package: ed_sdk>>
-            +MockJournalWriter
-            +EventGenerators
+            +MockJournalWriter (stub)
         }
 
         class EdApp {
             <<package: ed_app>>
-            +bootstrap: build_engine()
-            +cli: main()
-            +api: FastAPI
-            +mcp: MCPServer
-            +ui: ViewRunner
+            +build_engine() (bootstrap)
+            +main() (cli smoke test)
         }
     }
 
     EdWatcher ..|> EdDomain : implements WatcherPort
     EdEgress ..|> EdDomain : implements EgressPort
-    EdSdk --> EdDomain : uses models & enums
-    EdApp --> EdDomain : orchestrates core engine
-    EdApp --> EdWatcher : instantiates in bootstrap
-    EdApp --> EdEgress : instantiates in bootstrap
+    EdSdk --> EdDomain : imports for testing
+    EdApp --> EdDomain : wires TelemetryEngine
+    EdApp --> EdWatcher : instantiates in bootstrap.py
+    EdApp --> EdEgress : instantiates in bootstrap.py
 
     %% Boundary Invariants
     note for EdDomain "INVARIANT A:\nPure computation only.\nZERO imports of network, watchdog, tkinter, or sibling packages."
@@ -88,35 +87,27 @@ classDiagram
 
 ---
 
-## 3. Dynamic Sequence Flow (Mermaid)
+## 3. Dynamic Sequence Flow: Bootstrapping Smoke Test (Mermaid)
 
-The sequence below illustrates the Composition Root bootstrapping flow and event routing across the co-equal driving interfaces:
+The sequence below illustrates the Composition Root verification flow:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant CLI as ed_app.cli (Entrypoint)
+    participant CLI as ed_app.cli.main
     participant Boot as ed_app.bootstrap (Composition Root)
-    participant Watch as ed_watcher.JournalWatcher
-    participant Egress as ed_egress.EDDNTransmitter
-    participant Core as ed_domain.TelemetryEngine
-    participant Client as External Persona (CLI / API / MCP / UI)
+    participant Watch as ed_watcher.watcher.JournalWatcher
+    participant Egress as ed_egress.transmitter.NullTransmitter
+    participant Core as ed_domain.engine.TelemetryEngine
 
-    CLI->>Boot: build_engine(journal_dir, enable_eddn=True)
-    Boot->>Watch: instantiate JournalWatcher()
-    Boot->>Egress: instantiate EDDNTransmitter()
+    CLI->>Boot: build_engine()
+    Boot->>Watch: instantiate JournalWatcher() [Stub]
+    Boot->>Egress: instantiate NullTransmitter() [Stub]
     Boot->>Core: instantiate TelemetryEngine(watcher, [egress])
-    Boot-->>CLI: returns initialized TelemetryEngine
-
-    alt Persona A: Headless Daemon
-        CLI->>Core: start() -> Watcher polls files & routes to Egress
-    else Persona B: FastAPI REST Server
-        CLI->>Client: starts Uvicorn (:8000) querying Core state
-    else Persona C: Model Context Protocol Server
-        CLI->>Client: starts MCP server exposing Core tools to LLMs
-    else Persona D: Desktop Presentation
-        CLI->>Client: renders GUI observing Core events
-    end
+    Boot-->>CLI: returns TelemetryEngine instance
+    CLI->>Core: start() -> Verifies zero exceptions and zero side-effects
+    Core->>Watch: watcher.start()
+    CLI-->>CLI: Prints "ed-telemetry baseline verified" & exits with code 0
 ```
 
 ---
@@ -127,48 +118,45 @@ sequenceDiagram
 packages/
 |-- ed_domain/                 # The Core Domain & Port Contracts (Zero Dependencies)
 |   |-- __init__.py
-|   |-- enums/                 # Game status flags, ship types, ranks
-|   |-- models/                # Typed telemetry events, commander state
-|   \-- ports/                 # Abstract interfaces (WatcherPort, EgressPort, ConfigPort)
-|-- ed_watcher/                # Inbound Adapter (Journal File Monitoring)
+|   |-- engine.py              # TelemetryEngine class
+|   \-- ports/                 # Abstract interfaces (WatcherPort, EgressPort)
+|       |-- __init__.py
+|       |-- watcher.py
+|       \-- egress.py
+|-- ed_watcher/                # Inbound Adapter (Stub Implementation)
 |   |-- __init__.py
-|   |-- watcher.py             # Watchdog & polling file listener
-|   \-- parser.py              # Raw line JSON extractor
-|-- ed_egress/                 # Outbound Adapter (Network Transmitters)
+|   \-- watcher.py             # JournalWatcher implementing WatcherPort
+|-- ed_egress/                 # Outbound Adapter (Stub Implementation)
 |   |-- __init__.py
-|   |-- eddn.py                # EDDN gateway HTTP client
-|   |-- inara.py               # Inara API client
-|   \-- edsm.py                # EDSM API client
-|-- ed_sdk/                    # Testing Harness (Mock Generator SDK)
+|   \-- transmitter.py         # NullTransmitter implementing EgressPort
+|-- ed_sdk/                    # Testing Harness (Mock Stubs)
 |   |-- __init__.py
-|   |-- mock_writer.py         # MockJournalWriter simulator
-|   \-- fixtures.py            # Sample payloads and event factories
+|   \-- mock_writer.py         # MockJournalWriter stub
 \-- ed_app/                    # Driving Adapters & Composition Root
     |-- __init__.py
     |-- __main__.py            # Module entrypoint (python -m ed_app)
-    |-- bootstrap.py           # Single Composition Root factory
-    |-- cli/                   # Front Door 1: Terminal commands
-    |-- api/                   # Front Door 2: FastAPI REST & WebSockets
-    |-- mcp/                   # Front Door 3: Model Context Protocol server
-    \-- ui/                    # Front Door 4: Desktop presentation shell
+    |-- bootstrap.py           # build_engine() Composition Root factory
+    \-- cli/
+        |-- __init__.py
+        \-- main.py            # Minimal smoke-test entrypoint
 ```
 
 ### 4.1 Strict Machine-Enforceable Invariants
 * **Invariant A (Pure Domain I/O Isolation):** `ed_domain` contains only pure algorithms, models, and type definitions. It is strictly forbidden from importing `httpx`, `requests`, `urllib`, `socket`, `watchdog`, `tkinter`, or any sibling package under `packages/`.
-* **Invariant B (SDK Production Isolation):** Production runtime packages (`ed_watcher`, `ed_egress`, `ed_app`) are strictly forbidden from importing `ed_sdk`. The SDK is reserved solely for `tests/` and third-party plugin authors.
+* **Invariant B (SDK Production Isolation):** Production runtime packages (`ed_watcher`, `ed_egress`, `ed_app`) are strictly forbidden from importing `ed_sdk`.
 * **Invariant C (Composition Root Monopoly):** `ed_app/bootstrap.py` is the only authorized location where concrete adapters are instantiated and wired together. Adapters must never instantiate sibling adapters at module level.
 
 ---
 
 ## 5. Automated CI Verification Pipeline Specification
 
-Continuous Integration (.github/workflows/ci.yml) executes four discrete quality gates across Ubuntu and Windows:
+Continuous Integration (`.github/workflows/ci.yml`) executes four discrete quality gates across Ubuntu and Windows:
 
 ```mermaid
 flowchart LR
     G1["Gate 1: Ruff<br/>(Lint & Format)"] --> G2["Gate 2: Import-Linter<br/>(Boundary Contracts)"]
     G2 --> G3["Gate 3: Mypy<br/>(Strict Types)"]
-    G3 --> G4["Gate 4: Pytest<br/>(Unit & Bootstrap)"]
+    G3 --> G4["Gate 4: Pytest<br/>(Headless Harness)"]
 ```
 
 ### 5.1 Gate 1: Ruff Lint & Format
@@ -177,21 +165,21 @@ flowchart LR
 
 ### 5.2 Gate 2: Architectural Boundary Verification (`import-linter`)
 * Command: `lint-imports`
-* Contracts:
+* Contracts configured in `pyproject.toml`:
   - **Contract 1 (Layers):** `ed_app` $\to$ `ed_watcher`, `ed_egress` $\to$ `ed_domain`. (Forbids reverse imports).
   - **Contract 2 (Independence):** `ed_watcher` and `ed_egress` are independent (may not import each other).
   - **Contract 3 (Domain Purity):** `ed_domain` is forbidden from importing external I/O libraries (`httpx`, `watchdog`, `tkinter`).
-  - **Contract 4 (SDK Isolation):** `ed_domain`, `ed_watcher`, `ed_egress`, and `ed_app` are forbidden from importing `ed_sdk`.
+  - **Contract 4 (SDK Isolation):** Production runtime packages may not import `ed_sdk`.
 
 ### 5.3 Gate 3: Mypy Static Type Analysis
 * Command: `mypy packages/ tests/`
-* Configuration: Enforces strict type annotations, verifying that concrete adapters satisfy abstract Port protocols.
+* Configuration: Enforces strict type annotations, verifying that stub adapters satisfy abstract Port protocols.
 
 ### 5.4 Gate 4: Headless Pytest Suite
 * Command: `pytest tests/`
 * Scope:
-  - `tests/unit/`: Isolated tests verifying models and parsers with mock I/O in < 1 second.
-  - `tests/integration/`: Verification of `bootstrap.py` wiring and side-effect-free imports.
+  - `tests/unit/test_bootstrap.py`: Asserts that `build_engine()` constructs a valid `TelemetryEngine` without side-effects.
+  - `tests/unit/test_imports.py`: Asserts that `ed_domain` can be imported cleanly without external dependencies.
   - **Zero Display Shims:** Tests must execute in standard headless terminals without `xvfb`.
 
 ---
@@ -200,6 +188,7 @@ flowchart LR
 
 * **Tooling:** `bump-my-version` configured under `[tool.bumpversion]` in `pyproject.toml`.
 * **Baseline:** Commences at `0.1.0`.
+* **Branch Policy:** Release tags are strictly restricted to the `main` branch.
 * **Synchronized Target Files:**
   1. `pyproject.toml` (`version = "0.1.0"`)
   2. `packages/ed_domain/__init__.py` (`__version__ = "0.1.0"`)
@@ -208,31 +197,8 @@ flowchart LR
 
 ---
 
-## 7. Phased Implementation Roadmap
-
-### Phase 1: Foundational Walking Skeleton & Verification Pipeline (Current)
-* Author port contracts in `packages/ed_domain/ports/`.
-* Implement minimal `TelemetryEngine` in `packages/ed_domain/engine.py`.
-* Implement Composition Root factory in `packages/ed_app/bootstrap.py`.
-* Implement minimal CLI smoke test in `packages/ed_app/cli/main.py`.
-* Configure `pyproject.toml` dependencies, `ruff`, `mypy`, `import-linter`, and `bump-my-version`.
-* Author `.github/workflows/ci.yml` matrix workflow.
-* Verify all 4 CI gates pass cleanly.
-
-### Phase 2: Domain Telemetry Models & Parsing Engine
-* Define typed Pydantic models for Elite Dangerous journal events (FSDJump, Docked, Market, etc.).
-* Extract constants and ship/module data tables into typed enums under `packages/ed_domain/enums/`.
-* Implement resilient JSON line parser with `extra="allow"` fallback.
-
-### Phase 3: Headless Watcher & Testing SDK
-* Implement `JournalWatcher` in `packages/ed_watcher/` supporting directory polling and file tailing.
-* Implement `MockJournalWriter` in `packages/ed_sdk/` to simulate live game logs for CI testing.
-
-### Phase 4: Outbound Egress Transmitters
-* Implement `EDDNTransmitter` in `packages/ed_egress/` validating against EDDN schemas.
-* Implement `InaraTransmitter` for commander profile synchronization.
-
-### Phase 5: Multi-Adapter Driving Surfaces
-* Implement full CLI subcommands (`watch`, `serve`, `status`).
-* Implement FastAPI REST and WebSocket endpoints in `packages/ed_app/api/`.
-* Implement Model Context Protocol (MCP) server in `packages/ed_app/mcp/`.
+## 7. Concrete Verification Milestone
+The Elaboration phase for this baseline is complete once:
+1. The walking skeleton stub files in Section 4 are created.
+2. `pyproject.toml` and `.github/workflows/ci.yml` are configured.
+3. All four CI gates pass with zero warnings across Ubuntu and Windows.

@@ -1,6 +1,6 @@
 ---
 title: "ADR 0003: Minimal Walking Skeleton and Bootstrap Verification Contract"
-status: "proposed"
+status: "accepted"
 date: "2026-10-06"
 tags: ["architecture", "adr", "skeleton", "bootstrap", "ports", "elaboration"]
 ---
