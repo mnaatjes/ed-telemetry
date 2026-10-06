@@ -141,7 +141,8 @@ packages/
         \-- main.py            # Minimal smoke-test entrypoint
 
 scripts/
-\-- verify.py                  # Portable cross-platform quality gate orchestrator
+|-- verify.py                  # Portable cross-platform quality gate orchestrator
+\-- print_dependency_graph.py  # Real-time AST dependency graph inspector (grimp)
 ```
 
 ### 4.1 Strict Machine-Enforceable Invariants
@@ -217,6 +218,16 @@ To eliminate discrepancies between developer environments and automated CI, qual
 4. **Gate 4: Headless Pytest Suite & CLI Smoke Test**
    * Commands: `pytest -v` and `python -m ed_app`
    * Verification: Headless verification of composition root instantiation and zero runtime side effects.
+
+### 5.3 On-Demand AST Dependency Graph Inspector (`scripts/print_dependency_graph.py`)
+
+To inspect live architectural relationships without checking static graph artifacts into documentation:
+* **Engine:** Built with `grimp` (already bundled with `import-linter`).
+* **Execution:** `python scripts/print_dependency_graph.py`
+* **Output:** Traverses the Abstract Syntax Tree across `ed_domain`, `ed_watcher`, `ed_egress`, `ed_sdk`, and `ed_app`, printing:
+  - Directed import edges per package.
+  - Upstream dependencies and downstream dependents.
+  - Visual confirmation that `ed_domain` has zero outgoing dependencies.
 
 ---
 

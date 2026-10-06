@@ -81,6 +81,13 @@ To eliminate divergence between local developer checks and CI, a standard Python
 * **Shared Invocations:** Executed identically on developer machines (`python scripts/verify.py`) and inside CI job definitions (`.github/workflows/ci.yml`).
 * **Sequential Halt:** Executes quality gates sequentially and halts immediately upon the first failure, reporting clear failure diagnostics and preserving exit codes.
 
+### 5.4 On-Demand AST Dependency Graph Inspection (`scripts/print_dependency_graph.py`)
+
+To provide developers and maintainers with real-time architectural visibility without committing noisy, auto-generated dependency trees to source control:
+* **Tooling Standard:** Uses `grimp` (the AST graph engine underlying `import-linter`) to parse the active package tree in memory.
+* **Output:** Generates a human-readable, formatted terminal view of module import directions, downstream dependencies, and invariant compliance on demand.
+* **Documentation Policy:** Documented in Diátaxis How-To runbooks (`docs/how-to/`), eliminating redundant graph documents in `docs/` and `architecture/`.
+
 ---
 
 ## 6. Release Versioning Policy & `bump-my-version`

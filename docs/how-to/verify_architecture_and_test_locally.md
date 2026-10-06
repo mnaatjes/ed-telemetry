@@ -170,3 +170,40 @@ lint-imports && \
 pytest -v && \
 python -m ed_app
 ```
+
+---
+
+## 5. Inspect the Live AST Dependency Graph On Demand
+
+To visually inspect the actual import graph and verify boundary health without committing static graph dumps to git:
+
+```bash
+python scripts/print_dependency_graph.py
+```
+
+Expected output:
+```text
+=================================================================
+Live AST Dependency & Boundary Graph (grimp)
+=================================================================
+
+[Package Cross-Boundary Imports]:
+  ed_domain    ──► (none / pure isolation)
+  ed_watcher   ──► (none / pure isolation)
+  ed_egress    ──► (none / pure isolation)
+  ed_sdk       ──► (none / pure isolation)
+  ed_app       ──► [ed_domain, ed_egress, ed_watcher]
+
+[Detailed Module-Level Import Pairs]:
+  ed_app.__main__ ──► ed_app.cli.main
+  ed_app.bootstrap ──► ed_domain.engine
+  ed_app.bootstrap ──► ed_egress.transmitter
+  ed_app.bootstrap ──► ed_watcher.watcher
+  ...
+
+=================================================================
+Boundary Health Check:
+  [OK] Invariant A: 'ed_domain' imports zero sibling packages.
+  [OK] Invariant B: 'ed_sdk' is NOT imported by any runtime package.
+=================================================================
+```
