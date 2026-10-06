@@ -25,6 +25,6 @@ def test_domain_clean_isolation() -> None:
 
     # Assert no sibling packages were loaded as a consequence of importing ed_domain
     for mod in sys.modules:
-        assert not any(
-            mod.startswith(prefix) for prefix in sibling_prefixes
-        ), f"Sibling package '{mod}' was unexpectedly imported by ed_domain"
+        assert not any(mod.startswith(prefix) for prefix in sibling_prefixes), (
+            f"Sibling package '{mod}' was unexpectedly imported by ed_domain"
+        )
