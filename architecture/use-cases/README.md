@@ -1,11 +1,11 @@
 ---
-title: "Use-Case Discipline Governance"
+title: "Use-Case Discipline Governance and Index"
 tags: ["architecture", "use-cases", "requirements", "governance"]
 created_at: "2026-10-06"
 last_updated_at: "2026-10-06"
 ---
 
-# Use-Case Discipline Governance
+# Use-Case Discipline Governance and Index
 
 Governed by the Rational Unified Process (RUP) Use-Case Specification standard and Alistair Cockburn's Goal-Level Hierarchy.
 
@@ -22,6 +22,6 @@ Governed by the Rational Unified Process (RUP) Use-Case Specification standard a
 
 ---
 
-## 2. File Naming & Frontmatter Template
+## 2. Registered Specifications
 
-Files are stored as `UC-NN_descriptive_name.md`.
+*(No use cases registered. Specifications will be authored during feature construction phases after foundational architecture and CI gates are verified).*

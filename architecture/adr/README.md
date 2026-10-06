@@ -25,3 +25,6 @@ Governed by Markdown Architectural Decision Records (MADR 3.0).
 | :---: | :--- | :---: | :---: | :--- |
 | **0001** | [ADR 0001: Architectural Vision, Operational Concept, and CI-Enforced Modular Boundaries](0001_architectural_vision_and_operational_concept.md) | **Accepted** | 2026-10-06 | — |
 | **0002** | [ADR 0002: Verification Tooling, Dependency Topology, and Release Versioning Lifecycle](0002_verification_tooling_and_versioning_lifecycle.md) | **Accepted** | 2026-10-06 | — |
+| **0003** | [ADR 0003: Minimal Walking Skeleton and Bootstrap Verification Contract](0003_minimal_walking_skeleton_and_bootstrap_contract.md) | **Accepted** | 2026-10-06 | — |
+
+

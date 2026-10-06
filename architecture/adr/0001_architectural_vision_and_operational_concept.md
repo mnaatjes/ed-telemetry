@@ -71,19 +71,14 @@ flowchart TD
     ENGINE --> EGRESS
 ```
 
-### 4.1 Persona Specifications
-1. **Persona A: Terminal Operator (Headless Daemon):**
-   * Command: `ed-telemetry watch`
-   * Behavior: Runs silently in the background, monitoring Elite Dangerous journal logs and streaming telemetry to EDDN and Inara. Zero GUI requirements; zero `$DISPLAY` dependencies.
-2. **Persona B: Streamer / Web Integrator (REST & WebSockets):**
-   * Command: `ed-telemetry serve --api`
-   * Behavior: Mounts a local FastAPI server providing OpenAPI interactive documentation (`/docs`) and real-time WebSocket state streams for browser overlays, OBS docks, or third-party web apps.
-3. **Persona C: AI Co-Pilot Integrator (MCP Server):**
-   * Command: `ed-telemetry serve --mcp`
-   * Behavior: Exposes a standardized Model Context Protocol (MCP) server over stdio or SSE, allowing AI coding assistants and game co-pilots (e.g. Antigravity, Claude Desktop) to invoke live game telemetry tools.
-4. **Persona D: Desktop Commander (Visual Dashboard):**
-   * Command: `ed-telemetry app`
-   * Behavior: Launches an optional graphical desktop view that visualizes commander status, cargo, and outfitting by observing the local core engine.
+### 4.1 Co-Equal Driving Interface Concept
+To prevent the monolithic coupling of legacy tooling, `ed_app` provides four architectural entrypoints into the core engine:
+* **CLI Entrypoint:** Headless terminal commands.
+* **REST API Entrypoint:** Local HTTP/WebSocket server.
+* **MCP Server Entrypoint:** Model Context Protocol tool calling for AI assistants.
+* **UI Entrypoint:** Decoupled presentation dashboard.
+
+*(Detailed endpoints, tool schemas, and command options are intentionally excluded here; they will be planned and approved in dedicated ADRs during feature construction).*
 
 ---
 

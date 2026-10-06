@@ -78,9 +78,11 @@ Version strings must be maintained in lockstep across four authoritative targets
 3. `README.md` (Project header badge / version declaration)
 4. `CHANGELOG.md` (Keep a Changelog release heading)
 
-### 6.3 Tooling Configuration
+### 6.3 Tooling Configuration & Branch Restriction Gate
 * **Tool:** `bump-my-version` configured under `[tool.bumpversion]` in `pyproject.toml`.
-* **Execution:** Releases are cut via automated commands (e.g. `bump-my-version bump minor`), which update all four target files and generate signed git tags automatically.
+* **Branch Restriction Policy:** Running `bump-my-version` to create release tags is **strictly restricted to the `main` branch**. Releasing from feature or topic branches is prohibited to prevent stray tags and history divergence.
+* **Execution:** Releases are cut via automated commands on `main` (e.g. `bump-my-version bump minor`), which update all four target files and generate signed git tags automatically.
+
 
 ---
 
