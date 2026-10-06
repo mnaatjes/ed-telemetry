@@ -74,6 +74,13 @@ To balance rapid developer velocity with strict architectural enforcement, verif
 | **`mypy`** | **Type & Port Contract Gate** | Strict static type validation across `packages/`. Validates that concrete adapters strictly satisfy `ed_domain.ports` interfaces. |
 | **`pytest`** | **Behavioral & Bootstrap Gate** | Executes headless unit tests (`tests/unit/`), integration workflows (`tests/integration/`), and side-effect-free bootstrap verification. |
 
+### 5.3 Single-Command Orchestrator (`scripts/verify.py`)
+
+To eliminate divergence between local developer checks and CI, a standard Python script (`scripts/verify.py`) serves as the single source of truth for Tier 2 gate execution:
+* **Portability Guarantee:** Built purely with Python standard library (`subprocess`, `sys`), guaranteeing seamless execution across Linux, macOS, and native Windows without requiring bash, WSL, or task runner dependencies.
+* **Shared Invocations:** Executed identically on developer machines (`python scripts/verify.py`) and inside CI job definitions (`.github/workflows/ci.yml`).
+* **Sequential Halt:** Executes quality gates sequentially and halts immediately upon the first failure, reporting clear failure diagnostics and preserving exit codes.
+
 ---
 
 ## 6. Release Versioning Policy & `bump-my-version`

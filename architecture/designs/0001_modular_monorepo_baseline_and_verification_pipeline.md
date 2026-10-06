@@ -139,6 +139,9 @@ packages/
     \-- cli/
         |-- __init__.py
         \-- main.py            # Minimal smoke-test entrypoint
+
+scripts/
+\-- verify.py                  # Portable cross-platform quality gate orchestrator
 ```
 
 ### 4.1 Strict Machine-Enforceable Invariants
@@ -185,38 +188,35 @@ flowchart TD
   - Manual execution across all files: `pre-commit run --all-files`
 * **Exclusions from Pre-Commit:** `mypy`, `import-linter`, and `pytest` are intentionally excluded from `pre-commit` to prevent local commit latency. For instructions on executing these slower checks locally prior to push, consult the Diátaxis guide: [`docs/how-to/verify_architecture_and_test_locally.md`](../../docs/how-to/verify_architecture_and_test_locally.md).
 
-### 5.2 Tier 2: Continuous Integration Gates (`.github/workflows/ci.yml`)
+### 5.2 Tier 2: Continuous Integration Gates & Verification Orchestrator (`scripts/verify.py`)
 
-The CI workflow executes four discrete quality gates across Ubuntu runners (and Windows test matricies):
+To eliminate discrepancies between developer environments and automated CI, quality gates are orchestrated by a portable, zero-dependency Python script: [`scripts/verify.py`](../../scripts/verify.py).
 
-#### 5.2.1 Gate 1: Ruff Lint & Format Verification
-* Commands:
-  - `ruff check packages tests`
-  - `ruff format --check packages tests`
-* Rules: Enforces PEP 8, import sorting (`I001`), bug detection (`B`), and modern Python 3.11+ idioms across the monorepo.
+#### 5.2.1 Orchestrator Execution Model
+* **Command:** `python scripts/verify.py`
+* **Implementation Standard:** Pure Python standard library (`subprocess`, `sys`). Operates identically across Linux, macOS, and Windows.
+* **Failure Policy:** Executes gates sequentially and halts immediately upon non-zero exit code of any step, echoing failing command output and bubbling up the failure code.
 
-#### 5.2.2 Gate 2: Mypy Static Type Analysis
-* Command: `mypy`
-* Configuration (`pyproject.toml`):
-  - `packages = ["ed_domain", "ed_watcher", "ed_egress", "ed_sdk", "ed_app"]`
-  - `strict = true`, `warn_return_any = true`, `warn_unused_configs = true`.
-  - Requires `py.typed` markers in all packages.
+#### 5.2.2 Quality Gates Executed
 
-#### 5.2.3 Gate 3: Architectural Boundary Verification (`import-linter`)
-* Command: `lint-imports`
-* Contracts configured in `pyproject.toml`:
-  - **Contract 1 (Invariant A - Domain Purity):** `ed_domain` is forbidden from importing external I/O libraries (`httpx`, `watchdog`, `tkinter`, `socket`, `requests`, `http`, `urllib`) or sibling packages (`ed_watcher`, `ed_egress`, `ed_app`, `ed_sdk`).
-  - **Contract 2 (Invariant B - SDK Isolation):** Production runtime packages (`ed_domain`, `ed_watcher`, `ed_egress`, `ed_app`) are strictly forbidden from importing `ed_sdk`.
-  - **Contract 3 (Layered Boundaries):** `ed_app` $\to$ `ed_watcher | ed_egress` $\to$ `ed_domain`. (Forbids reverse upward imports).
+1. **Gate 1: Ruff Lint & Format Verification**
+   * Commands: `ruff check packages tests` and `ruff format --check packages tests`
+   * Rules: Enforces PEP 8, import sorting (`I001`), bug detection (`B`), and Python 3.11+ syntax idioms.
 
-#### 5.2.4 Gate 4: Headless Pytest Suite & CLI Smoke Test
-* Commands:
-  - `pytest -v`
-  - `python -m ed_app`
-* Verification:
-  - `tests/unit/test_bootstrap.py`: Verifies that `build_engine()` constructs a valid `TelemetryEngine` with zero background side-effects.
-  - Smoke test: Runs the composition root startup and shutdown cleanly.
-  - **Zero Display Shims:** Tests must execute in standard headless terminals without `xvfb`.
+2. **Gate 2: Mypy Static Type Analysis**
+   * Command: `mypy`
+   * Rules: Strict static typing across all 5 packages using `pyproject.toml` configurations.
+
+3. **Gate 3: Architectural Boundary Verification (`import-linter`)**
+   * Command: `lint-imports`
+   * Contracts:
+     - Invariant A (Domain purity: no I/O or sibling package imports in `ed_domain`).
+     - Invariant B (SDK runtime isolation: no `ed_sdk` imports in production packages).
+     - Layered boundaries (`ed_app` $\to$ `ed_watcher | ed_egress` $\to$ `ed_domain`).
+
+4. **Gate 4: Headless Pytest Suite & CLI Smoke Test**
+   * Commands: `pytest -v` and `python -m ed_app`
+   * Verification: Headless verification of composition root instantiation and zero runtime side effects.
 
 ---
 
