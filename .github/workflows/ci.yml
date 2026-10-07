@@ -8,11 +8,14 @@ on:
 
 jobs:
   verify:
-    name: Quality Gates (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Quality Gates (${{ matrix.os }} - Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11", "3.12"]
+
 
     steps:
       - name: Checkout source code

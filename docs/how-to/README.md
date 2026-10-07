@@ -11,3 +11,5 @@ Problem-oriented, task-focused practical runbooks and operational procedures for
 
 * [How to Run the CLI Telemetry Daemon](run_cli_daemon.md)
 * [How to Verify Architecture and Run Tests Locally](verify_architecture_and_test_locally.md)
+* [How to Test Cross-Platform Logic Locally with Wine and CI](test_cross_platform_locally.md)
+
