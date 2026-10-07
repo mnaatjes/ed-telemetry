@@ -100,41 +100,41 @@ The discovery process follows an ordered, deterministic precedence hierarchy:
 ```mermaid
 flowchart TD
     Start([Bootstrap: discover_journal_directory]) --> CheckCLI{CLI Flag Override Passed?}
-    CheckCLI -- Yes (--journal-dir) --> ValidateCLI[Validate Directory Exists & Accessible]
-    CheckCLI -- No --> CheckEnv{Env Var ED_JOURNAL_DIR Set?}
-    
-    CheckEnv -- Yes --> ValidateEnv[Validate Directory Exists & Accessible]
-    CheckEnv -- No --> GateOS{Detect sys.platform}
-    
-    GateOS -- win32 --> WinStrategy[WindowsPathStrategy]
-    GateOS -- linux --> LinuxStrategy[LinuxProtonPathStrategy]
-    GateOS -- other --> RaiseUnsupported[Raise UnsupportedPlatformError]
-    
-    WinStrategy --> WinKnown[1. Shell32 SHGetKnownFolderPath FOLDERID_SavedGames]
-    WinKnown -- Found --> ValidateCandidate[Validate Directory Exists & Accessible]
-    WinKnown -- Not Found --> WinReg[2. Registry HKCU Explorer User Shell Folders]
-    WinReg -- Found --> ValidateCandidate
-    WinReg -- Not Found --> WinDefault[3. Standard %USERPROFILE% Saved Games Path]
+    CheckCLI -->|"Yes (--journal-dir)"| ValidateCLI[Validate Directory Exists & Accessible]
+    CheckCLI -->|No| CheckEnv{Env Var ED_JOURNAL_DIR Set?}
+
+    CheckEnv -->|Yes| ValidateEnv[Validate Directory Exists & Accessible]
+    CheckEnv -->|No| GateOS{Detect sys.platform}
+
+    GateOS -->|win32| WinStrategy[WindowsPathStrategy]
+    GateOS -->|linux| LinuxStrategy[LinuxProtonPathStrategy]
+    GateOS -->|other| RaiseUnsupported[Raise UnsupportedPlatformError]
+
+    WinStrategy --> WinKnown["1. Shell32 SHGetKnownFolderPath (FOLDERID_SavedGames)"]
+    WinKnown -->|Found| ValidateCandidate[Validate Directory Exists & Accessible]
+    WinKnown -->|Not Found| WinReg["2. Registry HKCU Explorer User Shell Folders"]
+    WinReg -->|Found| ValidateCandidate
+    WinReg -->|Not Found| WinDefault["3. Standard %USERPROFILE% Saved Games Path"]
     WinDefault --> ValidateCandidate
 
-    LinuxStrategy --> SteamVDF[1. Parse Steam libraryfolders.vdf for App 359320]
-    SteamVDF -- Found --> ValidateCandidate
-    SteamVDF -- Not Found --> StdSteam[2. Check ~/.steam and ~/.local/share/Steam]
-    StdSteam -- Found --> ValidateCandidate
-    StdSteam -- Not Found --> FlatpakSteam[3. Check ~/.var/app/com.valvesoftware.Steam]
-    FlatpakSteam -- Found --> ValidateCandidate
-    FlatpakSteam -- Not Found --> WinePrefix[4. Check active $WINEPREFIX drive_c]
+    LinuxStrategy --> SteamVDF["1. Parse Steam libraryfolders.vdf for App 359320"]
+    SteamVDF -->|Found| ValidateCandidate
+    SteamVDF -->|Not Found| StdSteam["2. Check ~/.steam and ~/.local/share/Steam"]
+    StdSteam -->|Found| ValidateCandidate
+    StdSteam -->|Not Found| FlatpakSteam["3. Check ~/.var/app/com.valvesoftware.Steam"]
+    FlatpakSteam -->|Found| ValidateCandidate
+    FlatpakSteam -->|Not Found| WinePrefix["4. Check active $WINEPREFIX drive_c"]
     WinePrefix --> ValidateCandidate
 
-    ValidateCandidate -- Directory Valid --> Success([Return Canonical Path])
-    ValidateCandidate -- Directory Missing/Unreadable --> NextOrExhaust{More Candidates?}
-    NextOrExhaust -- Yes --> NextCandidate[Try Next Candidate]
-    NextOrExhaust -- No --> RaiseNotFound[Raise JournalPathNotFoundError with Actionable Diagnostic]
+    ValidateCandidate -->|Directory Valid| Success([Return Canonical Path])
+    ValidateCandidate -->|Directory Missing or Unreadable| NextOrExhaust{More Candidates?}
+    NextOrExhaust -->|Yes| NextCandidate[Try Next Candidate]
+    NextOrExhaust -->|No| RaiseNotFound[Raise JournalPathNotFoundError with Actionable Diagnostic]
 
-    ValidateCLI -- Valid --> Success
-    ValidateCLI -- Invalid --> RaiseInvalidOverride[Raise InvalidPathOverrideError]
-    ValidateEnv -- Valid --> Success
-    ValidateEnv -- Invalid --> RaiseInvalidOverride
+    ValidateCLI -->|Valid| Success
+    ValidateCLI -->|Invalid| RaiseInvalidOverride[Raise InvalidPathOverrideError]
+    ValidateEnv -->|Valid| Success
+    ValidateEnv -->|Invalid| RaiseInvalidOverride
 ```
 
 ---
@@ -149,6 +149,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
+
 class SupportedPlatform(str, Enum):
     WINDOWS = "win32"
     LINUX = "linux"
@@ -157,11 +158,13 @@ class SupportedPlatform(str, Enum):
     @classmethod
     def from_current_platform(cls) -> "SupportedPlatform":
         import sys
+
         if sys.platform == "win32":
             return cls.WINDOWS
         elif sys.platform.startswith("linux"):
             return cls.LINUX
         return cls.UNSUPPORTED
+
 
 @dataclass(frozen=True)
 class DiscoveryResult:
