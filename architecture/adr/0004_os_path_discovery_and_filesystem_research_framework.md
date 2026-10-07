@@ -63,6 +63,25 @@ The resolved path serves as the single foundation for two eventual downstream si
 
 *(Note: Internal features and logic for Workflows A and B are deferred to dedicated future ADRs).*
 
+### 4.3 Single Source of Truth (SSoT) Architecture: Research vs. Code Declaration
+To avoid coupling runtime code to fragile external files while preserving historical traceability across Elite Dangerous game versions, we establish a two-tier Single Source of Truth (SSoT) boundary:
+
+1. **Empirical Knowledge SSoT (`architecture/research/`):**
+   - The human-readable and versioned platform fact registry resides in `architecture/research/`.
+   - Captures empirical findings, platform differences, version quirks (e.g., Horizons 3.8 vs. Odyssey 4.0), and filesystem structures as Markdown reference dossiers.
+   - Updated whenever Frontier releases major client updates or new OS platforms emerge.
+
+2. **Runtime Code SSoT (Immutable Typed Specification in `packages/ed_watcher`):**
+   - **Form:** Strongly typed, frozen domain/infrastructure specification (e.g., Python `dataclass(frozen=True)` or `enum` definition, such as `GameVersion`, `FileDescriptor`, `PlatformPathStrategy`).
+   - **Why Code Constants/Dataclasses over `.env` or Configuration Files:**
+     - *.env / Config Files:* Dynamic configuration (`.env`, `.json`, `.yaml`) is designed for *operator runtime preferences* (such as `--journal-dir` manual override, API keys, log levels), not *immutable platform mechanics*. Treating game version path layouts as loose configuration files risks configuration drift, missing file errors, and lack of compiler/type-checker validation.
+     - *Typed Code Definition:* The relationship between an OS platform, a game version, and its standard file locations is a deterministic constant of the game's binary distribution. Declaring them as frozen Python definitions within `packages/ed_watcher.discovery` guarantees compile-time validation, static type safety (mypy), zero file I/O overhead at startup, and explicit version-tagging.
+   - **Precedence Hierarchy for Path Resolution:**
+     1. *CLI / Operator Flag Override:* Explicit `--journal-dir <PATH>` provided by the user.
+     2. *Environment Variable Override:* `ED_JOURNAL_DIR=<PATH>` (via `.env` or system environment).
+     3. *Automated OS Strategy Discovery:* Built-in runtime SSoT strategy detecting default paths for the active OS platform and game version.
+
+
 ---
 
 ## 5. The Filesystem Research Verification Framework
