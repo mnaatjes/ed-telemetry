@@ -1,6 +1,6 @@
 # Elite Dangerous Telemetry (`ed-telemetry`)
 \
-**Version:** `v0.1.0` (Inception / Elaboration Phase)
+**Version:** `v0.2.0` (Inception / Elaboration Phase)
 
 A modern, modular monorepo providing a decoupled, headless telemetry engine, file watcher, and multi-adapter interface (CLI, FastAPI REST, MCP Server) for the *Elite Dangerous* galaxy.
 
