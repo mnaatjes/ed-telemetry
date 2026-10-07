@@ -22,6 +22,7 @@ Governed by the Rational Unified Process (RUP) Use-Case Specification standard a
 
 ---
 
-## 2. Registered Specifications
+| ID | Title | Status | Date | Primary Actor |
+| :---: | :--- | :---: | :---: | :--- |
+| **UC-0002** | [UC-0002: Resolve Elite Dangerous Game Journal Directory](0002_discover_game_directory.md) | **draft** | 2026-10-07 | Application Bootstrap |
 
-*(No use cases registered. Specifications will be authored during feature construction phases after foundational architecture and CI gates are verified).*
