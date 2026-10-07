@@ -149,6 +149,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
+
 class SupportedPlatform(str, Enum):
     WINDOWS = "win32"
     LINUX = "linux"
@@ -157,11 +158,13 @@ class SupportedPlatform(str, Enum):
     @classmethod
     def from_current_platform(cls) -> "SupportedPlatform":
         import sys
+
         if sys.platform == "win32":
             return cls.WINDOWS
         elif sys.platform.startswith("linux"):
             return cls.LINUX
         return cls.UNSUPPORTED
+
 
 @dataclass(frozen=True)
 class DiscoveryResult:
@@ -177,11 +180,14 @@ All path discovery exceptions reside strictly within `packages/ed_watcher/src/ed
 from pathlib import Path
 from typing import Sequence
 
+
 class WatcherError(Exception):
     """Base infrastructure exception for all ed_watcher failures."""
 
+
 class PathDiscoveryError(WatcherError):
     """Base exception for all path discovery failures."""
+
 
 class UnsupportedPlatformError(PathDiscoveryError):
     """
@@ -190,6 +196,7 @@ class UnsupportedPlatformError(PathDiscoveryError):
     Attributes:
         platform_name: The raw sys.platform string that was rejected.
     """
+
     def __init__(self, platform_name: str) -> None:
         self.platform_name = platform_name
         super().__init__(
@@ -197,6 +204,7 @@ class UnsupportedPlatformError(PathDiscoveryError):
             "Automated path discovery is only supported on Windows (win32) and Linux. "
             "Supply an explicit path parameter or set the ED_JOURNAL_DIR environment variable."
         )
+
 
 class InvalidPathOverrideError(PathDiscoveryError):
     """
@@ -208,6 +216,7 @@ class InvalidPathOverrideError(PathDiscoveryError):
         source: The origin of the override ('parameter' or 'environment').
         reason: Diagnostic reason for failure ('does_not_exist', 'not_a_directory', 'permission_denied').
     """
+
     def __init__(self, target_path: Path, source: str, reason: str) -> None:
         self.target_path = target_path
         self.source = source
@@ -216,6 +225,7 @@ class InvalidPathOverrideError(PathDiscoveryError):
             f"Invalid journal directory override from {source}: '{target_path}' ({reason}). "
             "Verify the path exists, is a directory, and has read permissions."
         )
+
 
 class JournalPathNotFoundError(PathDiscoveryError):
     """
@@ -226,6 +236,7 @@ class JournalPathNotFoundError(PathDiscoveryError):
         inspected_paths: The ordered sequence of candidate paths evaluated.
         platform_name: The active platform strategy that was executed.
     """
+
     def __init__(self, inspected_paths: Sequence[Path], platform_name: str) -> None:
         self.inspected_paths = tuple(inspected_paths)
         self.platform_name = platform_name
@@ -276,5 +287,6 @@ In accordance with UP scoping policies, full cross-platform Docker integration a
 * **Milestone 4 (Coordinator & Complete Test Suite):**
   - Implement `PathDiscoverer` coordinating overrides and platform gating in `ed_watcher.discovery.coordinator`.
   - Add end-to-end unit tests covering all success and failure branches, verifying 100% branch coverage across the discovery subsystem.
-
-
+* **Milestone 5 (Diataxis API Reference Documentation):**
+  - Author developer API reference manual `docs/reference/watcher_path_discovery.md` documenting `PathDiscoverer`, `DiscoveryResult`, parameter signatures, return types, and code snippets.
+  - Register the reference in `docs/reference/README.md`.
