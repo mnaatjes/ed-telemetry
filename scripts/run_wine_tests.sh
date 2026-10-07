@@ -39,7 +39,7 @@ print(f'Winreg:   {\"available\" if \"winreg\" in sys.builtin_module_names else 
 echo "Executing path discovery tests..."
 wine "${PYTHON_EXE}" -c "
 import sys
-sys.path.insert(0, r'${WIN_REPO_ROOT}\packages\ed_watcher')
+sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
 
 from ed_watcher.discovery.strategies.windows import WindowsPathStrategy
 strat = WindowsPathStrategy()
