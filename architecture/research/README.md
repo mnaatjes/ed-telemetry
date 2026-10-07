@@ -24,4 +24,4 @@ This directory serves as the engineering ledger and single source of truth for e
 
 | Document | Topic | Target OS / Environment | Status | Last Verified |
 | :--- | :--- | :--- | :---: | :---: |
-| *Pending initial research documents* | — | — | — | — |
+| [0001: OS Targets, Journal Filesystem Catalog, and Ingestion Mechanics](0001_os_targets_and_filesystem_catalog.md) | OS targets, filesystem paths, journal taxonomy, file locks, encoding | Windows 10/11, Linux Proton, Steam Deck, Wine | **Active** | 2026-10-07 |
