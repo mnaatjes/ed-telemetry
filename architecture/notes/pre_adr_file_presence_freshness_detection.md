@@ -114,36 +114,30 @@ The platform context must not leak across business logic. We propagate the opera
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Engine as TelemetryEngine
-    participant Watcher as WatcherPort (FPFD)
-    participant Disk as Saved Games Directory
-    participant Domain as Domain Pipeline
+    actor Engine as TelemetryEngine
+    participant Watcher as WatcherPort
+    participant Disk as SavedGamesDirectory
+    participant Domain as DomainPipeline
 
     Note over Engine,Domain: Phase 1: Boot & Catch-Up Phase
     Engine->>Watcher: start()
-    Watcher->>Disk: Scan & Regex Filter candidate Journal files
-    Watcher->>Disk: Select initial active Journal (Candidate Selection Strategy)
-    Watcher->>Disk: Open stream & read lines (Offset 0 -> EOF)
-    Watcher->>Domain: Replay historical events -> Establish SessionContext (Cmdr, FID, session_start)
-    Watcher->>Disk: Checkpoint last_valid_offset = tell()
-    Watcher->>Disk: Read Status.json (Verify timestamp >= session_start)
-    Watcher->>Domain: Reconcile initial HUD/Cockpit state
+    Watcher->>Disk: Scan and regex filter candidate journal files
+    Watcher->>Disk: Select initial active journal
+    Watcher->>Disk: Open stream and read lines from offset 0 to EOF
+    Watcher->>Domain: Replay historical events to build SessionContext
+    Watcher->>Disk: Checkpoint last valid offset
+    Watcher->>Disk: Read Status.json if timestamp >= session_start
+    Watcher->>Domain: Reconcile initial cockpit state
 
-    Note over Engine,Domain: Phase 2: Steady-State Runtime (Continuous Loop)
-    loop Hybrid Watcher Loop (Event Trigger or 1.0s Timeout)
-        alt Journal has new bytes (size > offset)
-            Watcher->>Disk: Read new appended byte slice
-            Watcher->>Domain: Dispatch live journal events
-            Watcher->>Watcher: Advance last_valid_offset
-        end
-        alt Status.json modified (mtime changed & hash changed)
-            Watcher->>Disk: Read whole bytes (with retry guard)
-            Watcher->>Domain: Dispatch updated StatusEvent
-        end
-        alt Journal Event triggers Snapshot (e.g. Market, Cargo)
-            Watcher->>Disk: Read whole auxiliary snapshot file
-            Watcher->>Domain: Dispatch SnapshotEvent
-        end
+    Note over Engine,Domain: Phase 2: Steady-State Runtime
+    loop Hybrid Watcher Loop
+        Watcher->>Disk: Poll or wait for filesystem trigger
+        Watcher->>Disk: Read appended journal byte slice
+        Watcher->>Domain: Dispatch live journal events
+        Watcher->>Disk: Check and read modified Status.json
+        Watcher->>Domain: Dispatch StatusEvent
+        Watcher->>Disk: Read auxiliary snapshots on triggering journal events
+        Watcher->>Domain: Dispatch SnapshotEvent
     end
 ```
 
