@@ -277,272 +277,122 @@ sequenceDiagram
 
 ---
 
-## 9. Domain Models Representation & Evaluation of the "Ur-Event" Pattern
+## 9. Watcher I/O & Lifecycle Audit Architecture (FPFD Scope)
 
-### 9.1 Evaluation: State (`SessionContext`) vs. Stream (`TelemetryEvent`)
-
-#### Why is `TelemetryEvent` necessary if `SessionContext` already exists?
-- **`SessionContext` is Entity State (The "Who & Where")**:
-  It represents the persistent, slowly changing environmental envelope of the active session (Commander name, Frontier ID, game version, active journal path, start time). It is a reference entity updated on major transitions.
-- **`TelemetryEvent` is Stream Occurrences (The "What Happened & When")**:
-  It represents discrete time-series occurrences passing through time (e.g. `FSDJump`, `FuelStatus`, `CargoPickup`, `Docked`). A single `SessionContext` spans tens of thousands of `TelemetryEvent` instances.
-- **Egress & Decoupling**: Downstream consumers (WebSockets, UI dashboards, telemetry exporters) subscribe to a stream of `TelemetryEvent` instances; they query `SessionContext` only when establishing session bounds or account identity.
-
-#### Event Collection & Retention:
-- **In-Memory Ring Buffering**: The domain engine maintains an in-memory sliding window (e.g. ring buffer of the last $N=1,000$ events). This enables:
-  1. Replaying dropped events to reconnecting clients without re-reading disks.
-  2. Querying recent flight history (e.g. "last 5 systems jumped").
-  3. Boundary contract verification during testing.
-
-#### Event Identifiers & Idempotency:
-- **Should events have UUIDs?**
-  **Yes, using Deterministic UUIDs (UUIDv5 or UUIDv7) rather than random UUIDv4**:
-  - *The Danger of Random UUIDv4*: If the watcher restarts and replays historical journal lines from offset 0, every replayed event would receive a new random UUIDv4, destroying idempotency and polluting downstream databases with duplicates.
-  - *Deterministic Identifier Strategy*:
-    - **Journal Events**: Deterministically hashed from `UUIDv5(namespace, f"{session_id}:{part}:{byte_offset}")`.
-    - **Status Events**: Deterministically hashed from `UUIDv5(namespace, f"{session_id}:{timestamp}:{raw_hash}")`.
-    - **Snapshot Events**: Deterministically hashed from `UUIDv5(namespace, f"{session_id}:{snapshot_name}:{timestamp}")`.
-
-#### Heritability Evaluation: Classical OOP vs. Protocol Composition:
-- **No Heavy Inheritance Trees**:
-  `SessionContext` is an entity, **not** an event; it does not inherit from `TelemetryEvent`.
-  `JournalEvent`, `StatusEvent`, and `SnapshotEvent` do not inherit from a shared concrete base class. Instead, they share a flat, standardized `EventHeader` component and conform to the `TelemetryEvent` protocol.
+### 9.1 Boundary Enforcement: I/O Envelopes vs. Domain Payloads
+In alignment with the **File Presence & Freshness Detection (FPFD)** scope boundary (Section 1):
+- The watcher subsystem is **strictly responsible for physical file interaction**: detecting existence, verifying non-empty content (`st_size > 0`), evaluating freshness, and extracting raw unparsed byte slices.
+- The watcher is **strictly agnostic to internal JSON schemas**: it does not parse game telemetry attributes (`pips`, `fuel`, `cargo`, `body_name`), nor does it validate game business logic.
+- To eliminate class proliferation and inheritance boilerplate, the watcher's output is consolidated into two tightly bounded data structures:
+  1. **`FileIngestionEvent`**: The raw data I/O carrier emitted whenever fresh bytes are read from any target file.
+  2. **`WatcherAuditEvent`**: The operational diagnostic audit record emitted during watcher lifecycle transitions, retries, and error handling.
 
 ---
 
-### 9.2 Proposed Domain Models Architecture
+### 9.2 Consolidated Model Architecture
 
 ```mermaid
 classDiagram
-    class TelemetryEvent {
-        <<Protocol>>
-        +UUID event_id
+    class FileKind {
+        <<enumeration>>
+        JOURNAL
+        STATUS
+        SNAPSHOT
+    }
+
+    class WatcherAuditAction {
+        <<enumeration>>
+        DISCOVERED
+        SELECTED
+        POLL_TICK
+        FRESHNESS_VERIFIED
+        RETRY_BACKOFF
+        PART_ROLLOVER
+        LINE_QUARANTINED
+    }
+
+    class FileIngestionEvent {
+        +str event_id
         +datetime timestamp
-        +str event_type
-        +str session_id
-    }
-
-    class EventHeader {
-        +UUID event_id
-        +datetime timestamp
-        +str event_type
-        +str session_id
-    }
-
-    class SessionContext {
-        +str session_id
-        +str frontier_id
-        +str commander_name
-        +str game_version
-        +str build
-        +bool odyssey
-        +datetime session_start
-        +Path journal_path
+        +FileKind file_kind
+        +Path target_path
+        +bytes raw_payload
+        +int start_offset
+        +int end_offset
         +int part
-    }
-
-    class JournalEvent {
-        +EventHeader header
-        +int part
-        +int byte_offset
-        +dict payload
-    }
-
-    class StatusEvent {
-        +EventHeader header
-        +int flags
-        +int flags2
-        +tuple pips
-        +float fuel_main
-        +float fuel_reservoir
-        +float cargo_mass
         +str raw_hash
     }
 
-    class SnapshotEvent {
-        +EventHeader header
-        +str snapshot_name
-        +int market_id
-        +str station_name
-        +dict payload
+    class WatcherAuditEvent {
+        +datetime timestamp
+        +WatcherAuditAction action
+        +Path target_path
+        +str detail
     }
 
-    TelemetryEvent <|.. JournalEvent : conforms
-    TelemetryEvent <|.. StatusEvent : conforms
-    TelemetryEvent <|.. SnapshotEvent : conforms
-    JournalEvent *-- EventHeader : contains
-    StatusEvent *-- EventHeader : contains
-    SnapshotEvent *-- EventHeader : contains
-    SessionContext ..> JournalEvent : populated from
+    FileIngestionEvent --> FileKind : categorized by
+    WatcherAuditEvent --> WatcherAuditAction : classified by
 ```
 
 ---
 
-### 9.3 Concrete Model Definitions (`packages/ed_domain/models/`)
+### 9.3 Concrete Model Definitions (`packages/ed_watcher/models.py`)
 
 ```python
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Mapping, Protocol, runtime_checkable
-from uuid import UUID
 
 
-@runtime_checkable
-class TelemetryEvent(Protocol):
-    """Minimal structural protocol satisfied by all inbound telemetry events."""
+class FileKind(StrEnum):
+    """Discriminator for target file categories within FPFD scope."""
 
-    @property
-    def event_id(self) -> UUID: ...
-
-    @property
-    def timestamp(self) -> datetime: ...
-
-    @property
-    def event_type(self) -> str: ...
-
-    @property
-    def session_id(self) -> str: ...
+    JOURNAL = "journal"  # Append-only log stream (Journal.*.log)
+    STATUS = "status"  # Fast heartbeat snapshot (Status.json)
+    SNAPSHOT = "snapshot"  # Auxiliary state snapshots (Market.json, Cargo.json, etc.)
 
 
 @dataclass(frozen=True)
-class EventHeader:
-    """Universal immutable envelope header for stream telemetry."""
+class FileIngestionEvent:
+    """
+    Consolidated I/O record emitted upon extracting raw bytes from a target file.
 
-    event_id: UUID
+    Carries file location, byte pointers, and raw unparsed payload.
+    Does NOT decode or validate domain JSON schemas.
+    """
+
+    event_id: str  # Deterministic hash / ID (UUIDv5 or content hash)
+    timestamp: datetime  # Read timestamp (UTC)
+    file_kind: FileKind  # JOURNAL | STATUS | SNAPSHOT
+    target_path: Path  # Absolute path to file on disk
+    raw_payload: bytes  # Raw unparsed byte content (line or whole file)
+    start_offset: int = 0  # Stream start offset (0 for snapshots)
+    end_offset: int = 0  # Stream end offset (len(raw_payload) for snapshots)
+    part: int | None = None  # Journal part number (if applicable)
+    raw_hash: str = ""  # Content hash (used for change detection)
+
+
+class WatcherAuditAction(StrEnum):
+    """Discriminator for watcher operational lifecycle actions."""
+
+    DISCOVERED = "discovered"  # Candidate file detected in directory
+    SELECTED = "selected"  # Active journal selected for streaming
+    POLL_TICK = "poll_tick"  # Fallback periodic poll completed
+    FRESHNESS_VERIFIED = "freshness_verified"  # File determined to have new unread content
+    RETRY_BACKOFF = "retry_backoff"  # Transient I/O or truncate race retry
+    PART_ROLLOVER = "part_rollover"  # Transitioned from part N to N+1
+    LINE_QUARANTINED = "line_quarantined"  # Corrupt or undecodable line isolated
+
+
+@dataclass(frozen=True)
+class WatcherAuditEvent:
+    """Internal diagnostic audit record for watcher operations and error tracking."""
+
     timestamp: datetime
-    event_type: str
-    session_id: str
-
-
-@dataclass(frozen=True)
-class SessionContext:
-    """
-    Stateful session envelope established during boot replay.
-
-    Reconciles game executable context and player identity from
-    initial Fileheader, LoadGame, and Commander events.
-    """
-
-    session_id: str
-    frontier_id: str | None
-    commander_name: str | None
-    game_version: str
-    build: str
-    odyssey: bool
-    session_start: datetime
-    active_journal_path: Path
-    part: int
-
-
-@dataclass(frozen=True)
-class JournalEvent:
-    """Discrete event streamed from an active Journal.*.log line."""
-
-    header: EventHeader
-    part: int
-    byte_offset: int
-    payload: Mapping[str, Any]
-
-    @property
-    def event_id(self) -> UUID:
-        return self.header.event_id
-
-    @property
-    def timestamp(self) -> datetime:
-        return self.header.timestamp
-
-    @property
-    def event_type(self) -> str:
-        return self.header.event_type
-
-    @property
-    def session_id(self) -> str:
-        return self.header.session_id
-
-
-@dataclass(frozen=True)
-class StatusEvent:
-    """
-    Real-time cockpit HUD and vehicle state snapshot (from Status.json).
-
-    Specialty vs. Auxiliary Snapshots:
-    - Cadence: Unlike reactive snapshots (Market.json, etc.) written on menu interaction,
-      Status.json is an autonomous, continuous telemetry heartbeat overwritten at ~1.0 Hz
-      and immediately on cockpit state toggles.
-    - Conditional Schema: Invariant properties (timestamp, event, flags) are always emitted.
-      However, context properties are sparse/conditional: pips/fuel are emitted only in-ship,
-      latitude/altitude only in planetary proximity, oxygen/health only on-foot, and
-      destination only when actively nav-targeted. All conditional telemetry fields default to None.
-    """
-
-    header: EventHeader
-    flags: int = 0
-    flags2: int = 0
-    pips: tuple[int, int, int] | None = None
-    firegroup: int | None = None
-    gui_focus: int | None = None
-    fuel_main: float | None = None
-    fuel_reservoir: float | None = None
-    cargo_mass: float | None = None
-    legal_state: str | None = None
-    balance: int | None = None
-    latitude: float | None = None
-    longitude: float | None = None
-    altitude: float | None = None
-    heading: float | None = None
-    body_name: str | None = None
-    planet_radius: float | None = None
-    oxygen: float | None = None
-    health: float | None = None
-    temperature: float | None = None
-    selected_weapon: str | None = None
-    gravity: float | None = None
-    raw_hash: str = ""
-
-    @property
-    def event_id(self) -> UUID:
-        return self.header.event_id
-
-    @property
-    def timestamp(self) -> datetime:
-        return self.header.timestamp
-
-    @property
-    def event_type(self) -> str:
-        return self.header.event_type
-
-    @property
-    def session_id(self) -> str:
-        return self.header.session_id
-
-
-@dataclass(frozen=True)
-class SnapshotEvent:
-    """Discrete auxiliary snapshot (Market.json, Cargo.json, NavRoute.json, etc.)."""
-
-    header: EventHeader
-    snapshot_name: str  # "Market.json"
-    market_id: int | None
-    station_name: str | None
-    system_address: int | None
-    payload: Mapping[str, Any]
-
-    @property
-    def event_id(self) -> UUID:
-        return self.header.event_id
-
-    @property
-    def timestamp(self) -> datetime:
-        return self.header.timestamp
-
-    @property
-    def event_type(self) -> str:
-        return self.header.event_type
-
-    @property
-    def session_id(self) -> str:
-        return self.header.session_id
+    action: WatcherAuditAction
+    target_path: Path
+    detail: str = ""
 ```
