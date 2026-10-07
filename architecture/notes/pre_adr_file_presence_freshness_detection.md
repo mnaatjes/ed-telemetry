@@ -203,10 +203,36 @@ sequenceDiagram
   - Matches the game engine's true chronological generation order.
 - **Cons**: Requires parsing timestamp strings from filenames.
 
-#### Strategy 4: Composite Key (Filename Domain Key with `mtime` Tiebreaker) (Recommended)
+#### Strategy 4: Composite Lexicographical & Metadata Sort (Recommended)
 - **Mechanism**:
-  Sort primarily by `(timestamp, part)` parsed from filename, with `mtime` as a final tiebreaker for malformed filenames.
-- **Pros**: Combines domain precision with robust fallback.
+  Combines filename domain regex extraction with filesystem `st_mtime` metadata into a deterministic tuple sort key:
+  ```python
+  def composite_journal_sort_key(filepath: Path) -> tuple[datetime, int, float]:
+      """
+      Composite sort key for Journal log candidate selection.
+
+      Evaluates:
+      1. Primary: Parsed ISO/compact timestamp from filename (chronological game order)
+      2. Secondary: Part number sequence (e.g. 01 -> 02 rollover within same session)
+      3. Tertiary: Filesystem st_mtime as tiebreaker for malformed filenames or non-matching logs
+      """
+      match = JOURNAL_FILE_REGEX.match(filepath.name)
+      if match:
+          ts = parse_journal_timestamp(match.group("timestamp"))
+          part = int(match.group("part"))
+          return (ts, part, filepath.stat().st_mtime)
+      return (datetime.min, 0, filepath.stat().st_mtime)
+  ```
+  Select active file via:
+  ```python
+  active_journal = max(candidate_files, key=composite_journal_sort_key)
+  ```
+- **Pros**:
+  - **Immune to Platform Metadata Inconsistencies**: Bypasses the divergence between Windows birthtime and Linux POSIX metadata change time (`st_ctime`).
+  - **Archive & Cloud-Sync Safe**: Restoring files or copying them across disks preserves filename timestamps even when filesystem timestamps are wiped.
+  - **Session Rollover Resilient**: Correctly ranks `02.log` over `01.log` even if both share identical creation or start timestamps.
+  - **Graceful Fallback**: If a test fixture or simulated log has a non-standard timestamp string, it falls back gracefully to `st_mtime`.
+- **Cons**: Minor overhead of evaluating regex and parsing datetime during the initial startup discovery scan ($O(N)$ once at boot).
 
 ---
 
