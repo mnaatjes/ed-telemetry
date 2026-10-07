@@ -12,7 +12,7 @@ last_updated_at: "2026-10-07"
 * **Use Case ID:** `UC-0002`
 * **Use Case Name:** Resolve Elite Dangerous Game Journal Directory
 * **Goal Level:** User-Goal (Sea-Level)
-* **Primary Actor:** Telemetry Engine Bootstrap Service (CLI / SDK Runner)
+* **Primary Actor:** Telemetry Engine Bootstrap Service (Programmatic / SDK Runner)
 * **Secondary Actor:** Host Operating System (Win32 Shell / Linux Steam Environment)
 * **Scope:** `packages/ed_watcher.discovery`
 
@@ -32,7 +32,7 @@ Before the telemetry system can tail player activity or ingest station market da
 
 ### 3.2 Post-conditions
 * **Success:** A validated, canonical `pathlib.Path` pointing to an existing, readable Elite Dangerous journal directory is returned to the bootstrap orchestrator.
-* **Failure:** An informative, actionable exception (`PathDiscoveryError`) is raised detailing examined paths and instructing the operator on using the explicit `--journal-dir` override.
+* **Failure:** An informative, actionable exception (`PathDiscoveryError`) is raised detailing examined paths and instructing the operator on providing an explicit path parameter or environment variable override.
 
 ---
 
@@ -80,7 +80,7 @@ sequenceDiagram
 
 ### 4.2 Extension Flows (Alternate & Failure Paths)
 
-* **1a. Operator supplies CLI or environment override (`--journal-dir` or `ED_JOURNAL_DIR`):**
+* **1a. Caller supplies programmatic parameter or environment override (`override_path` or `ED_JOURNAL_DIR`):**
   * `1a1.` `PathDiscoverer` bypasses automated platform strategies.
   * `1a2.` `PathDiscoverer` validates that the override path exists and is a directory.
   * `1a3.` If valid, `PathDiscoverer` returns the override path.
@@ -88,11 +88,12 @@ sequenceDiagram
 
 * **2a. Host operating system is unsupported (e.g. macOS, FreeBSD):**
   * `2a1.` `PathDiscoverer` detects an unsupported `sys.platform`.
-  * `2a2.` `PathDiscoverer` raises `UnsupportedPlatformError` stating that automated discovery is unavailable and directs the user to supply `--journal-dir`.
+  * `2a2.` `PathDiscoverer` raises `UnsupportedPlatformError` stating that automated discovery is unavailable and directs the user to supply an explicit path override.
 
 * **4a. Automated strategy candidates are completely exhausted:**
   * `4a1.` The platform strategy tests all candidate locations (standard Steam, custom library folders, Flatpak prefixes, registry entries) and finds none existing.
-  * `4a2.` `PathDiscoverer` raises `JournalPathNotFoundError` containing the full list of inspected paths and clear remediation instructions (`"Set --journal-dir <PATH> or launch Elite Dangerous once to generate save folders"`).
+  * `4a2.` `PathDiscoverer` raises `JournalPathNotFoundError` containing the full list of inspected paths and clear remediation instructions (`"Supply an explicit override path or launch Elite Dangerous once to generate save folders"`).
+
 
 ---
 

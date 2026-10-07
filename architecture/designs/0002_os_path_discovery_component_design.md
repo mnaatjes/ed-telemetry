@@ -99,9 +99,9 @@ The discovery process follows an ordered, deterministic precedence hierarchy:
 
 ```mermaid
 flowchart TD
-    Start([Bootstrap: discover_journal_directory]) --> CheckCLI{CLI Flag Override Passed?}
-    CheckCLI -->|"Yes (--journal-dir)"| ValidateCLI[Validate Directory Exists & Accessible]
-    CheckCLI -->|No| CheckEnv{Env Var ED_JOURNAL_DIR Set?}
+    Start([Bootstrap: discover_journal_directory]) --> CheckParam{Explicit Path Parameter Passed?}
+    CheckParam -->|"Yes (explicit Path)"| ValidateParam[Validate Directory Exists & Accessible]
+    CheckParam -->|No| CheckEnv{Env Var ED_JOURNAL_DIR Set?}
 
     CheckEnv -->|Yes| ValidateEnv[Validate Directory Exists & Accessible]
     CheckEnv -->|No| GateOS{Detect sys.platform}
@@ -131,8 +131,8 @@ flowchart TD
     NextOrExhaust -->|Yes| NextCandidate[Try Next Candidate]
     NextOrExhaust -->|No| RaiseNotFound[Raise JournalPathNotFoundError with Actionable Diagnostic]
 
-    ValidateCLI -->|Valid| Success
-    ValidateCLI -->|Invalid| RaiseInvalidOverride[Raise InvalidPathOverrideError]
+    ValidateParam -->|Valid| Success
+    ValidateParam -->|Invalid| RaiseInvalidOverride[Raise InvalidPathOverrideError]
     ValidateEnv -->|Valid| Success
     ValidateEnv -->|Invalid| RaiseInvalidOverride
 ```
@@ -149,7 +149,6 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-
 class SupportedPlatform(str, Enum):
     WINDOWS = "win32"
     LINUX = "linux"
@@ -158,18 +157,16 @@ class SupportedPlatform(str, Enum):
     @classmethod
     def from_current_platform(cls) -> "SupportedPlatform":
         import sys
-
         if sys.platform == "win32":
             return cls.WINDOWS
         elif sys.platform.startswith("linux"):
             return cls.LINUX
         return cls.UNSUPPORTED
 
-
 @dataclass(frozen=True)
 class DiscoveryResult:
     resolved_path: Path
-    discovery_source: str  # "cli_override", "env_override", "win32_shell", "steam_proton", etc.
+    discovery_source: str  # "explicit_override", "env_override", "win32_shell", "steam_proton", etc.
 ```
 
 ### 5.2 Exception Hierarchy
@@ -178,8 +175,8 @@ All discovery exceptions inherit from `WatcherError` within `ed_watcher`:
 * `WatcherError` (Base infrastructure error)
   * `PathDiscoveryError`
     * `UnsupportedPlatformError`: Raised when running on unhandled platforms (e.g. Darwin/macOS, BSD).
-    * `InvalidPathOverrideError`: Raised when the operator provides `--journal-dir` or `ED_JOURNAL_DIR` pointing to a non-existent or unreadable path.
-    * `JournalPathNotFoundError`: Raised when automated strategy candidates are exhausted without encountering a valid journal directory. Contains actionable diagnostics pointing to `--journal-dir` remediation.
+    * `InvalidPathOverrideError`: Raised when the caller provides an explicit path parameter or `ED_JOURNAL_DIR` pointing to a non-existent or unreadable path.
+    * `JournalPathNotFoundError`: Raised when automated strategy candidates are exhausted without encountering a valid journal directory. Contains actionable diagnostics pointing to explicit path remediation.
 
 ---
 
@@ -205,5 +202,6 @@ In accordance with UP scoping policies, full cross-platform Docker integration a
   - Implement `WindowsPathStrategy` with Win32 ctypes `SHGetKnownFolderPath` and registry fallback.
 * **Milestone 3 (Linux Proton Strategy):**
   - Implement `LinuxProtonPathStrategy` scanning Steam libraries, default paths, and Flatpak prefixes.
-* **Milestone 4 (Orchestrator & CLI Integration):**
-  - Implement `PathDiscoverer` coordinating overrides and platform gating; expose `--journal-dir` in `packages/ed_app`.
+* **Milestone 4 (Coordinator & Unit Test Suite):**
+  - Implement `PathDiscoverer` coordinating overrides and platform gating; author complete unit test suite in `tests/unit/test_path_discovery.py`.
+
