@@ -279,21 +279,34 @@ sequenceDiagram
 
 ## 9. Domain Models Representation & Evaluation of the "Ur-Event" Pattern
 
-### 9.1 Evaluation: Should We Employ an "Ur-Event" (Base Event)?
+### 9.1 Evaluation: State (`SessionContext`) vs. Stream (`TelemetryEvent`)
 
-#### The Dilemma: Structural Base Class vs. Pure Protocol / Structural Subtyping
-- **The Risk of an OOP "Ur-Event" Hierarchy**:
-  In object-oriented architectures, creating a heavy `BaseTelemetryEvent` class that attempts to encompass all possible properties across FDev's heterogeneous events leads to an **anemic or bloated base model**, tight inheritance coupling, and serialization rigidity.
-- **The Case for a Minimal Structural Protocol (`TelemetryEvent`)**:
-  Every telemetry record emitted by Elite Dangerous (whether in `Journal.*.log`, `Status.json`, or `Market.json`) strictly shares exactly two universal invariant attributes:
-  1. `timestamp: datetime` (When the event occurred in UTC).
-  2. `event_type: str` (The discriminator identifier, e.g. `"Fileheader"`, `"Status"`, `"FSDJump"`).
+#### Why is `TelemetryEvent` necessary if `SessionContext` already exists?
+- **`SessionContext` is Entity State (The "Who & Where")**:
+  It represents the persistent, slowly changing environmental envelope of the active session (Commander name, Frontier ID, game version, active journal path, start time). It is a reference entity updated on major transitions.
+- **`TelemetryEvent` is Stream Occurrences (The "What Happened & When")**:
+  It represents discrete time-series occurrences passing through time (e.g. `FSDJump`, `FuelStatus`, `CargoPickup`, `Docked`). A single `SessionContext` spans tens of thousands of `TelemetryEvent` instances.
+- **Egress & Decoupling**: Downstream consumers (WebSockets, UI dashboards, telemetry exporters) subscribe to a stream of `TelemetryEvent` instances; they query `SessionContext` only when establishing session bounds or account identity.
 
-#### Architectural Recommendation: Discriminated Protocol / Union
-Do **not** create a heavy inheritance tree. Instead:
-1. Define a minimal, runtime-checkable protocol or lightweight ABC `TelemetryEvent` that enforces only `timestamp` and `event_type`.
-2. Model concrete event envelopes as immutable dataclasses (`frozen=True`).
-3. Downstream subscribers consume specific types or the type union `TelemetryEvent`.
+#### Event Collection & Retention:
+- **In-Memory Ring Buffering**: The domain engine maintains an in-memory sliding window (e.g. ring buffer of the last $N=1,000$ events). This enables:
+  1. Replaying dropped events to reconnecting clients without re-reading disks.
+  2. Querying recent flight history (e.g. "last 5 systems jumped").
+  3. Boundary contract verification during testing.
+
+#### Event Identifiers & Idempotency:
+- **Should events have UUIDs?**
+  **Yes, using Deterministic UUIDs (UUIDv5 or UUIDv7) rather than random UUIDv4**:
+  - *The Danger of Random UUIDv4*: If the watcher restarts and replays historical journal lines from offset 0, every replayed event would receive a new random UUIDv4, destroying idempotency and polluting downstream databases with duplicates.
+  - *Deterministic Identifier Strategy*:
+    - **Journal Events**: Deterministically hashed from `UUIDv5(namespace, f"{session_id}:{part}:{byte_offset}")`.
+    - **Status Events**: Deterministically hashed from `UUIDv5(namespace, f"{session_id}:{timestamp}:{raw_hash}")`.
+    - **Snapshot Events**: Deterministically hashed from `UUIDv5(namespace, f"{session_id}:{snapshot_name}:{timestamp}")`.
+
+#### Heritability Evaluation: Classical OOP vs. Protocol Composition:
+- **No Heavy Inheritance Trees**:
+  `SessionContext` is an entity, **not** an event; it does not inherit from `TelemetryEvent`.
+  `JournalEvent`, `StatusEvent`, and `SnapshotEvent` do not inherit from a shared concrete base class. Instead, they share a flat, standardized `EventHeader` component and conform to the `TelemetryEvent` protocol.
 
 ---
 
@@ -303,11 +316,21 @@ Do **not** create a heavy inheritance tree. Instead:
 classDiagram
     class TelemetryEvent {
         <<Protocol>>
+        +UUID event_id
         +datetime timestamp
         +str event_type
+        +str session_id
+    }
+
+    class EventHeader {
+        +UUID event_id
+        +datetime timestamp
+        +str event_type
+        +str session_id
     }
 
     class SessionContext {
+        +str session_id
         +str frontier_id
         +str commander_name
         +str game_version
@@ -319,20 +342,17 @@ classDiagram
     }
 
     class JournalEvent {
-        +datetime timestamp
-        +str event_type
+        +EventHeader header
         +int part
         +int byte_offset
         +dict payload
     }
 
     class StatusEvent {
-        +datetime timestamp
-        +str event_type
+        +EventHeader header
         +int flags
         +int flags2
-        +list pips
-        +int firegroup
+        +tuple pips
         +float fuel_main
         +float fuel_reservoir
         +float cargo_mass
@@ -340,18 +360,19 @@ classDiagram
     }
 
     class SnapshotEvent {
-        +datetime timestamp
-        +str event_type
+        +EventHeader header
         +str snapshot_name
         +int market_id
         +str station_name
-        +str system_address
         +dict payload
     }
 
-    TelemetryEvent <|.. JournalEvent : implements
-    TelemetryEvent <|.. StatusEvent : implements
-    TelemetryEvent <|.. SnapshotEvent : implements
+    TelemetryEvent <|.. JournalEvent : conforms
+    TelemetryEvent <|.. StatusEvent : conforms
+    TelemetryEvent <|.. SnapshotEvent : conforms
+    JournalEvent *-- EventHeader : contains
+    StatusEvent *-- EventHeader : contains
+    SnapshotEvent *-- EventHeader : contains
     SessionContext ..> JournalEvent : populated from
 ```
 
@@ -366,6 +387,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping, Protocol, runtime_checkable
+from uuid import UUID
 
 
 @runtime_checkable
@@ -373,10 +395,26 @@ class TelemetryEvent(Protocol):
     """Minimal structural protocol satisfied by all inbound telemetry events."""
 
     @property
+    def event_id(self) -> UUID: ...
+
+    @property
     def timestamp(self) -> datetime: ...
 
     @property
     def event_type(self) -> str: ...
+
+    @property
+    def session_id(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class EventHeader:
+    """Universal immutable envelope header for stream telemetry."""
+
+    event_id: UUID
+    timestamp: datetime
+    event_type: str
+    session_id: str
 
 
 @dataclass(frozen=True)
@@ -388,6 +426,7 @@ class SessionContext:
     initial Fileheader, LoadGame, and Commander events.
     """
 
+    session_id: str
     frontier_id: str | None
     commander_name: str | None
     game_version: str
@@ -402,11 +441,26 @@ class SessionContext:
 class JournalEvent:
     """Discrete event streamed from an active Journal.*.log line."""
 
-    timestamp: datetime
-    event_type: str
+    header: EventHeader
     part: int
     byte_offset: int
     payload: Mapping[str, Any]
+
+    @property
+    def event_id(self) -> UUID:
+        return self.header.event_id
+
+    @property
+    def timestamp(self) -> datetime:
+        return self.header.timestamp
+
+    @property
+    def event_type(self) -> str:
+        return self.header.event_type
+
+    @property
+    def session_id(self) -> str:
+        return self.header.session_id
 
 
 @dataclass(frozen=True)
@@ -424,8 +478,7 @@ class StatusEvent:
       destination only when actively nav-targeted. All conditional telemetry fields default to None.
     """
 
-    timestamp: datetime
-    event_type: str = "Status"
+    header: EventHeader
     flags: int = 0
     flags2: int = 0
     pips: tuple[int, int, int] | None = None
@@ -449,16 +502,47 @@ class StatusEvent:
     gravity: float | None = None
     raw_hash: str = ""
 
+    @property
+    def event_id(self) -> UUID:
+        return self.header.event_id
+
+    @property
+    def timestamp(self) -> datetime:
+        return self.header.timestamp
+
+    @property
+    def event_type(self) -> str:
+        return self.header.event_type
+
+    @property
+    def session_id(self) -> str:
+        return self.header.session_id
+
 
 @dataclass(frozen=True)
 class SnapshotEvent:
     """Discrete auxiliary snapshot (Market.json, Cargo.json, NavRoute.json, etc.)."""
 
-    timestamp: datetime
-    event_type: str  # e.g. "Market", "Cargo", "NavRoute"
+    header: EventHeader
     snapshot_name: str  # "Market.json"
     market_id: int | None
     station_name: str | None
     system_address: int | None
     payload: Mapping[str, Any]
+
+    @property
+    def event_id(self) -> UUID:
+        return self.header.event_id
+
+    @property
+    def timestamp(self) -> datetime:
+        return self.header.timestamp
+
+    @property
+    def event_type(self) -> str:
+        return self.header.event_type
+
+    @property
+    def session_id(self) -> str:
+        return self.header.session_id
 ```
