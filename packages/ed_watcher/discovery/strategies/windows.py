@@ -56,19 +56,20 @@ class WindowsPathStrategy:
             from ctypes import wintypes
 
             # GUID structure for {4C5C32FF-BB9D-43b0-B5B4-2D780DDF04E3}
+            # Uses fixed-width integers (c_uint32, c_uint16, c_ubyte) to ensure exact 16-byte Win32 C ABI
             class GUID(ctypes.Structure):
                 _fields_ = [
-                    ("Data1", wintypes.DWORD),
-                    ("Data2", wintypes.WORD),
-                    ("Data3", wintypes.WORD),
-                    ("Data4", ctypes.c_byte * 8),
+                    ("Data1", ctypes.c_uint32),
+                    ("Data2", ctypes.c_uint16),
+                    ("Data3", ctypes.c_uint16),
+                    ("Data4", ctypes.c_ubyte * 8),
                 ]
 
             folderid_saved_games = GUID(
                 0x4C5C32FF,
                 0xBB9D,
                 0x43B0,
-                (ctypes.c_byte * 8)(0xB5, 0xB4, 0x2D, 0x78, 0x0D, 0xDF, 0x04, 0xE3),
+                (ctypes.c_ubyte * 8)(0xB5, 0xB4, 0x2D, 0x78, 0x0D, 0xDF, 0x04, 0xE3),
             )
 
             # On non-Windows platforms ctypes has no windll attribute
