@@ -411,18 +411,43 @@ class JournalEvent:
 
 @dataclass(frozen=True)
 class StatusEvent:
-    """Real-time cockpit HUD and vehicle state snapshot (from Status.json)."""
+    """
+    Real-time cockpit HUD and vehicle state snapshot (from Status.json).
+
+    Specialty vs. Auxiliary Snapshots:
+    - Cadence: Unlike reactive snapshots (Market.json, etc.) written on menu interaction,
+      Status.json is an autonomous, continuous telemetry heartbeat overwritten at ~1.0 Hz
+      and immediately on cockpit state toggles.
+    - Conditional Schema: Invariant properties (timestamp, event, flags) are always emitted.
+      However, context properties are sparse/conditional: pips/fuel are emitted only in-ship,
+      latitude/altitude only in planetary proximity, oxygen/health only on-foot, and
+      destination only when actively nav-targeted. All conditional telemetry fields default to None.
+    """
 
     timestamp: datetime
-    event_type: str  # "Status"
-    flags: int
-    flags2: int
-    pips: tuple[int, int, int]
-    firegroup: int
-    fuel_main: float
-    fuel_reservoir: float
-    cargo_mass: float
-    raw_hash: str
+    event_type: str = "Status"
+    flags: int = 0
+    flags2: int = 0
+    pips: tuple[int, int, int] | None = None
+    firegroup: int | None = None
+    gui_focus: int | None = None
+    fuel_main: float | None = None
+    fuel_reservoir: float | None = None
+    cargo_mass: float | None = None
+    legal_state: str | None = None
+    balance: int | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    altitude: float | None = None
+    heading: float | None = None
+    body_name: str | None = None
+    planet_radius: float | None = None
+    oxygen: float | None = None
+    health: float | None = None
+    temperature: float | None = None
+    selected_weapon: str | None = None
+    gravity: float | None = None
+    raw_hash: str = ""
 
 
 @dataclass(frozen=True)
