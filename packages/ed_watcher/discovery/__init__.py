@@ -1,23 +1,22 @@
-"""Journal watcher adapter package."""
+"""Public API for ed_watcher OS path discovery subsystem."""
 
-from ed_watcher.discovery import (
-    DiscoveryResult,
+from __future__ import annotations
+
+from ed_watcher.discovery.coordinator import PathDiscoverer
+from ed_watcher.discovery.exceptions import (
     InvalidPathOverrideError,
     JournalPathNotFoundError,
-    PathDiscoverer,
     PathDiscoveryError,
-    PathDiscoveryStrategy,
-    SupportedPlatform,
     UnsupportedPlatformError,
     WatcherError,
 )
-from ed_watcher.watcher import JournalWatcher
+from ed_watcher.discovery.models import DiscoveryResult, SupportedPlatform
+from ed_watcher.discovery.protocols import PathDiscoveryStrategy
 
 __all__ = [
     "DiscoveryResult",
     "InvalidPathOverrideError",
     "JournalPathNotFoundError",
-    "JournalWatcher",
     "PathDiscoverer",
     "PathDiscoveryError",
     "PathDiscoveryStrategy",
