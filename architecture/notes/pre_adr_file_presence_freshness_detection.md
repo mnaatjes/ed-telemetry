@@ -274,3 +274,166 @@ sequenceDiagram
 | **`asyncio` / `threading`** | Existing (Stdlib) | Event loop & timeout ticker | Drives the hybrid event-wait + 1.0s timeout polling loop. |
 | **`watchdog`** | **New (Proposed)** | OS filesystem event monitoring (`on_created`, `on_modified`) | Native OS notification drivers (`inotify` on Linux, `ReadDirectoryChangesW` on Windows). |
 | **`_winapi` / `msvcrt`** | Existing (Stdlib) | Windows-specific low-level verification (if needed) | Available as fallback if standard library file opening requires low-level share flags. |
+
+---
+
+## 9. Domain Models Representation & Evaluation of the "Ur-Event" Pattern
+
+### 9.1 Evaluation: Should We Employ an "Ur-Event" (Base Event)?
+
+#### The Dilemma: Structural Base Class vs. Pure Protocol / Structural Subtyping
+- **The Risk of an OOP "Ur-Event" Hierarchy**:
+  In object-oriented architectures, creating a heavy `BaseTelemetryEvent` class that attempts to encompass all possible properties across FDev's heterogeneous events leads to an **anemic or bloated base model**, tight inheritance coupling, and serialization rigidity.
+- **The Case for a Minimal Structural Protocol (`TelemetryEvent`)**:
+  Every telemetry record emitted by Elite Dangerous (whether in `Journal.*.log`, `Status.json`, or `Market.json`) strictly shares exactly two universal invariant attributes:
+  1. `timestamp: datetime` (When the event occurred in UTC).
+  2. `event_type: str` (The discriminator identifier, e.g. `"Fileheader"`, `"Status"`, `"FSDJump"`).
+
+#### Architectural Recommendation: Discriminated Protocol / Union
+Do **not** create a heavy inheritance tree. Instead:
+1. Define a minimal, runtime-checkable protocol or lightweight ABC `TelemetryEvent` that enforces only `timestamp` and `event_type`.
+2. Model concrete event envelopes as immutable dataclasses (`frozen=True`).
+3. Downstream subscribers consume specific types or the type union `TelemetryEvent`.
+
+---
+
+### 9.2 Proposed Domain Models Architecture
+
+```mermaid
+classDiagram
+    class TelemetryEvent {
+        <<Protocol>>
+        +datetime timestamp
+        +str event_type
+    }
+
+    class SessionContext {
+        +str frontier_id
+        +str commander_name
+        +str game_version
+        +str build
+        +bool odyssey
+        +datetime session_start
+        +Path journal_path
+        +int part
+    }
+
+    class JournalEvent {
+        +datetime timestamp
+        +str event_type
+        +int part
+        +int byte_offset
+        +dict payload
+    }
+
+    class StatusEvent {
+        +datetime timestamp
+        +str event_type
+        +int flags
+        +int flags2
+        +list pips
+        +int firegroup
+        +float fuel_main
+        +float fuel_reservoir
+        +float cargo_mass
+        +str raw_hash
+    }
+
+    class SnapshotEvent {
+        +datetime timestamp
+        +str event_type
+        +str snapshot_name
+        +int market_id
+        +str station_name
+        +str system_address
+        +dict payload
+    }
+
+    TelemetryEvent <|.. JournalEvent : implements
+    TelemetryEvent <|.. StatusEvent : implements
+    TelemetryEvent <|.. SnapshotEvent : implements
+    SessionContext ..> JournalEvent : populated from
+```
+
+---
+
+### 9.3 Concrete Model Definitions (`packages/ed_domain/models/`)
+
+```python
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Mapping, Protocol, runtime_checkable
+
+
+@runtime_checkable
+class TelemetryEvent(Protocol):
+    """Minimal structural protocol satisfied by all inbound telemetry events."""
+
+    @property
+    def timestamp(self) -> datetime: ...
+
+    @property
+    def event_type(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class SessionContext:
+    """
+    Stateful session envelope established during boot replay.
+
+    Reconciles game executable context and player identity from
+    initial Fileheader, LoadGame, and Commander events.
+    """
+
+    frontier_id: str | None
+    commander_name: str | None
+    game_version: str
+    build: str
+    odyssey: bool
+    session_start: datetime
+    active_journal_path: Path
+    part: int
+
+
+@dataclass(frozen=True)
+class JournalEvent:
+    """Discrete event streamed from an active Journal.*.log line."""
+
+    timestamp: datetime
+    event_type: str
+    part: int
+    byte_offset: int
+    payload: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class StatusEvent:
+    """Real-time cockpit HUD and vehicle state snapshot (from Status.json)."""
+
+    timestamp: datetime
+    event_type: str  # "Status"
+    flags: int
+    flags2: int
+    pips: tuple[int, int, int]
+    firegroup: int
+    fuel_main: float
+    fuel_reservoir: float
+    cargo_mass: float
+    raw_hash: str
+
+
+@dataclass(frozen=True)
+class SnapshotEvent:
+    """Discrete auxiliary snapshot (Market.json, Cargo.json, NavRoute.json, etc.)."""
+
+    timestamp: datetime
+    event_type: str  # e.g. "Market", "Cargo", "NavRoute"
+    snapshot_name: str  # "Market.json"
+    market_id: int | None
+    station_name: str | None
+    system_address: int | None
+    payload: Mapping[str, Any]
+```
