@@ -92,20 +92,30 @@ flowchart TD
 ```
 
 ### Architectural Resolution: Where Divergence is Confined
-The platform context must not leak across business logic. We propagate the operating system context cleanly through the following architecture:
+The platform context must not leak across business logic. We propagate the operating system context cleanly while avoiding architectural anti-patterns:
 
-1. **Model Enrichment in `DiscoveryResult`**:
-   Currently, `DiscoveryResult` ([models.py](file:///home/michael/src/github.com/mnaatjes/ed-telemetry/packages/ed_watcher/discovery/models.py#L29-L34)) stores `(resolved_path, discovery_source)`.
-   We enrich `DiscoveryResult` (or create `WatcherSessionConfig`) to carry the resolved `platform: SupportedPlatform`.
-2. **Unified Outer Abstraction**:
+1. **Rejection of Ambient "Context" Objects**:
+   - An ambient `WatcherContext` or bag-of-properties threaded up and down function calls is **strictly rejected** as a God Object / Trampoline Data anti-pattern.
+   - Low-level functions (file tailers, sort key evaluators, hashers) must accept strictly narrow, explicit primitives (`Path`, `int`, `file handle`). They must not accept broad context envelopes.
+2. **Model Enrichment in `DiscoveryResult`**:
+   - `DiscoveryResult` ([models.py](file:///home/michael/src/github.com/mnaatjes/ed-telemetry/packages/ed_watcher/discovery/models.py#L29-L34)) is updated directly to include the detected host execution platform:
+   ```python
+   @dataclass(frozen=True)
+   class DiscoveryResult:
+       resolved_path: Path
+       discovery_source: str
+       platform: SupportedPlatform
+   ```
+   - The coordinator / composition root inspects `DiscoveryResult.platform` once at initialization time to configure platform-tuned parameters (e.g. timeout frequencies) without leaking OS details into inner file ingestion routines.
+3. **Unified Outer Abstraction**:
    The `WatcherPort` contract remains $100\%$ unified:
    ```
    PathDiscoverer -> FilePresenceDetector -> FreshnessChecker -> Stream/ReadAdapter
    ```
-3. **Driver Confinement**:
+4. **Driver Confinement**:
    Platform divergence is confined strictly to:
    - **Path Resolution** (already decoupled in `packages/ed_watcher/discovery/strategies/`).
-   - **Filesystem Event Driver Setup**: If running on Linux/Proton over potential network or Wine mount points where `inotify` may drop events, the hybrid event driver shortens its liveness timeout tick (e.g. 500ms instead of 1000ms). The ingestion engine itself executes identical logic across all platforms.
+   - **Filesystem Event Driver Tuning**: If running on Linux/Proton over Wine or network mount points where `inotify` events may not propagate reliably, the hybrid event driver applies a shorter fallback polling tick (e.g., 500ms vs. 1000ms). The ingestion engine itself executes identical logic across all platforms.
 
 ---
 
