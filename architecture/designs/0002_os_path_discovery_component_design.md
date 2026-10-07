@@ -169,14 +169,74 @@ class DiscoveryResult:
     discovery_source: str  # "explicit_override", "env_override", "win32_shell", "steam_proton", etc.
 ```
 
-### 5.2 Exception Hierarchy
+### 5.2 Exception Hierarchy (`ed_watcher.discovery.exceptions`)
 
-All discovery exceptions inherit from `WatcherError` within `ed_watcher`:
-* `WatcherError` (Base infrastructure error)
-  * `PathDiscoveryError`
-    * `UnsupportedPlatformError`: Raised when running on unhandled platforms (e.g. Darwin/macOS, BSD).
-    * `InvalidPathOverrideError`: Raised when the caller provides an explicit path parameter or `ED_JOURNAL_DIR` pointing to a non-existent or unreadable path.
-    * `JournalPathNotFoundError`: Raised when automated strategy candidates are exhausted without encountering a valid journal directory. Contains actionable diagnostics pointing to explicit path remediation.
+All path discovery exceptions reside strictly within `packages/ed_watcher/src/ed_watcher/discovery/exceptions.py` and derive from the infrastructure base `WatcherError`. They are structured to provide callers with programmatic inspection attributes (e.g. `inspected_paths`, `platform_name`, `target_path`) alongside actionable diagnostic messages.
+
+```python
+from pathlib import Path
+from typing import Sequence
+
+class WatcherError(Exception):
+    """Base infrastructure exception for all ed_watcher failures."""
+
+class PathDiscoveryError(WatcherError):
+    """Base exception for all path discovery failures."""
+
+class UnsupportedPlatformError(PathDiscoveryError):
+    """
+    Raised when the runtime encounters an operating system without an automated strategy.
+
+    Attributes:
+        platform_name: The raw sys.platform string that was rejected.
+    """
+    def __init__(self, platform_name: str) -> None:
+        self.platform_name = platform_name
+        super().__init__(
+            f"Unsupported operating system platform: '{platform_name}'. "
+            "Automated path discovery is only supported on Windows (win32) and Linux. "
+            "Supply an explicit path parameter or set the ED_JOURNAL_DIR environment variable."
+        )
+
+class InvalidPathOverrideError(PathDiscoveryError):
+    """
+    Raised when an explicit override path (parameter or environment variable)
+    does not exist or is not a readable directory.
+
+    Attributes:
+        target_path: The invalid Path provided.
+        source: The origin of the override ('parameter' or 'environment').
+        reason: Diagnostic reason for failure ('does_not_exist', 'not_a_directory', 'permission_denied').
+    """
+    def __init__(self, target_path: Path, source: str, reason: str) -> None:
+        self.target_path = target_path
+        self.source = source
+        self.reason = reason
+        super().__init__(
+            f"Invalid journal directory override from {source}: '{target_path}' ({reason}). "
+            "Verify the path exists, is a directory, and has read permissions."
+        )
+
+class JournalPathNotFoundError(PathDiscoveryError):
+    """
+    Raised when automated platform strategies exhaust all candidate locations
+    without locating a valid Elite Dangerous journal directory.
+
+    Attributes:
+        inspected_paths: The ordered sequence of candidate paths evaluated.
+        platform_name: The active platform strategy that was executed.
+    """
+    def __init__(self, inspected_paths: Sequence[Path], platform_name: str) -> None:
+        self.inspected_paths = tuple(inspected_paths)
+        self.platform_name = platform_name
+        formatted_paths = "\n  - ".join(str(p) for p in self.inspected_paths) or "None"
+        super().__init__(
+            f"Failed to discover Elite Dangerous journal directory on {platform_name}.\n"
+            f"Inspected candidate locations:\n  - {formatted_paths}\n\n"
+            "Remediation: Launch Elite Dangerous at least once to initialize save files, "
+            "or provide an explicit path parameter / ED_JOURNAL_DIR."
+        )
+```
 
 ---
 
@@ -184,10 +244,16 @@ All discovery exceptions inherit from `WatcherError` within `ed_watcher`:
 
 In accordance with UP scoping policies, full cross-platform Docker integration and CI test fixtures will be formalized in a dedicated testing ADR. For Component Design SDD-002, the following testing contracts are established:
 
-1. **Unit Testing Fast-Path (Pytest Mocking):**
-   - Use `tmp_path` to build virtual Windows and Proton filesystem hierarchies.
-   - Mock `sys.platform` to verify that `LinuxProtonPathStrategy` is never invoked under Windows, and vice-versa.
-   - Mock `shell32.SHGetKnownFolderPath` Win32 ctypes calls to test missing/corrupted registry paths.
+1. **Unit Testing Fast-Path (Pytest Mocking in `tests/unit/test_path_discovery.py`):**
+   - **Happy Path Discovery:**
+     - Mock Windows `shell32.SHGetKnownFolderPath` returning a valid `Saved Games` directory in `tmp_path`.
+     - Mock Linux Steam standard library paths and custom `libraryfolders.vdf` in `tmp_path`.
+   - **Exception Branch Verification (100% Error Coverage):**
+     - Verify `UnsupportedPlatformError` is raised when `sys.platform == "darwin"`.
+     - Verify `InvalidPathOverrideError` is raised when passing non-existent or unreadable paths via parameter or `ED_JOURNAL_DIR`.
+     - Verify `JournalPathNotFoundError` is raised when all candidate directories are missing, asserting that `error.inspected_paths` accurately reflects all evaluated candidates.
+   - **Isolation Invariant:** Assert that Windows strategies never execute on Linux and Linux strategies never execute on Windows.
+
 2. **Integration Verification (Future Scope):**
    - GitHub Actions multi-runner matrix (`windows-latest` for native Win32 Shell API execution; `ubuntu-latest` for Proton filesystem verification).
    - Docker containerized environments modeling standard Linux vs. Flatpak sandboxes.
@@ -196,12 +262,19 @@ In accordance with UP scoping policies, full cross-platform Docker integration a
 
 ## 7. Implementation Roadmap & PR Sequencing
 
-* **Milestone 1 (Foundations & Protocols):**
-  - Implement `SupportedPlatform`, exceptions, and `PathDiscoveryStrategy` protocol in `ed_watcher.discovery`.
+* **Milestone 1 (Foundations, Models & Exceptions):**
+  - Implement `SupportedPlatform`, `DiscoveryResult` in `ed_watcher.discovery.models`.
+  - Implement complete exception hierarchy (`WatcherError`, `PathDiscoveryError`, `UnsupportedPlatformError`, `InvalidPathOverrideError`, `JournalPathNotFoundError`) with inspection attributes in `ed_watcher.discovery.exceptions`.
+  - Implement `PathDiscoveryStrategy` protocol in `ed_watcher.discovery.protocols`.
+  - Add unit tests for models and exception formatting/attributes.
 * **Milestone 2 (Windows Strategy):**
   - Implement `WindowsPathStrategy` with Win32 ctypes `SHGetKnownFolderPath` and registry fallback.
+  - Add unit tests mocking Windows environment markers and ctypes calls.
 * **Milestone 3 (Linux Proton Strategy):**
   - Implement `LinuxProtonPathStrategy` scanning Steam libraries, default paths, and Flatpak prefixes.
-* **Milestone 4 (Coordinator & Unit Test Suite):**
-  - Implement `PathDiscoverer` coordinating overrides and platform gating; author complete unit test suite in `tests/unit/test_path_discovery.py`.
+  - Add unit tests mocking Steam `libraryfolders.vdf` parsing and filesystem trees in `tmp_path`.
+* **Milestone 4 (Coordinator & Complete Test Suite):**
+  - Implement `PathDiscoverer` coordinating overrides and platform gating in `ed_watcher.discovery.coordinator`.
+  - Add end-to-end unit tests covering all success and failure branches, verifying 100% branch coverage across the discovery subsystem.
+
 
