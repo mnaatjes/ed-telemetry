@@ -132,32 +132,42 @@ sequenceDiagram
     Note over Engine,Domain: Phase 1: Boot & Catch-Up Phase
     Engine->>Watcher: start()
     Watcher->>Disk: Scan and regex filter candidate journal files
+    Watcher->>Watcher: Emit WatcherAuditEvent(DISCOVERED)
     Watcher->>Disk: Select initial active journal
+    Watcher->>Watcher: Emit WatcherAuditEvent(SELECTED)
     Watcher->>Disk: Open stream and read lines from offset 0 to EOF
-    Watcher->>Domain: Replay historical events to build SessionContext
+    Watcher->>Domain: Dispatch FileIngestionEvent(file_kind=JOURNAL, raw_payload)
+    Watcher->>Watcher: Emit WatcherAuditEvent(FRESHNESS_VERIFIED)
     Watcher->>Disk: Checkpoint last valid offset
-    Watcher->>Disk: Read Status.json if timestamp >= session_start
-    Watcher->>Domain: Reconcile initial cockpit state
+    Watcher->>Disk: Read Status.json if modified
+    Watcher->>Domain: Dispatch FileIngestionEvent(file_kind=STATUS, raw_payload)
 
     Note over Engine,Domain: Phase 2: Steady-State Runtime
-    loop Hybrid Watcher Loop
+    loop Hybrid Watcher Loop (Event Trigger or Timeout)
         Watcher->>Disk: Poll or wait for filesystem trigger
-        Watcher->>Disk: Read appended journal byte slice
-        Watcher->>Domain: Dispatch live journal events
-        Watcher->>Disk: Check and read modified Status.json
-        Watcher->>Domain: Dispatch StatusEvent
-        Watcher->>Disk: Read auxiliary snapshots on triggering journal events
-        Watcher->>Domain: Dispatch SnapshotEvent
+        alt Journal has new bytes
+            Watcher->>Disk: Read appended journal byte slice
+            Watcher->>Domain: Dispatch FileIngestionEvent(file_kind=JOURNAL, raw_payload)
+            Watcher->>Watcher: Checkpoint offset
+        end
+        alt Status.json modified (hash changed)
+            Watcher->>Disk: Read whole bytes (with retry guard)
+            Watcher->>Domain: Dispatch FileIngestionEvent(file_kind=STATUS, raw_payload)
+        end
+        alt Auxiliary Snapshot modified (Market, Cargo, etc.)
+            Watcher->>Disk: Read whole auxiliary snapshot file
+            Watcher->>Domain: Dispatch FileIngestionEvent(file_kind=SNAPSHOT, raw_payload)
+        end
     end
 ```
 
 ### Execution Order Rules:
-1. **Journal Precedes Snapshots on Boot**: The active journal must be read before snapshots because `Fileheader`, `Commander`, and `LoadGame` establish the active `SessionContext` (`session_start`, `FID`, `Odyssey`).
-2. **Freshness Gating**: Any snapshot whose payload `timestamp < session_start` is discarded as stale residue from a prior session.
+1. **Journal Precedes Snapshots on Boot**: The active journal must be read before snapshots so that the domain layer can establish session bounds from the raw stream before reconciling snapshots.
+2. **Freshness Gating**: Any snapshot whose raw content hash or filesystem metadata has not changed is discarded without emitting a `FileIngestionEvent`.
 3. **Steady-State Priority**:
-   - **Priority 1 (High)**: Journal delta stream (real-time telemetry).
-   - **Priority 2 (Medium)**: `Status.json` cockpit state changes (~1.0 Hz).
-   - **Priority 3 (Reactive)**: Auxiliary snapshots (`Market.json`, `Cargo.json`) read strictly when triggered by corresponding journal events.
+   - **Priority 1 (High)**: Journal delta stream (`FileIngestionEvent` with `file_kind=JOURNAL`).
+   - **Priority 2 (Medium)**: `Status.json` cockpit state changes (`FileIngestionEvent` with `file_kind=STATUS` at ~1.0 Hz).
+   - **Priority 3 (Reactive)**: Auxiliary snapshots (`FileIngestionEvent` with `file_kind=SNAPSHOT`).
 
 ---
 
