@@ -53,7 +53,7 @@ Chosen Option: **Establish a Reusable OS Path Discovery Mandate, Define the File
 
 ### 4.1 Reusable OS Path Discovery Mandate
 * Path discovery logic shall be encapsulated as a dedicated service within `packages/ed_watcher` (e.g., `ed_watcher.discovery`).
-* It must automatically detect standard installation and saved game paths on supported operating systems, while supporting an explicit operator path override (e.g., `--journal-dir <PATH>`).
+* It must automatically detect standard installation and saved game paths on supported operating systems, while supporting an explicit path parameter override.
 * Its sole responsibility is resolving the directory containing live game files and validating read accessibility. It does not perform event parsing or business logic.
 
 ### 4.2 Upstream Provider Role (Workflow Context)
@@ -77,8 +77,8 @@ To avoid coupling runtime code to fragile external files while preserving histor
      - *.env / Config Files:* Dynamic configuration (`.env`, `.json`, `.yaml`) is designed for *operator runtime preferences* (such as `--journal-dir` manual override, API keys, log levels), not *immutable platform mechanics*. Treating game version path layouts as loose configuration files risks configuration drift, missing file errors, and lack of compiler/type-checker validation.
      - *Typed Code Definition:* The relationship between an OS platform, a game version, and its standard file locations is a deterministic constant of the game's binary distribution. Declaring them as frozen Python definitions within `packages/ed_watcher.discovery` guarantees compile-time validation, static type safety (mypy), zero file I/O overhead at startup, and explicit version-tagging.
    - **Precedence Hierarchy for Path Resolution:**
-     1. *CLI / Operator Flag Override:* Explicit `--journal-dir <PATH>` provided by the user.
-     2. *Environment Variable Override:* `ED_JOURNAL_DIR=<PATH>` (via `.env` or system environment).
+     1. *Programmatic / Explicit Parameter Override:* Explicit path parameter provided to the discoverer.
+     2. *Environment Variable Override:* `ED_JOURNAL_DIR=<PATH>` (via system environment or `.env`).
      3. *Automated OS Strategy Discovery:* Built-in runtime SSoT strategy detecting default paths for the active OS platform and game version.
 
 
