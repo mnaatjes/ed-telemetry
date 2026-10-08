@@ -70,17 +70,17 @@ flowchart TD
         Dispatch -->|Journal Active| JT[Journal Stream Tailer]
         Dispatch -->|Snapshot Trigger| SW[Snapshot Whole-Reader]
         JT -->|Monotonic Forward Seek| JBuf[64 KB Buffer & Newline Verify]
-        SW -->|20ms Debounce| SCheck{len > 0 and starts '{' and ends '}'}
-        SCheck -->|Truncated / Race| Backoff[Exponential Backoff: 20ms, 40ms, 80ms]
+        SW -->|20ms Debounce| SCheck{"len > 0 and starts '{' and ends '}'"}
+        SCheck -->|Truncated / Race| Backoff["Exponential Backoff: 20ms, 40ms, 80ms"]
         Backoff --> SW
-        SCheck -->|Valid| Hash[SnapshotFreshnessTracker: BLAKE2b 64-bit]
+        SCheck -->|Valid| Hash["SnapshotFreshnessTracker: BLAKE2b 64-bit"]
     end
 
     subgraph EnvelopePlane["Emitted Event Envelopes"]
-        JBuf --> FIE[FileIngestionEvent - Data Plane]
+        JBuf --> FIE["FileIngestionEvent - Data Plane"]
         Hash -->|New Hash| FIE
         Hash -->|Identical Hash| Discard[Discard Duplicate]
-        Dispatch -.->|Lifecycle Transitions| WAE[WatcherAuditEvent - Control Plane]
+        Dispatch -.->|Lifecycle Transitions| WAE["WatcherAuditEvent - Control Plane"]
     end
 ```
 
@@ -116,12 +116,22 @@ To prevent endlessly tailing a retired journal file when the game transitions pa
 * **Truncation & Interleaved Read Guard**: Validates that bytes are non-empty (`len(raw) > 0`) and conform to JSON structural delimiters (starts with `{` and ends with `}`). If incomplete, retries with exponential backoff (20ms, 40ms, 80ms; up to 3 attempts).
 * **Per-Tier Debouncing**: Implements a 20ms debouncing window to coalesce rapid successive `on_modified` events and poll sweeps, preventing interleaved concurrent read operations on the same snapshot file.
 
-#### 4. Centralized Deduplication & Freshness Gate (`SnapshotFreshnessTracker`)
-* All three trigger tiers (Tier 1 Journal event, Tier 2 Watchdog FS event, Tier 3 Polling tick) must pass through a single serialized deduplication gate before emitting an event.
+#### 4. Buffer Release & Event Emission Rules (By File Category)
+
+To maintain absolute scope boundaries (no JSON parsing) while guaranteeing downstream consumers receive complete, valid raw data, the engine enforces strict emission and buffer release criteria across each target file category:
+
+| Target Category | Target Files | Buffer Release & Emission Triggers | Permit Conditions (Must ALL Be True) | Suppress / Hold Conditions (No Emission) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Journal Stream** | `Journal.*.log` | Emits per complete line slice as bytes are flushed to disk. | 1. Slice ends strictly in newline (`\n`).<br/>2. Slice byte length $> 0$.<br/>3. Offset strictly advances (`end_offset > start_offset`). | 1. Trailing bytes lack `\n` (held in memory until next write flush).<br/>2. Zero byte diff (`size == last_valid_offset`). |
+| **Status Heartbeat** | `Status.json` | Emits on change (~1.0 Hz cadence or cockpit toggle). | 1. File size $> 0$.<br/>2. Structural boundary valid (`startswith(b'{')` and `endswith(b'}')`).<br/>3. BLAKE2b hash differs from `last_known_hash["Status.json"]`. | 1. File is 0 bytes (mid-truncation by game).<br/>2. Incomplete JSON boundaries (partial write).<br/>3. Hash unchanged (cockpit state unchanged). |
+| **Auxiliary Snapshots** | `Market.json`, `Cargo.json`, `NavRoute.json`, etc. | Emits on trigger (Tier 1 hint, Tier 2 FS event, or Tier 3 poll). | 1. File exists on disk.<br/>2. File size $> 0$.<br/>3. Structural boundary valid (`startswith(b'{')` and `endswith(b'}')`).<br/>4. BLAKE2b hash differs from `last_known_hash[filename]`. | 1. File does not exist (unvisited station service).<br/>2. 0-byte truncation race (caught by backoff).<br/>3. Hash unchanged (duplicate data). |
+
+#### 5. Centralized Deduplication & Freshness Gate (`SnapshotFreshnessTracker`)
+* All three trigger tiers (Tier 1 Inbound hint, Tier 2 Watchdog FS event, Tier 3 Polling tick) must pass through a single serialized deduplication gate before emitting an event.
 * Calculates 64-bit BLAKE2b hash of raw bytes: `current_hash = hashlib.blake2b(raw, digest_size=8).hexdigest()`.
 * Compares against `last_known_hash[snapshot_name]`. If hash matches, the read is discarded as duplicate/unchanged without downstream emission.
 
-#### 5. Dual Event Envelope Contracts
+#### 6. Dual Event Envelope Contracts
 
 ##### Data Plane: `FileIngestionEvent`
 Emitted upon extracting a valid raw byte slice from disk:
@@ -165,7 +175,7 @@ class WatcherAuditEvent:
     detail: str = ""
 ```
 
-#### 6. Inbound Control Plane Port: `WatcherIngestReceiver` (The Feedback Boundary)
+#### 7. Inbound Control Plane Port: `WatcherIngestReceiver` (The Feedback Boundary)
 
 To support event-gated snapshot triggers (ADR 0007 Tier 1) and external rollover hints without violating the Cardinal Boundary (FPFD) or requiring the watcher to parse JSON, the engine exposes a decoupled inbound port backed by a **bounded command queue** with explicit operational metrics:
 
