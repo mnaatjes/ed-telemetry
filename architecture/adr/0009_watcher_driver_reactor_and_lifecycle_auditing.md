@@ -13,7 +13,7 @@ The `ed_watcher` subsystem requires an execution driver to coordinate candidate 
 
 Determining *when* to check files across heterogeneous platforms presents operational challenges:
 - **Kernel Event Differences**: Windows `ReadDirectoryChangesW` and Linux `inotify` emit filesystem events efficiently on local drives.
-- **Proton / Wine & Network Mount Drops**: When Elite Dangerous runs inside Proton/Wine or directories reside on container bind-mounts or network shares, kernel notification events frequently fail to propagate to external processes.
+- **Proton / Wine Inotify Loss (Empirically Confirmed)**: Empirical research across community codebases confirms that Linux kernel `inotify` events are frequently dropped across Steam Proton/Wine virtual filesystems. In `joncage/ed-scout`, tests verifying watchdog inotify modifications had to be explicitly disabled (`@pytest.mark.skip(reason="unreliable on linux")`), forcing the application to maintain a separate background thread (`FileSystemUpdatePrompter.py`) continually polling `os.stat()` every 100ms.
 - **Fault Recovery**: Unreadable files, corrupt byte sequences, or drive unmounts must not crash the long-running application process.
 
 We require an architectural decision for the watcher event loop, operational diagnostics/auditing, and fault isolation.

@@ -93,6 +93,21 @@ Chosen Option: **Option 4: Composite Lexicographical & Metadata Sort.**
    - *Scenario*: Candidate matches regex but date/part string extraction produces unparseable values.
    - *Behavior*: `composite_journal_sort_key` catches parsing exceptions, logs a warning, and falls back to `(datetime.min, 0, stat().st_mtime)` so that ingestion is never blocked by a malformed test fixture.
 
+### 4.2 Declarative Startup Stream Positioning
+
+Drawing from streaming architecture established in community references (e.g. `ed-journal`), the journal watcher supports an explicit startup positioning parameter (`StreamPosition`):
+1. **`HEAD` (Default for batch/history)**: Begins tailing at byte offset 0 of the active journal file.
+2. **`TAIL` (Default for live monitoring)**: Seeks immediately to `st_size` (end of file) upon startup, reading only subsequent events emitted while the daemon is actively running.
+3. **`LOCATE_EVENT(event_name)`**: Rapidly scans backwards from end-of-file across candidate journals to locate the last emitted instance of a critical state event (e.g. `Location`, `FSDJump`, `FileHeader`), initializing session state in milliseconds without replaying historical gigabytes of exploration logs.
+
+### 4.3 Proton & Steam Deck Discovery Integration
+
+Informed by findings in `ed-scout` (`SavedGamesLocator.py`) and `ed-journal` (`findDirectory`), the candidate search space on Linux platforms must include the canonical Steam Proton Wine prefix for Elite Dangerous:
+```text
+~/.local/share/Steam/steamapps/compatdata/359320/pfx/drive_c/users/steamuser/Saved Games/Frontier Developments/Elite Dangerous
+```
+Where App ID `359320` is the canonical Steam store identifier for *Elite Dangerous*. The resolver must evaluate this path in `PathDiscoverer` fallback sequences before declaring candidate set vacancy.
+
 ---
 
 ## 5. Consequences

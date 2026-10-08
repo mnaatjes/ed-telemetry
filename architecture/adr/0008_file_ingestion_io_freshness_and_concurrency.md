@@ -54,9 +54,11 @@ Chosen Option: **Option 3: Dual-Mode I/O Engine with Transient Retry Guard.**
 ### Architectural Specification
 
 1. **Journal Streaming Mode**:
-   - Open persistent handle in read-only binary mode.
-   - Slices are read from `last_valid_offset` up to current EOF.
-   - If buffer does not terminate in `\n`, seek back to `last_valid_offset` and await next flush.
+   - Open persistent handle in read-only binary mode (`open(..., 'rb')`).
+   - **Monotonic Forward Seek Invariant**: Seek directly to absolute forward position via `handle.seek(last_valid_offset, os.SEEK_SET)`. Relative seek arithmetic using end-of-file offsets (e.g. `seek(-diff, SEEK_END)` seen in `ed-scout`) is **strictly prohibited**, as concurrent game writes or file rotations trigger negative offset arithmetic, dropping lines or throwing fatal `OSError: [Errno 22] Invalid argument` exceptions.
+   - Slices are read from `last_valid_offset` up to current EOF using a 64 KB read buffer to efficiently process startup burst flushes (`Journal.FastWritesOnStartup.log`).
+   - If the trailing slice does not terminate in a newline (`\n`), the incomplete fragment is held in memory, and the file pointer is repositioned to `last_valid_offset` to await the next complete flush without advancing state.
+   - Tracks line count monotonically (`1`-indexed) to pair line numbers with byte offsets.
 2. **Snapshot Whole-Read Mode & Concurrency Mitigations**:
    - **Atomic Read with Structural Boundary Check**: Reads full bytes via `path.read_bytes().strip()`.
    - **Truncation & Interleaved Read Guard**: Validates that bytes are non-empty (`len(raw) > 0`) and conform to JSON structural delimiters (starts with `{` and ends with `}`). If incomplete, retries with exponential backoff (20ms, 40ms, 80ms; up to 3 attempts).
@@ -66,7 +68,20 @@ Chosen Option: **Option 3: Dual-Mode I/O Engine with Transient Retry Guard.**
    - Calculates 64-bit BLAKE2b hash of raw bytes: `current_hash = hashlib.blake2b(raw, digest_size=8).hexdigest()`.
    - Compares against `last_known_hash[snapshot_name]`. If hash matches, the read is discarded as duplicate/unchanged without downstream emission.
 4. **I/O Envelope Output**:
-   Emits `FileIngestionEvent(event_id, timestamp, file_kind, target_path, raw_payload, start_offset, end_offset, part, raw_hash)` where `file_kind: FileKind` (`JOURNAL`, `STATUS`, `SNAPSHOT`).
+   Emits `FileIngestionEvent`:
+   ```python
+   class FileIngestionEvent(BaseModel):
+       event_id: UUID
+       timestamp: datetime  # UTC ISO 8601
+       file_kind: FileKind  # JOURNAL, STATUS, SNAPSHOT
+       target_path: Path
+       raw_payload: bytes
+       start_offset: int
+       end_offset: int
+       line_number: int | None  # 1-indexed for journals; None for whole snapshots
+       part: int
+       raw_hash: str  # 64-bit BLAKE2b
+   ```
 
 ---
 
