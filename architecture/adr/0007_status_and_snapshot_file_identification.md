@@ -19,6 +19,7 @@ These snapshot files present identification challenges:
 * **Filesystem Case Sensitivity Discrepancies**: Windows NTFS is case-preserving but case-insensitive. Linux filesystems (Ext4, Btrfs, ZFS) used under Proton/Wine or native development are strictly case-sensitive. While official FDev clients write canonical PascalCase (`Status.json`, `Market.json`), custom Wine prefix configurations, test simulators, or symlinks may introduce lowercase or mixed-case filenames.
 * **Presence Variance**: Auxiliary snapshots do not exist when a player has not yet opened a corresponding station service (e.g. `Outfitting.json` is missing until Outfitting is visited). Candidate lookup must not treat the absence of unvisited service snapshots as an error.
 * **Unnecessary I/O Chatter**: Blindly polling all auxiliary snapshot files on every clock tick wastes disk I/O and CPU cycles.
+* **Unidirectional Telemetry Egress Contract**: In Frontier's architecture, snapshot files are strictly **write-only egress telemetry dumps** produced by the game engine. The game client never watches or reads these files back from disk. Modifying or replacing these files (such as injecting custom routes into `NavRoute.json`) will not alter in-game state or navigation, as the game engine overwrites them from internal memory on subsequent state updates. `ed_watcher` operates strictly as a read-only telemetry consumer.
 
 We require an architectural decision governing how `ed_watcher` identifies, registers, normalizes, and schedules candidate lookups for status and auxiliary snapshot files.
 
@@ -49,8 +50,6 @@ We require an architectural decision governing how `ed_watcher` identifies, regi
 ## 4. Decision Outcome
 
 Chosen Option: **Option 3: Canonical Membership Registry with Case-Insensitive Normalization and Ingestion Decoupling.**
-
-### Architectural Specification
 
 ### Architectural Specification
 
@@ -95,7 +94,7 @@ Chosen Option: **Option 3: Canonical Membership Registry with Case-Insensitive N
 4. **Three-Tier Identification & Ingestion Gating Model**:
    - **`Status.json`**: Identified unconditionally as a continuous liveness target (~1.0 Hz).
    - **Auxiliary Snapshots**:
-     - **Tier 1 (Journal Event-Gated - Fastest)**: When active journal emits `Market`, `Cargo`, etc., trigger immediate target lookup.
+     - **Tier 1 (Inbound Target Hint Port - Fastest / Event-Driven)**: When an external consumer (e.g. downstream domain parser) observes a relevant game event, it submits an agnostic `WatcherIngestCommand(action=HINT_SNAPSHOT, target_name="Market.json")` into the watcher's `WatcherIngestReceiver` port ([ADR 0008](0008_file_ingestion_io_freshness_and_concurrency.md)). This instantly wakes the reactor to execute a debounced target lookup without requiring the watcher itself to parse JSON bytes.
      - **Tier 2 (Filesystem Event - Near-Real-Time)**: OS `watchdog` notification on `on_created` / `on_modified` for any file matching the registry triggers lookup.
      - **Tier 3 (Polling Fallback - Reliability)**: Periodic 0.5s–1.0s timeout tick scans registry to detect unannounced file writes or dropped OS notifications.
 

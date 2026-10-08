@@ -322,13 +322,14 @@ classDiagram
     }
 
     class FileIngestionEvent {
-        +str event_id
+        +UUID event_id
         +datetime timestamp
         +FileKind file_kind
         +Path target_path
         +bytes raw_payload
         +int start_offset
         +int end_offset
+        +int line_number
         +int part
         +str raw_hash
     }
@@ -355,6 +356,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from uuid import UUID
 
 
 class FileKind(StrEnum):
@@ -370,19 +372,20 @@ class FileIngestionEvent:
     """
     Consolidated I/O record emitted upon extracting raw bytes from a target file.
 
-    Carries file location, byte pointers, and raw unparsed payload.
+    Carries file location, byte pointers, line number, and raw unparsed payload.
     Does NOT decode or validate domain JSON schemas.
     """
 
-    event_id: str  # Deterministic hash / ID (UUIDv5 or content hash)
+    event_id: UUID  # Deterministic UUIDv5 based on (path, start_offset, raw_hash)
     timestamp: datetime  # Read timestamp (UTC)
     file_kind: FileKind  # JOURNAL | STATUS | SNAPSHOT
     target_path: Path  # Absolute path to file on disk
     raw_payload: bytes  # Raw unparsed byte content (line or whole file)
     start_offset: int = 0  # Stream start offset (0 for snapshots)
     end_offset: int = 0  # Stream end offset (len(raw_payload) for snapshots)
+    line_number: int | None = None  # 1-indexed for journals; None for whole snapshots
     part: int | None = None  # Journal part number (if applicable)
-    raw_hash: str = ""  # Content hash (used for change detection)
+    raw_hash: str = ""  # Content hash (64-bit BLAKE2b used for change detection)
 
 
 class WatcherAuditAction(StrEnum):

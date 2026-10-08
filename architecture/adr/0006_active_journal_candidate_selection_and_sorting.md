@@ -93,6 +93,39 @@ Chosen Option: **Option 4: Composite Lexicographical & Metadata Sort.**
    - *Scenario*: Candidate matches regex but date/part string extraction produces unparseable values.
    - *Behavior*: `composite_journal_sort_key` catches parsing exceptions, logs a warning, and falls back to `(datetime.min, 0, stat().st_mtime)` so that ingestion is never blocked by a malformed test fixture.
 
+### 4.2 Declarative Startup Stream Positioning
+
+Drawing from streaming architecture established in community references (e.g. `ed-journal`), the journal watcher supports an explicit startup positioning parameter (`StreamPosition`):
+1. **`HEAD` (Default for batch/history)**: Begins tailing at byte offset 0 of the active journal file.
+2. **`TAIL` (Default for live monitoring)**: Seeks immediately to `st_size` (end of file) upon startup, reading only subsequent events emitted while the daemon is actively running.
+3. **`LOCATE_EVENT(event_name)`**: Rapidly scans backwards from end-of-file across candidate journals to locate the last emitted instance of a critical state event (e.g. `Location`, `FSDJump`, `FileHeader`), initializing session state in milliseconds without replaying historical gigabytes of exploration logs.
+
+### 4.3 Proton & Steam Deck Discovery Integration (PathDiscoverer Implementation Update)
+
+> [!NOTE]
+> **Superseding Implementation Requirement for `PathDiscoverer`**:
+> While `PathDiscoverer` architecture was originally established in [ADR 0004](0004_os_path_discovery_and_filesystem_research_framework.md), empirical research across community codebases (`joncage/ed-scout` and `kayahr/ed-journal`) establishes the definitive canonical Steam Proton path layout on Linux. During concrete implementation of the `packages/ed_watcher.discovery` module, `PathDiscoverer`'s Linux strategy (`LinuxProtonPathStrategy`) must incorporate the concrete Steam App ID heuristic below as a primary candidate path prior to generic Wine prefix probing.
+
+Informed by findings in `ed-scout` (`SavedGamesLocator.py`) and `ed-journal` (`findDirectory`), the candidate search space on Linux platforms must include the canonical Steam Proton Wine prefix for Elite Dangerous:
+```text
+~/.local/share/Steam/steamapps/compatdata/359320/pfx/drive_c/users/steamuser/Saved Games/Frontier Developments/Elite Dangerous
+```
+Where App ID `359320` is the canonical Steam store identifier for *Elite Dangerous*. The resolver must evaluate this path in `PathDiscoverer` fallback sequences before declaring candidate set vacancy.
+
+### 4.4 Continuous Runtime Candidate Re-Evaluation & Successor Ranking
+
+Candidate selection is not solely an initial boot operation; it is an active evaluator invoked throughout the engine's lifecycle:
+1. **Dynamic Successor Query (`get_successor(current_journal)`)**:
+   When notified of new files or upon idle timeout checks, the selector inspects the journal directory and determines if a strictly newer candidate exists according to `composite_journal_sort_key`.
+   - **Part Rollover**: Evaluates whether a candidate with matching session timestamp and higher part number (`part > current_part`) is present.
+   - **New Session**: Evaluates whether a candidate with a strictly newer timestamp exists.
+2. **Determinism Invariant**:
+   The active journal must strictly satisfy:
+   ```python
+   active_journal = max(candidate_files, key=composite_journal_sort_key)
+   ```
+   If any candidate ranks higher than the currently tailed file, the selector signals the engine to initiate retirement of the current file handle without blocking or throwing exceptions.
+
 ---
 
 ## 5. Consequences
