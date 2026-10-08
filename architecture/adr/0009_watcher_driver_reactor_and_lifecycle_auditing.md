@@ -1,15 +1,15 @@
 ---
-title: "ADR 0008: Watcher Driver Reactor, Lifecycle Auditing, and Fault Recovery"
+title: "ADR 0009: Watcher Driver Reactor, Lifecycle Auditing, and Fault Recovery"
 status: "proposed"
 date: "2026-10-08"
 tags: ["architecture", "adr", "watcher", "reactor", "driver", "auditing", "madr"]
 ---
 
-# ADR 0008: Watcher Driver Reactor, Lifecycle Auditing, and Fault Recovery
+# ADR 0009: Watcher Driver Reactor, Lifecycle Auditing, and Fault Recovery
 
 ## 1. Context and Problem Statement
 
-The `ed_watcher` subsystem requires an execution driver to coordinate candidate selection ([ADR 0006](0006_active_journal_candidate_selection_and_sorting.md)) and physical I/O ingestion ([ADR 0007](0007_file_ingestion_io_freshness_and_concurrency.md)).
+The `ed_watcher` subsystem requires an execution driver to coordinate candidate selection ([ADR 0006](0006_active_journal_candidate_selection_and_sorting.md), [ADR 0007](0007_status_and_snapshot_file_identification.md)) and physical I/O ingestion ([ADR 0008](0008_file_ingestion_io_freshness_and_concurrency.md)).
 
 Determining *when* to check files across heterogeneous platforms presents operational challenges:
 - **Kernel Event Differences**: Windows `ReadDirectoryChangesW` and Linux `inotify` emit filesystem events efficiently on local drives.

@@ -1,15 +1,15 @@
 ---
-title: "ADR 0007: File Ingestion I/O, Freshness Detection, and Concurrency Guards"
+title: "ADR 0008: File Ingestion I/O, Freshness Detection, and Concurrency Guards"
 status: "proposed"
 date: "2026-10-08"
 tags: ["architecture", "adr", "watcher", "ingestion", "freshness", "io", "madr"]
 ---
 
-# ADR 0007: File Ingestion I/O, Freshness Detection, and Concurrency Guards
+# ADR 0008: File Ingestion I/O, Freshness Detection, and Concurrency Guards
 
 ## 1. Context and Problem Statement
 
-Following candidate identification ([ADR 0006](0006_active_journal_candidate_selection_and_sorting.md)), `ed_watcher` must physically open files, evaluate if new unread content exists, and extract raw bytes into the domain pipeline.
+Following candidate identification for journals ([ADR 0006](0006_active_journal_candidate_selection_and_sorting.md)) and snapshots ([ADR 0007](0007_status_and_snapshot_file_identification.md)), `ed_watcher` must physically open files, evaluate if new unread content exists, and extract raw bytes into the domain pipeline.
 
 In *Elite Dangerous*, target files fall into two distinct physical I/O categories:
 1. **Journal Files (`Journal.*.log`)**: Growing, append-only line-delimited streams.
