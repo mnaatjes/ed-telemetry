@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Architectural research on Frontier Developments telemetry file specifications (`architecture/research/journal_and_snapshot_filename_spec.md`) documenting canonical regex patterns, Horizons/Odyssey naming variances, and part rollover semantics.
+- Telemetry metadata specification (`architecture/research/target_files_metadata_spec.md`) detailing software/build context (`Fileheader`), account identification (`Commander.FID`), and snapshot envelope attributes.
+- Reference implementation analysis of EDMarketConnector (`architecture/notes/edmarketconnector_journal_analysis.md`) analyzing journal discovery, JSONL stream consumption, and read-only file semantics.
+- Pre-ADR architectural planning document (`architecture/notes/pre_adr_file_presence_freshness_detection.md`) defining the File Presence & Freshness Detection (FPFD) phase, unified hybrid event drivers, and consolidated `FileIngestionEvent` / `WatcherAuditEvent` models.
 - Native dual-OS GitHub Actions CI workflow executing `scripts/verify.py` against both `ubuntu-latest` and `windows-latest` across Python 3.11 and 3.12 (ADR 0005).
 - Binary ABI memory validation test suite (`tests/unit/test_windows_simulant.py`) verifying Microsoft Win32 GUID memory struct alignment and `FOLDERID_SavedGames` byte literal fidelity on Linux.
 - Local Wine simulation environment setup script (`scripts/setup_wine_simulant.sh`) provisioning isolated prefix (`.cache/winepfx/`) with official Windows Python 3.11 embeddable package without root privilege.
