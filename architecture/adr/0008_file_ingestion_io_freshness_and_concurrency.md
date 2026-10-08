@@ -1,96 +1,163 @@
 ---
-title: "ADR 0008: File Ingestion I/O, Freshness Detection, and Concurrency Guards"
+title: "ADR 0008: File Ingestion Engine, Concurrency Guards, and Reactive Reactor"
 status: "proposed"
 date: "2026-10-08"
-tags: ["architecture", "adr", "watcher", "ingestion", "freshness", "io", "madr"]
+tags: ["architecture", "adr", "watcher", "ingestion", "freshness", "io", "reactor", "driver", "auditing", "madr"]
 ---
 
-# ADR 0008: File Ingestion I/O, Freshness Detection, and Concurrency Guards
+# ADR 0008: File Ingestion Engine, Concurrency Guards, and Reactive Reactor
 
 ## 1. Context and Problem Statement
 
-Following candidate identification for journals ([ADR 0006](0006_active_journal_candidate_selection_and_sorting.md)) and snapshots ([ADR 0007](0007_status_and_snapshot_file_identification.md)), `ed_watcher` must physically open files, evaluate if new unread content exists, and extract raw bytes into the domain pipeline.
+Following candidate identification for journals ([ADR 0006](0006_active_journal_candidate_selection_and_sorting.md)) and snapshots ([ADR 0007](0007_status_and_snapshot_file_identification.md)), `ed_watcher` requires a unified execution engine to manage file descriptor lifecycles, schedule reactive checks across heterogeneous operating systems, evaluate freshness, and stream raw bytes into the domain pipeline.
 
 In *Elite Dangerous*, target files fall into two distinct physical I/O categories:
-1. **Journal Files (`Journal.*.log`)**: Growing, append-only line-delimited streams.
+1. **Journal Files (`Journal.*.log`)**: Growing, append-only line-delimited streams with session part rollovers.
 2. **Snapshot Files (`Status.json`, `Market.json`, etc.)**: Overwrite-in-place state files rewritten periodically or upon UI interaction.
 
-These files present severe operational concurrency challenges:
+These files present severe operational concurrency and scheduling challenges:
 - **Truncation Race Conditions**: FDev rewrites snapshot files by truncating to 0 bytes before writing new JSON, causing external tools to read empty or partially written files.
 - **File Locking on Windows**: The game engine opens files with shared read (`FILE_SHARE_READ`). External tools attempting exclusive locks trigger `PermissionError: [WinError 32]`.
 - **Incomplete Flushes**: Tailers reading an appending journal stream at EOF may read half a line if the game engine has not yet flushed the trailing newline (`\n`).
+- **Proton / Wine Inotify Loss (Empirically Confirmed)**: Empirical research across community codebases confirms that Linux kernel `inotify` events are frequently dropped across Steam Proton/Wine virtual filesystems. In `joncage/ed-scout`, tests verifying watchdog inotify modifications had to be explicitly disabled (`@pytest.mark.skip(reason="unreliable on linux")`), forcing the application to maintain a separate background thread polling `os.stat()` every 100ms.
+- **Fault Recovery**: Unreadable files, corrupt byte sequences, or drive unmounts must not crash the long-running application process.
 
-We require an architectural decision governing file access modes, freshness metrics, retry concurrency guards, and the boundary envelope for extracted data.
+We require a consolidated architectural decision governing file access modes, the reactive event loop (reactor), freshness metrics, concurrency retry guards, session rollover transitions, and the data/audit boundary envelopes.
 
 ---
 
 ## 2. Decision Drivers
 
 * **Scope Purity (FPFD Boundary):** The I/O ingestion engine must remain completely agnostic to JSON business schemas (no parsing of `flags`, `pips`, `fuel`). It extracts raw byte slices.
+* **Continuous Liveness Guarantee:** Telemetry must never stall indefinitely due to dropped kernel filesystem events across Proton/Wine or network mounts.
 * **Zero Lock Collisions:** Reading must never interfere with the game engine's write routines on Windows or POSIX.
 * **Race Condition Resilience:** In-progress truncations and partial buffer flushes must never crash the engine or advance offsets prematurely.
-* **Performance Efficiency:** Append-only journals must be tailed as delta byte streams without re-reading entire multi-megabyte files.
+* **Performance Efficiency:** Append-only journals must be tailed as delta byte streams without re-reading entire multi-megabyte files, and idle monitoring must not spin CPU in tight polling loops.
+* **Decoupled Observability:** Operational transitions (discovery, selection, retries, rollovers, quarantine) must be auditable without polluting domain models.
 
 ---
 
 ## 3. Considered Options
 
-* **Option 1: Read All Files in Whole on Every Change [REJECTED]**
-  - Reading entire files into memory works for small snapshots (~1 KB), but causes severe $O(N)$ CPU and disk overhead when applied to growing 100 MB+ journal files.
-* **Option 2: Low-Level Win32 `_winapi.CreateFile` Sharing Drivers [REJECTED]**
-  - Explicit Win32 handle creation provides granular control, but introduces unnecessary C-extension divergence between Windows and Linux.
-* **Option 3: Dual-Mode I/O Engine with Transient Retry Guard (Recommended)**
-  - **Journals**: Persistent binary stream tailer (`open(..., 'rb')`). Tracks `last_valid_offset = handle.tell()`. Verifies newline flush before advancing.
-  - **Snapshots**: Ephemeral whole-byte reads (`path.read_bytes()`) wrapped in a zero-byte and JSON-decode retry guard with exponential backoff (20ms, 40ms, 80ms).
-  - **Freshness**: Hashing snapshot raw bytes via BLAKE2b ($O(1)$) to discard unchanged payloads.
-  - **Envelope Model**: Emits a consolidated `FileIngestionEvent` carrying raw unparsed payload.
+* **Option 1: Pure Polling Loop with Full Re-Reads [REJECTED]**
+  - Reading entire files into memory on a static 1-second timer avoids complex event drivers, but causes severe $O(N)$ CPU and disk overhead when applied to growing 100 MB+ journal files and introduces fixed polling latency.
+* **Option 2: Low-Level Win32 APIs and Pure Inotify Event Watcher [REJECTED]**
+  - Sub-millisecond latency on local desktops, but vulnerable to silent deadlocks if Wine or container mounts drop kernel notification events, and introduces unnecessary platform-divergent C-extension code.
+* **Option 3: Unified Dual-Mode I/O Engine with Hybrid Reactive Reactor (Recommended)**
+  - **Hybrid Reactor Driver**: Primary reactivity driven by `watchdog` (`on_created`, `on_modified`) with a bounded fallback timeout ticker (1.0s on Windows, 0.5s on Wine/Linux) to guarantee liveness under dropped kernel events.
+  - **Journal Tailing**: Persistent binary stream tailer (`open(..., 'rb')`) utilizing monotonic forward seek (`SEEK_SET`) and a 64 KB burst buffer. Verifies newline flush before advancing byte and line offsets.
+  - **Snapshot Whole-Read**: Ephemeral whole-byte reads (`path.read_bytes()`) wrapped in a zero-byte and JSON structural delimiter check (`startswith('{') and endswith('}')`) with exponential backoff (20ms, 40ms, 80ms).
+  - **Freshness & Deduplication**: Serialized `SnapshotFreshnessTracker` utilizing 64-bit BLAKE2b raw byte hashing to discard unchanged payloads.
+  - **Dual Event Envelopes**: Cleanly isolates the Data Plane (`FileIngestionEvent`) from the Operational Control Plane (`WatcherAuditEvent`).
 
 ---
 
 ## 4. Decision Outcome
 
-Chosen Option: **Option 3: Dual-Mode I/O Engine with Transient Retry Guard.**
+Chosen Option: **Option 3: Unified Dual-Mode I/O Engine with Hybrid Reactive Reactor.**
 
 ### Architectural Specification
 
-1. **Journal Streaming Mode**:
-   - Open persistent handle in read-only binary mode (`open(..., 'rb')`).
-   - **Monotonic Forward Seek Invariant**: Seek directly to absolute forward position via `handle.seek(last_valid_offset, os.SEEK_SET)`. Relative seek arithmetic using end-of-file offsets (e.g. `seek(-diff, SEEK_END)` seen in `ed-scout`) is **strictly prohibited**, as concurrent game writes or file rotations trigger negative offset arithmetic, dropping lines or throwing fatal `OSError: [Errno 22] Invalid argument` exceptions.
-   - Slices are read from `last_valid_offset` up to current EOF using a 64 KB read buffer to efficiently process startup burst flushes (`Journal.FastWritesOnStartup.log`).
-   - If the trailing slice does not terminate in a newline (`\n`), the incomplete fragment is held in memory, and the file pointer is repositioned to `last_valid_offset` to await the next complete flush without advancing state.
-   - Tracks line count monotonically (`1`-indexed) to pair line numbers with byte offsets.
-2. **Snapshot Whole-Read Mode & Concurrency Mitigations**:
-   - **Atomic Read with Structural Boundary Check**: Reads full bytes via `path.read_bytes().strip()`.
-   - **Truncation & Interleaved Read Guard**: Validates that bytes are non-empty (`len(raw) > 0`) and conform to JSON structural delimiters (starts with `{` and ends with `}`). If incomplete, retries with exponential backoff (20ms, 40ms, 80ms; up to 3 attempts).
-   - **Per-Tier Debouncing**: Implements a 20ms debouncing window to coalesce rapid successive `on_modified` events and poll sweeps, preventing interleaved concurrent read operations on the same snapshot file.
-3. **Centralized Deduplication & Freshness Gate (`SnapshotFreshnessTracker`)**:
-   - All three trigger tiers (Tier 1 Journal event, Tier 2 Watchdog FS event, Tier 3 Polling tick) must pass through a single serialized deduplication gate before emitting an event.
-   - Calculates 64-bit BLAKE2b hash of raw bytes: `current_hash = hashlib.blake2b(raw, digest_size=8).hexdigest()`.
-   - Compares against `last_known_hash[snapshot_name]`. If hash matches, the read is discarded as duplicate/unchanged without downstream emission.
-4. **I/O Envelope Output**:
-   Emits `FileIngestionEvent`:
-   ```python
-   class FileIngestionEvent(BaseModel):
-       event_id: UUID
-       timestamp: datetime  # UTC ISO 8601
-       file_kind: FileKind  # JOURNAL, STATUS, SNAPSHOT
-       target_path: Path
-       raw_payload: bytes
-       start_offset: int
-       end_offset: int
-       line_number: int | None  # 1-indexed for journals; None for whole snapshots
-       part: int
-       raw_hash: str  # 64-bit BLAKE2b
-   ```
+```mermaid
+flowchart TD
+    subgraph ReactiveReactor["Execution Driver: Hybrid Reactor"]
+        W[watchdog FS Events] -->|on_created / on_modified| Signal[Async Wakeup Signal]
+        Timer[Bounded Timeout Ticker: 0.5s / 1.0s] --> Signal
+        Signal --> Dispatch{Event Dispatcher}
+    end
+
+    subgraph IOEngine["I/O & Concurrency Engine"]
+        Dispatch -->|Journal Active| JT[Journal Stream Tailer]
+        Dispatch -->|Snapshot Trigger| SW[Snapshot Whole-Reader]
+        JT -->|Monotonic Forward Seek| JBuf[64 KB Buffer & Newline Verify]
+        SW -->|20ms Debounce| SCheck{len > 0 and starts '{' and ends '}'}
+        SCheck -->|Truncated / Race| Backoff[Exponential Backoff: 20ms, 40ms, 80ms]
+        Backoff --> SW
+        SCheck -->|Valid| Hash[SnapshotFreshnessTracker: BLAKE2b 64-bit]
+    end
+
+    subgraph EnvelopePlane["Emitted Event Envelopes"]
+        JBuf --> FIE[FileIngestionEvent - Data Plane]
+        Hash -->|New Hash| FIE
+        Hash -->|Identical Hash| Discard[Discard Duplicate]
+        Dispatch -.->|Lifecycle Transitions| WAE[WatcherAuditEvent - Control Plane]
+    end
+```
+
+#### 1. Hybrid Reactive Reactor Loop
+* **Event Driver**: Uses `watchdog` registering listeners for `on_created` (rollover detection) and `on_modified` (append notification).
+* **Liveness Heartbeat**: Async wait with bounded timeout (`timeout=1.0` on Windows, `timeout=0.5` on Linux/Wine).
+* **Wakeup Logic**: If an OS kernel event fires, the reactor wakes immediately; if the timeout expires, the reactor executes a fallback freshness check across active candidates.
+
+#### 2. Journal Streaming Mode & Part Rollover
+* Open persistent handle in read-only binary mode (`open(..., 'rb')`).
+* **Monotonic Forward Seek Invariant**: Seek directly to absolute forward position via `handle.seek(last_valid_offset, os.SEEK_SET)`. Relative seek arithmetic using end-of-file offsets (e.g. `seek(-diff, SEEK_END)` seen in `ed-scout`) is **strictly prohibited**, as concurrent game writes or file rotations trigger negative offset arithmetic, dropping lines or throwing fatal `OSError: [Errno 22] Invalid argument` exceptions.
+* Slices are read from `last_valid_offset` up to current EOF using a 64 KB read buffer to efficiently process startup burst flushes (`Journal.FastWritesOnStartup.log`).
+* If the trailing slice does not terminate in a newline (`\n`), the incomplete fragment is held in memory, and the file pointer is repositioned to `last_valid_offset` to await the next complete flush without advancing state.
+* Tracks line count monotonically (`1`-indexed) to pair line numbers with byte offsets.
+* **Part Rollover Coordination**: When the active journal stream encounters EOF during a session transition, the engine queries the candidate selector for successor part (`part + 1`). If present, the engine drains remaining bytes, closes the current descriptor, emits `WatcherAuditEvent(PART_ROLLOVER)`, and binds a new handle to the successor file.
+
+#### 3. Snapshot Whole-Read Mode & Concurrency Mitigations
+* **Atomic Read with Structural Boundary Check**: Reads full bytes via `path.read_bytes().strip()`.
+* **Truncation & Interleaved Read Guard**: Validates that bytes are non-empty (`len(raw) > 0`) and conform to JSON structural delimiters (starts with `{` and ends with `}`). If incomplete, retries with exponential backoff (20ms, 40ms, 80ms; up to 3 attempts).
+* **Per-Tier Debouncing**: Implements a 20ms debouncing window to coalesce rapid successive `on_modified` events and poll sweeps, preventing interleaved concurrent read operations on the same snapshot file.
+
+#### 4. Centralized Deduplication & Freshness Gate (`SnapshotFreshnessTracker`)
+* All three trigger tiers (Tier 1 Journal event, Tier 2 Watchdog FS event, Tier 3 Polling tick) must pass through a single serialized deduplication gate before emitting an event.
+* Calculates 64-bit BLAKE2b hash of raw bytes: `current_hash = hashlib.blake2b(raw, digest_size=8).hexdigest()`.
+* Compares against `last_known_hash[snapshot_name]`. If hash matches, the read is discarded as duplicate/unchanged without downstream emission.
+
+#### 5. Dual Event Envelope Contracts
+
+##### Data Plane: `FileIngestionEvent`
+Emitted upon extracting a valid raw byte slice from disk:
+```python
+class FileIngestionEvent(BaseModel):
+    event_id: UUID
+    timestamp: datetime  # UTC ISO 8601
+    file_kind: FileKind  # JOURNAL, STATUS, SNAPSHOT
+    target_path: Path
+    raw_payload: bytes
+    start_offset: int
+    end_offset: int
+    line_number: int | None  # 1-indexed for journals; None for whole snapshots
+    part: int | None
+    raw_hash: str  # 64-bit BLAKE2b
+```
+
+##### Control & Observability Plane: `WatcherAuditEvent`
+Emitted upon internal state transitions, fault mitigations, or operational heartbeats:
+```python
+class WatcherAuditAction(StrEnum):
+    DISCOVERED = "discovered"
+    SELECTED = "selected"
+    POLL_TICK = "poll_tick"
+    FRESHNESS_VERIFIED = "freshness_verified"
+    RETRY_BACKOFF = "retry_backoff"
+    PART_ROLLOVER = "part_rollover"
+    LINE_QUARANTINED = "line_quarantined"
+    CASING_COLLISION_DETECTED = "casing_collision_detected"
+    EMPTY_CANDIDATE_SET = "empty_candidate_set"
+
+
+@dataclass(frozen=True)
+class WatcherAuditEvent:
+    timestamp: datetime
+    action: WatcherAuditAction
+    target_path: Path
+    detail: str = ""
+```
 
 ---
 
 ## 5. Consequences
 
 ### Positive
-* **Zero Collision**: Standard library binary mode provides clean read-sharing without Win32 lock collisions.
-* **Truncation Immune**: Transient 0-byte reads during FDev snapshot writes are caught and resolved by retry backoff.
-* **Decoupled Architecture**: Domain layer receives raw unparsed bytes in a uniform event envelope without coupling I/O to game schemas.
+* **Unified Architectural Model**: Merges the physical I/O tailer and reactive scheduling loop into a single, cohesive engine specification, eliminating unnecessary manager abstractions.
+* **100% Platform Liveness**: Combines sub-millisecond OS event reactivity on native desktops with an active timeout ticker that prevents silent freezes under Proton/Wine or network mounts.
+* **Truncation & Race Immunity**: Transient 0-byte states during FDev in-place rewrites are caught and resolved by boundary guards and exponential backoff.
+* **Decoupled Observability**: Operational metrics and quarantine events flow through `WatcherAuditEvent` without polluting domain telemetry pipelines.
 
 ### Negative
-* Requires managing persistent file descriptor lifecycles for active journals across session rotations.
+* Requires managing persistent file descriptor lifecycles for active journals across multi-part session rollovers.
+* Introduces `watchdog` as a project dependency to handle cross-platform filesystem event drivers.
