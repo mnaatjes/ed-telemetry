@@ -99,6 +99,43 @@ Chosen Option: **Option 3: Canonical Membership Registry with Case-Insensitive N
      - **Tier 2 (Filesystem Event - Near-Real-Time)**: OS `watchdog` notification on `on_created` / `on_modified` for any file matching the registry triggers lookup.
      - **Tier 3 (Polling Fallback - Reliability)**: Periodic 0.5s–1.0s timeout tick scans registry to detect unannounced file writes or dropped OS notifications.
 
+### 4.2 Error Conditions, Failure Paths, and Exception Hierarchy
+
+1. **Target Directory Inaccessibility**:
+   - *Scenario*: The injected `journal_dir` path does not exist, is unmounted, or raises OS `PermissionError` (`EACCES`/`ENOENT`) during snapshot lookup.
+   - *Behavior*: Raises `SnapshotDirectoryAccessError(target_path, reason)` deriving from `WatcherError`. This is an unrecoverable configuration failure that halts the watcher startup.
+2. **Unregistered Snapshot Lookup Attempt**:
+   - *Scenario*: A caller or domain event requests resolution for an unknown filename not present in the canonical or custom registry (e.g. `ArbitraryFile.json`).
+   - *Behavior*: Raises `UnregisteredSnapshotError(requested_name, available_registry)` or quenches lookup, preventing arbitrary path traversal outside the approved registry boundary.
+3. **Casing Collision Ambiguity (Linux/POSIX Multi-Match)**:
+   - *Scenario*: On Linux, multiple files differing only in case exist simultaneously (e.g. both `Status.json` AND `status.json`).
+   - *Behavior*: The resolver enforces strict **Canonical PascalCase Priority**. If canonical `Status.json` exists, it is selected and a diagnostic `WatcherAuditEvent(CASING_COLLISION_DETECTED)` is emitted. If only non-canonical variants exist and multiple match, `SnapshotCollisionError` is raised.
+4. **Invalid File Type (Directory / FIFO Collision)**:
+   - *Scenario*: An entity matching a snapshot name exists but is a directory or special file instead of a regular file (`not path.is_file()`).
+   - *Behavior*: Raises `InvalidSnapshotFileTypeError(target_path, actual_type)` and omits the target from the candidate set.
+5. **Broken Symbolic Link**:
+   - *Scenario*: A symlink pointing to an external mount or Wine drive is dangling (`path.is_symlink() and not path.exists()`).
+   - *Behavior*: Non-fatal; logs diagnostic audit record and yields `None` without raising an exception.
+
+#### Exception Hierarchy (`packages/ed_watcher/discovery/exceptions.py` or `packages/ed_watcher/exceptions.py`)
+
+```text
+WatcherError (Exception)
+└── SnapshotIdentificationError
+    ├── SnapshotDirectoryAccessError
+    │   ├── target_path: Path
+    │   └── reason: str ("does_not_exist" | "permission_denied" | "not_a_directory")
+    ├── UnregisteredSnapshotError
+    │   ├── requested_name: str
+    │   └── available_registry: frozenset[str]
+    ├── SnapshotCollisionError
+    │   ├── canonical_name: str
+    │   └── colliding_paths: tuple[Path, ...]
+    └── InvalidSnapshotFileTypeError
+        ├── target_path: Path
+        └── actual_type: str ("directory" | "fifo" | "socket")
+```
+
 ---
 
 ## 5. Consequences
