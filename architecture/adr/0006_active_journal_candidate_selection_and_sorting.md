@@ -100,7 +100,11 @@ Drawing from streaming architecture established in community references (e.g. `e
 2. **`TAIL` (Default for live monitoring)**: Seeks immediately to `st_size` (end of file) upon startup, reading only subsequent events emitted while the daemon is actively running.
 3. **`LOCATE_EVENT(event_name)`**: Rapidly scans backwards from end-of-file across candidate journals to locate the last emitted instance of a critical state event (e.g. `Location`, `FSDJump`, `FileHeader`), initializing session state in milliseconds without replaying historical gigabytes of exploration logs.
 
-### 4.3 Proton & Steam Deck Discovery Integration
+### 4.3 Proton & Steam Deck Discovery Integration (PathDiscoverer Implementation Update)
+
+> [!NOTE]
+> **Superseding Implementation Requirement for `PathDiscoverer`**:
+> While `PathDiscoverer` architecture was originally established in [ADR 0004](0004_os_path_discovery_and_filesystem_research_framework.md), empirical research across community codebases (`joncage/ed-scout` and `kayahr/ed-journal`) establishes the definitive canonical Steam Proton path layout on Linux. During concrete implementation of the `packages/ed_watcher.discovery` module, `PathDiscoverer`'s Linux strategy (`LinuxProtonPathStrategy`) must incorporate the concrete Steam App ID heuristic below as a primary candidate path prior to generic Wine prefix probing.
 
 Informed by findings in `ed-scout` (`SavedGamesLocator.py`) and `ed-journal` (`findDirectory`), the candidate search space on Linux platforms must include the canonical Steam Proton Wine prefix for Elite Dangerous:
 ```text
