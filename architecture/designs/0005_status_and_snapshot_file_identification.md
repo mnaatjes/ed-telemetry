@@ -99,9 +99,16 @@ classDiagram
         +colliding_paths: tuple[Path, ...]
     }
 
+    class SnapshotRegistrationError {
+        <<exception>>
+        +invalid_name: str
+        +reason: str
+    }
+
     WatcherError <|-- SnapshotIdentificationError
     SnapshotIdentificationError <|-- UnregisteredSnapshotError
     SnapshotIdentificationError <|-- SnapshotCollisionError
+    SnapshotIdentificationError <|-- SnapshotRegistrationError
     SnapshotIdentifier --> SnapshotRegistry : consults
     SnapshotIdentifier ..> SnapshotCandidate : produces
 ```
@@ -128,7 +135,12 @@ Immutable baseline catalog governing recognized FDev snapshot filenames:
   )
   ```
 * Provides `canonical_name(query: str) -> str | None` doing case-insensitive lookup against the registry.
-* Supports `register_custom(name: str)` for experimental test fixtures or future expansions.
+* **Custom Registration Security Gate (`register_custom`)**:
+  To protect the engine against malicious inputs, misconfigurations, or memory bombs, dynamically registered snapshot names must strictly satisfy three validation gates before admission into the candidate set:
+  1. **Pure Basename Invariant (Directory Traversal Defense)**: The candidate must be a pure filename without path separators (`/`, `\`) or parent traversal elements (`..`). Paths are strictly bound relative to `journal_dir`.
+  2. **Extension Invariant**: Filename must terminate strictly in `.json`.
+  3. **Stream Separation Invariant (Journal Collision Defense)**: Filename must not begin with the `"Journal"` prefix or match `JOURNAL_FILE_REGEX`, ensuring whole-read snapshot logic never collides with monotonic journal stream handles.
+  Violating any gate raises `SnapshotRegistrationError(invalid_name, reason)`.
 
 #### `SnapshotCandidate`
 Immutable value object describing a resolved snapshot file on disk:
@@ -236,6 +248,9 @@ WatcherError (packages/ed_watcher.exceptions)
     ├── SnapshotCollisionError
     │   ├── canonical_name: str
     │   └── colliding_paths: tuple[Path, ...]
+    ├── SnapshotRegistrationError
+    │   ├── invalid_name: str
+    │   └── reason: str ("path_traversal" | "invalid_extension" | "journal_collision")
     └── InvalidSnapshotFileTypeError
         ├── target_path: Path
         └── actual_type: str ("directory" | "fifo" | "socket")
