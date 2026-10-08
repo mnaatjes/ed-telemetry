@@ -52,7 +52,18 @@ Chosen Option: **Option 3: Canonical Membership Registry with Case-Insensitive N
 
 ### Architectural Specification
 
-1. **Canonical Snapshot Registry**:
+### Architectural Specification
+
+1. **Path Injection Contract**:
+   Snapshot identification does not discover paths autonomously. It strictly receives `resolved_journal_dir: Path` injected directly from `PathDiscoverer.discover_journal_directory().resolved_path`:
+   ```python
+   class SnapshotIdentifier:
+       def __init__(self, journal_dir: Path) -> None:
+           self._journal_dir = journal_dir
+   ```
+2. **Canonical Snapshot Registry & Dynamic Extension Fallback**:
+   - *Empirical Research Prerequisite*: The baseline registry represents all 9 verified FDev telemetry files (`Status.json` + 8 auxiliary files) established in `architecture/research/journal_and_snapshot_filename_spec.md`. Any addition to the core registry must be preceded by empirical research.
+   - *Dynamic Extension Fallback*: To prevent system brittleness against future game expansions or third-party simulators, the registry supports dynamic runtime registration:
    ```python
    CANONICAL_STATUS_FILE = "Status.json"
 
@@ -68,17 +79,25 @@ Chosen Option: **Option 3: Canonical Membership Registry with Case-Insensitive N
            "FCMaterials.json",
        }
    )
+
+
+   class SnapshotRegistry:
+       def __init__(self, custom_snapshots: set[str] | None = None) -> None:
+           self._auxiliary_snapshots = set(CANONICAL_AUXILIARY_SNAPSHOTS)
+           if custom_snapshots:
+               self._auxiliary_snapshots.update(custom_snapshots)
    ```
-2. **Case-Insensitive Resolution**:
-   When resolving a snapshot file within the target journal directory:
-   - Check direct canonical path: `(journal_dir / canonical_name).exists()`.
-   - If missing on Linux/POSIX, scan the directory for a case-insensitive match (`name.lower() == canonical_name.lower()`) to normalize casing dynamically.
-3. **Identification & Gating Strategy**:
-   - **`Status.json` Candidate**: Identified unconditionally upon watcher initialization as a permanent liveness target.
-   - **Auxiliary Snapshot Candidates**: Identified reactively. The watcher inspects an auxiliary snapshot only when:
-     1. The active journal stream emits a triggering event (e.g. `Market`, `Cargo`, `NavRoute`), OR
-     2. An explicit baseline catch-up check is requested upon startup.
-   - If the candidate file does not physically exist on disk, lookup yields empty without raising an error.
+3. **Execution Flow: Case-Preserving and Case-Insensitive Normalization**:
+   To address cross-platform filesystem differences where Linux is case-sensitive but Windows NTFS or Wine symlinks may present lowercase:
+   - *Step 1 (Fast Path)*: Check if canonical PascalCase file exists (`(self._journal_dir / name).exists()`).
+   - *Step 2 (Normalization Fallback)*: If not found and running on Linux/POSIX, scan directory entries matching `entry.name.lower() == name.lower()`. If found, bind to that existing path.
+   - *Step 3 (Absence)*: If no match exists, return `None` (graceful absence without error).
+4. **Three-Tier Identification & Ingestion Gating Model**:
+   - **`Status.json`**: Identified unconditionally as a continuous liveness target (~1.0 Hz).
+   - **Auxiliary Snapshots**:
+     - **Tier 1 (Journal Event-Gated - Fastest)**: When active journal emits `Market`, `Cargo`, etc., trigger immediate target lookup.
+     - **Tier 2 (Filesystem Event - Near-Real-Time)**: OS `watchdog` notification on `on_created` / `on_modified` for any file matching the registry triggers lookup.
+     - **Tier 3 (Polling Fallback - Reliability)**: Periodic 0.5s–1.0s timeout tick scans registry to detect unannounced file writes or dropped OS notifications.
 
 ---
 

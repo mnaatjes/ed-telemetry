@@ -57,17 +57,15 @@ Chosen Option: **Option 3: Dual-Mode I/O Engine with Transient Retry Guard.**
    - Open persistent handle in read-only binary mode.
    - Slices are read from `last_valid_offset` up to current EOF.
    - If buffer does not terminate in `\n`, seek back to `last_valid_offset` and await next flush.
-2. **Snapshot Whole-Read Mode**:
-   - Ephemeral `read_bytes()` with retry guard:
-     ```python
-     for attempt in range(3):
-         raw = path.read_bytes().strip()
-         if raw:
-             break
-         sleep(0.02 * (2**attempt))
-     ```
-   - Content hash comparison: `hashlib.blake2b(raw, digest_size=8)`.
-3. **I/O Envelope Output**:
+2. **Snapshot Whole-Read Mode & Concurrency Mitigations**:
+   - **Atomic Read with Structural Boundary Check**: Reads full bytes via `path.read_bytes().strip()`.
+   - **Truncation & Interleaved Read Guard**: Validates that bytes are non-empty (`len(raw) > 0`) and conform to JSON structural delimiters (starts with `{` and ends with `}`). If incomplete, retries with exponential backoff (20ms, 40ms, 80ms; up to 3 attempts).
+   - **Per-Tier Debouncing**: Implements a 20ms debouncing window to coalesce rapid successive `on_modified` events and poll sweeps, preventing interleaved concurrent read operations on the same snapshot file.
+3. **Centralized Deduplication & Freshness Gate (`SnapshotFreshnessTracker`)**:
+   - All three trigger tiers (Tier 1 Journal event, Tier 2 Watchdog FS event, Tier 3 Polling tick) must pass through a single serialized deduplication gate before emitting an event.
+   - Calculates 64-bit BLAKE2b hash of raw bytes: `current_hash = hashlib.blake2b(raw, digest_size=8).hexdigest()`.
+   - Compares against `last_known_hash[snapshot_name]`. If hash matches, the read is discarded as duplicate/unchanged without downstream emission.
+4. **I/O Envelope Output**:
    Emits `FileIngestionEvent(event_id, timestamp, file_kind, target_path, raw_payload, start_offset, end_offset, part, raw_hash)` where `file_kind: FileKind` (`JOURNAL`, `STATUS`, `SNAPSHOT`).
 
 ---

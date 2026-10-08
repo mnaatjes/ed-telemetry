@@ -79,6 +79,20 @@ Chosen Option: **Option 4: Composite Lexicographical & Metadata Sort.**
    active_journal = max(candidate_files, key=composite_journal_sort_key)
    ```
 
+### 4.1 Failure and Abort Workflows
+
+1. **Empty Candidate Set (`len(candidate_files) == 0`)**:
+   - *Scenario*: The resolved journal directory exists and is accessible, but contains no files matching `JOURNAL_FILE_REGEX` (e.g. fresh game installation before initial launch, or wrong directory).
+   - *Behavior*: **Non-Fatal Waiting Transition**.
+     - The selector yields `None` (or returns empty candidate result) and emits `WatcherAuditEvent(action=EMPTY_CANDIDATE_SET, detail="No matching journal files found")`.
+     - The watcher transitions into `WAITING_FOR_JOURNAL` state and listens for OS `on_created` events or poll ticks. It does **not** raise a fatal exception or abort the engine process.
+2. **Directory Inaccessibility / Non-Existence**:
+   - *Scenario*: The injected directory path from `PathDiscoverer` does not exist or raises `PermissionError`.
+   - *Exception*: Raises `JournalDirectoryAccessError(target_path, reason)` deriving from `WatcherError`. This is an unrecoverable configuration error that halts the watcher startup.
+3. **Corrupt Candidate Filenames**:
+   - *Scenario*: Candidate matches regex but date/part string extraction produces unparseable values.
+   - *Behavior*: `composite_journal_sort_key` catches parsing exceptions, logs a warning, and falls back to `(datetime.min, 0, stat().st_mtime)` so that ingestion is never blocked by a malformed test fixture.
+
 ---
 
 ## 5. Consequences
