@@ -51,6 +51,52 @@ for c in candidates:
 print('Windows Path Strategy successfully verified under Wine!')
 "
 
+echo "Executing journal candidate selector tests (SDD-004 / ADR 0006)..."
+wine "${PYTHON_EXE}" -c "
+import sys, os, tempfile
+from pathlib import Path
+sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+
+from ed_watcher.selector import JournalSelector, StreamPosition
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    win_dir = Path(tmp_dir)
+    print(f'Temporary Windows Test Directory: {win_dir}')
+
+    # 1. Test empty directory
+    sel = JournalSelector(win_dir)
+    assert sel.find_candidates() == (), 'Expected empty candidates'
+    assert sel.get_active_journal() is None, 'Expected None for empty directory'
+    print('  - Empty directory test: PASS')
+
+    # 2. Test candidate sorting and rollover part selection
+    f1 = win_dir / 'Journal.2026-10-08T120000.01.log'
+    f2 = win_dir / 'Journal.2026-10-08T120000.02.log'
+    f_legacy = win_dir / 'Journal.220101120000.01.log'
+    f_status = win_dir / 'Status.json'
+
+    for f in (f1, f2, f_legacy, f_status):
+        f.touch()
+
+    candidates = sel.find_candidates()
+    assert len(candidates) == 3, f'Expected 3 candidates, found {len(candidates)}'
+    print(f'  - Candidate filtering test ({len(candidates)} found): PASS')
+
+    active = sel.get_active_journal()
+    assert active is not None, 'Active journal should not be None'
+    assert active.filename == 'Journal.2026-10-08T120000.02.log', f'Wrong active journal: {active.filename}'
+    print(f'  - Active journal selection test ({active.filename}): PASS')
+
+    # 3. Test runtime successor detection
+    c1 = [c for c in candidates if c.part == 1 and c.timestamp.year == 2026][0]
+    successor = sel.get_successor(c1)
+    assert successor is not None, 'Expected successor for part 01'
+    assert successor.part == 2, f'Expected part 2, got {successor.part}'
+    print(f'  - Successor detection test (part 01 -> part 02): PASS')
+
+print('Journal candidate selection successfully verified under Windows NT / Wine!')
+"
+
 echo "============================================================"
 echo "[SUCCESS] Wine Windows verification passed cleanly!"
 echo "============================================================"
