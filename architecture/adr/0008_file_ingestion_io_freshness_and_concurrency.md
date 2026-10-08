@@ -89,13 +89,27 @@ flowchart TD
 * **Liveness Heartbeat**: Async wait with bounded timeout (`timeout=1.0` on Windows, `timeout=0.5` on Linux/Wine).
 * **Wakeup Logic**: If an OS kernel event fires, the reactor wakes immediately; if the timeout expires, the reactor executes a fallback freshness check across active candidates.
 
-#### 2. Journal Streaming Mode & Part Rollover
+#### 2. Journal Streaming Mode & Part Rollover Protocol
 * Open persistent handle in read-only binary mode (`open(..., 'rb')`).
 * **Monotonic Forward Seek Invariant**: Seek directly to absolute forward position via `handle.seek(last_valid_offset, os.SEEK_SET)`. Relative seek arithmetic using end-of-file offsets (e.g. `seek(-diff, SEEK_END)` seen in `ed-scout`) is **strictly prohibited**, as concurrent game writes or file rotations trigger negative offset arithmetic, dropping lines or throwing fatal `OSError: [Errno 22] Invalid argument` exceptions.
 * Slices are read from `last_valid_offset` up to current EOF using a 64 KB read buffer to efficiently process startup burst flushes (`Journal.FastWritesOnStartup.log`).
 * If the trailing slice does not terminate in a newline (`\n`), the incomplete fragment is held in memory, and the file pointer is repositioned to `last_valid_offset` to await the next complete flush without advancing state.
 * Tracks line count monotonically (`1`-indexed) to pair line numbers with byte offsets.
-* **Part Rollover Coordination**: When the active journal stream encounters EOF during a session transition, the engine queries the candidate selector for successor part (`part + 1`). If present, the engine drains remaining bytes, closes the current descriptor, emits `WatcherAuditEvent(PART_ROLLOVER)`, and binds a new handle to the successor file.
+
+##### The Continuous Spawn & Stale Handle Retirement Protocol
+To prevent endlessly tailing a retired journal file when the game transitions parts or launches a new session, the engine implements a 3-trigger retirement workflow:
+
+1. **Continuous Spawn Awareness**:
+   The reactor does not cease directory awareness while tailing an active file. A filesystem `on_created` notification matching `JOURNAL_FILE_REGEX` immediately triggers candidate re-evaluation via ADR 0006 (`get_successor(current_journal)`).
+2. **Idle Re-Evaluation Ticker (Anti-Zombie Guard)**:
+   If the currently active file handle has been sitting at EOF with zero new bytes read for $\ge 5.0$ seconds (or when an edge-case kernel inotify drop occurs), the periodic fallback ticker executes a fast candidate scan to detect if a newer journal file has spawned unannounced.
+3. **Drain-Before-Switch Guarantee**:
+   When a successor journal is confirmed:
+   - The engine performs one final read on the retired journal descriptor to capture and emit any trailing buffered bytes up to true EOF.
+   - The active handle is explicitly closed (`handle.close()`).
+   - The engine emits `WatcherAuditEvent(action=PART_ROLLOVER, detail="Rotated from <old> to <new>")`.
+   - The file pointer for the new successor journal is bound according to the configured startup positioning (`StreamPosition.HEAD`).
+   - The retired file is marked read-only/immutable in the watcher's session tracking and will not be re-scanned.
 
 #### 3. Snapshot Whole-Read Mode & Concurrency Mitigations
 * **Atomic Read with Structural Boundary Check**: Reads full bytes via `path.read_bytes().strip()`.

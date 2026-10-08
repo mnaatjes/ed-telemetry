@@ -108,6 +108,18 @@ Informed by findings in `ed-scout` (`SavedGamesLocator.py`) and `ed-journal` (`f
 ```
 Where App ID `359320` is the canonical Steam store identifier for *Elite Dangerous*. The resolver must evaluate this path in `PathDiscoverer` fallback sequences before declaring candidate set vacancy.
 
+### 4.4 Continuous Runtime Candidate Re-Evaluation & Successor Ranking
+
+Candidate selection is not solely an initial boot operation; it is an active evaluator invoked throughout the engine's lifecycle:
+1. **Dynamic Successor Query (`get_successor(current_journal)`)**:
+   When notified of new files or upon idle timeout checks, the selector inspects the journal directory and determines if a strictly newer candidate exists according to `composite_journal_sort_key`.
+   - **Part Rollover**: Evaluates whether a candidate with matching session timestamp and higher part number (`part > current_part`) is present.
+   - **New Session**: Evaluates whether a candidate with a strictly newer timestamp exists.
+2. **Determinism Invariant**:
+   The active journal must strictly satisfy:
+   $$\text{active\_journal} = \max(\text{candidate\_files}, \text{key}=\text{composite\_journal\_sort\_key})$$
+   If any candidate ranks higher than the currently tailed file, the selector signals the engine to initiate retirement of the current file handle without blocking or throwing exceptions.
+
 ---
 
 ## 5. Consequences
