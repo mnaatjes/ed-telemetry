@@ -152,7 +152,9 @@ class WatcherAuditAction(StrEnum):
     LINE_QUARANTINED = "line_quarantined"
     CASING_COLLISION_DETECTED = "casing_collision_detected"
     EMPTY_CANDIDATE_SET = "empty_candidate_set"
-    HINT_RECEIVED = "hint_received"
+    HINT_ENQUEUED = "hint_enqueued"
+    HINT_DISPATCHED = "hint_dispatched"
+    HINT_DROPPED = "hint_dropped"
 
 
 @dataclass(frozen=True)
@@ -165,7 +167,7 @@ class WatcherAuditEvent:
 
 #### 6. Inbound Control Plane Port: `WatcherIngestReceiver` (The Feedback Boundary)
 
-To support event-gated snapshot triggers (ADR 0007 Tier 1) and external rollover hints without violating the Cardinal Boundary (FPFD) or requiring the watcher to parse JSON, the engine exposes a decoupled inbound port:
+To support event-gated snapshot triggers (ADR 0007 Tier 1) and external rollover hints without violating the Cardinal Boundary (FPFD) or requiring the watcher to parse JSON, the engine exposes a decoupled inbound port backed by a **bounded command queue** with explicit operational metrics:
 
 ```python
 class WatcherHintAction(StrEnum):
@@ -183,27 +185,47 @@ class WatcherIngestCommand:
 
     action: WatcherHintAction
     target_name: str | None = None  # e.g., "Market.json", "NavRoute.json", or None
-    priority: bool = False  # Instantly wakes reactor if True
+    priority: bool = False  # If True, bypasses drop policy during queue congestion
+
+
+@dataclass(frozen=True)
+class ReactorQueueMetrics:
+    """Read-only operational telemetry on the inbound command queue for logging and debugging."""
+
+    current_depth: int
+    capacity: int  # Default: 256
+    high_water_mark: int
+    total_enqueued: int
+    total_processed: int
+    total_dropped: int
 
 
 class WatcherIngestReceiver(Protocol):
     """Inbound boundary protocol implemented by the reactive reactor."""
 
-    def submit_hint(self, command: WatcherIngestCommand) -> None:
+    def submit_hint(self, command: WatcherIngestCommand) -> bool:
         """
-        Receives an operational hint from external consumers (e.g. downstream parsers),
-        enqueues the command, and signals the async reactor loop to wake immediately.
+        Enqueues an operational hint and signals the async reactor loop to wake immediately.
+        Returns True if enqueued, False if dropped due to queue saturation.
         """
+        ...
+
+    def get_queue_metrics(self) -> ReactorQueueMetrics:
+        """Returns observable telemetry on queue depth, saturation, and drop counters."""
         ...
 ```
 
-##### Feedback Loop Execution Flow
-1. **Signal Ingestion**: Downstream layers (e.g. Phase 2 deserializer or test harness) invoke `submit_hint(command)`.
-2. **Reactor Wakeup**: Submitting an interrupt command enqueues the DTO and signals the reactor's async event wait (`asyncio.Event`), instantly breaking the 0.5s/1.0s sleep timer.
-3. **Targeted Dispatch**:
-   - If `action == HINT_SNAPSHOT`, the reactor delegates `target_name` directly to `SnapshotIdentifier` (ADR 0007), bypassing the timer tick.
+##### Bounded Queue Mechanics & Observability Workflow
+1. **Bounded Capacity**: The queue is bounded (default `maxsize=256`) to guarantee finite memory usage even during extreme write bursts or downstream consumer loops.
+2. **Backpressure & Drop Policy**:
+   - If the queue is saturated and `command.priority is False`, the hint is dropped, `total_dropped` is incremented, and `WatcherAuditEvent(action=HINT_DROPPED, detail=f"Queue saturated ({metrics.current_depth}/{metrics.capacity}) for {command.target_name}")` is emitted.
+   - If `command.priority is True`, the hint is enqueued regardless of normal watermarks (or evicts the oldest non-priority hint).
+3. **Signal & Reactor Wakeup**: Enqueueing a hint increments `total_enqueued`, sets `high_water_mark`, and signals the reactor's async event wait (`asyncio.Event`), instantly breaking the 0.5s/1.0s sleep timer.
+4. **Targeted Dispatch & Audit**:
+   - When the reactor pops a command, it emits `WatcherAuditEvent(action=HINT_DISPATCHED)`.
+   - If `action == HINT_SNAPSHOT`, the reactor delegates `target_name` directly to `SnapshotIdentifier` (ADR 0007), executing a debounced whole-file read.
    - If `action == HINT_ROLLOVER`, the reactor immediately queries `CandidateSelector.get_successor()` (ADR 0006) to execute the drain-and-switch sequence.
-4. **Zero Domain Inversion**: The watcher never decodes or evaluates event payloads; it strictly processes incoming operational file hints.
+5. **Observability Surface**: Operators and test harnesses can inspect `get_queue_metrics()` at any time or subscribe to `WatcherAuditEvent` streams to observe queue depth, high-water marks, and saturation rates without invasive debugging.
 
 ---
 
