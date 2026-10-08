@@ -94,7 +94,7 @@ Chosen Option: **Option 3: Canonical Membership Registry with Case-Insensitive N
 4. **Three-Tier Identification & Ingestion Gating Model**:
    - **`Status.json`**: Identified unconditionally as a continuous liveness target (~1.0 Hz).
    - **Auxiliary Snapshots**:
-     - **Tier 1 (Journal Event-Gated - Fastest)**: When active journal emits `Market`, `Cargo`, etc., trigger immediate target lookup.
+     - **Tier 1 (Inbound Target Hint Port - Fastest / Event-Driven)**: When an external consumer (e.g. downstream domain parser) observes a relevant game event, it submits an agnostic `WatcherIngestCommand(action=HINT_SNAPSHOT, target_name="Market.json")` into the watcher's `WatcherIngestReceiver` port ([ADR 0008](0008_file_ingestion_io_freshness_and_concurrency.md)). This instantly wakes the reactor to execute a debounced target lookup without requiring the watcher itself to parse JSON bytes.
      - **Tier 2 (Filesystem Event - Near-Real-Time)**: OS `watchdog` notification on `on_created` / `on_modified` for any file matching the registry triggers lookup.
      - **Tier 3 (Polling Fallback - Reliability)**: Periodic 0.5s–1.0s timeout tick scans registry to detect unannounced file writes or dropped OS notifications.
 

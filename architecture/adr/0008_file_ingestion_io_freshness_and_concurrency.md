@@ -152,6 +152,7 @@ class WatcherAuditAction(StrEnum):
     LINE_QUARANTINED = "line_quarantined"
     CASING_COLLISION_DETECTED = "casing_collision_detected"
     EMPTY_CANDIDATE_SET = "empty_candidate_set"
+    HINT_RECEIVED = "hint_received"
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,48 @@ class WatcherAuditEvent:
     target_path: Path
     detail: str = ""
 ```
+
+#### 6. Inbound Control Plane Port: `WatcherIngestReceiver` (The Feedback Boundary)
+
+To support event-gated snapshot triggers (ADR 0007 Tier 1) and external rollover hints without violating the Cardinal Boundary (FPFD) or requiring the watcher to parse JSON, the engine exposes a decoupled inbound port:
+
+```python
+class WatcherHintAction(StrEnum):
+    HINT_SNAPSHOT = "hint_snapshot"  # Request immediate read of specific snapshot
+    HINT_ROLLOVER = "hint_rollover"  # Request immediate evaluation for next journal part
+    HINT_DIRECTORY_SCAN = "hint_scan"  # Request immediate directory sweep
+
+
+@dataclass(frozen=True)
+class WatcherIngestCommand:
+    """
+    Agnostic filesystem hint received across the boundary.
+    Contains zero game schema logic.
+    """
+
+    action: WatcherHintAction
+    target_name: str | None = None  # e.g., "Market.json", "NavRoute.json", or None
+    priority: bool = False  # Instantly wakes reactor if True
+
+
+class WatcherIngestReceiver(Protocol):
+    """Inbound boundary protocol implemented by the reactive reactor."""
+
+    def submit_hint(self, command: WatcherIngestCommand) -> None:
+        """
+        Receives an operational hint from external consumers (e.g. downstream parsers),
+        enqueues the command, and signals the async reactor loop to wake immediately.
+        """
+        ...
+```
+
+##### Feedback Loop Execution Flow
+1. **Signal Ingestion**: Downstream layers (e.g. Phase 2 deserializer or test harness) invoke `submit_hint(command)`.
+2. **Reactor Wakeup**: Submitting an interrupt command enqueues the DTO and signals the reactor's async event wait (`asyncio.Event`), instantly breaking the 0.5s/1.0s sleep timer.
+3. **Targeted Dispatch**:
+   - If `action == HINT_SNAPSHOT`, the reactor delegates `target_name` directly to `SnapshotIdentifier` (ADR 0007), bypassing the timer tick.
+   - If `action == HINT_ROLLOVER`, the reactor immediately queries `CandidateSelector.get_successor()` (ADR 0006) to execute the drain-and-switch sequence.
+4. **Zero Domain Inversion**: The watcher never decodes or evaluates event payloads; it strictly processes incoming operational file hints.
 
 ---
 
