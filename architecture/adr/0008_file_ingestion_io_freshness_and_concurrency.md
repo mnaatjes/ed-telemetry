@@ -141,6 +141,34 @@ flowchart TD
     DropFrag --> ResetTimer
 ```
 
+##### Per-File Stream State Machine: `JournalStreamContext`
+
+To guarantee that file offsets, line counters, and fragment buffers are strictly isolated and never leak across file boundaries, stream state is encapsulated in a discrete per-file context model. A new context is instantiated for each active file; global or shared file offsets are strictly prohibited.
+
+```python
+@dataclass
+class JournalStreamContext:
+    """
+    Isolated, per-file streaming state machine.
+    Strictly instantiated per physical journal file; never shared or global.
+    """
+
+    target_path: Path
+    handle: BinaryIO
+    part: int
+    last_valid_offset: int = 0
+    current_line_number: int = 1
+    fragment_accumulator: bytearray = field(default_factory=bytearray)
+    fragment_first_seen: float | None = None
+    is_retired: bool = False
+
+    def close(self) -> None:
+        """Finalize and release handle."""
+        if not self.handle.closed:
+            self.handle.close()
+        self.is_retired = True
+```
+
 ##### The Continuous Spawn & Stale Handle Retirement Protocol
 To prevent endlessly tailing a retired journal file when the game transitions parts or launches a new session, the engine implements a 3-trigger retirement workflow:
 
@@ -150,11 +178,11 @@ To prevent endlessly tailing a retired journal file when the game transitions pa
    If the currently active file handle has been sitting at EOF with zero new bytes read for $\ge 5.0$ seconds (or when an edge-case kernel inotify drop occurs), the periodic fallback ticker executes a fast candidate scan to detect if a newer journal file has spawned unannounced.
 3. **Drain-Before-Switch Guarantee**:
    When a successor journal is confirmed:
-   - The engine performs one final read on the retired journal descriptor to capture and emit any trailing buffered bytes up to true EOF.
-   - The active handle is explicitly closed (`handle.close()`).
+   - The engine performs one final read on the retired journal context to capture and emit any trailing buffered bytes up to true EOF.
+   - The active context is explicitly finalized and closed (`context.close()`).
    - The engine emits `WatcherAuditEvent(action=PART_ROLLOVER, detail="Rotated from <old> to <new>")`.
-   - The file pointer for the new successor journal is bound according to the configured startup positioning (`StreamPosition.HEAD`).
-   - The retired file is marked read-only/immutable in the watcher's session tracking and will not be re-scanned.
+   - A brand-new `JournalStreamContext` is instantiated for the successor file with `last_valid_offset = 0` and `current_line_number = 1`, bound per `StreamPosition.HEAD`.
+   - The retired file context is marked `is_retired = True` and retained in session history as immutable.
 
 #### 3. Snapshot Whole-Read Mode & Concurrency Mitigations
 * **Atomic Read with Structural Boundary Check**: Reads full bytes via `path.read_bytes().strip()`.
