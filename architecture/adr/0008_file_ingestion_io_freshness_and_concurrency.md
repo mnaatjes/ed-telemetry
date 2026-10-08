@@ -96,6 +96,51 @@ flowchart TD
 * If the trailing slice does not terminate in a newline (`\n`), the incomplete fragment is held in memory, and the file pointer is repositioned to `last_valid_offset` to await the next complete flush without advancing state.
 * Tracks line count monotonically (`1`-indexed) to pair line numbers with byte offsets.
 
+##### Failure Mode Taxonomy: `SEEK_END` Arithmetic vs. `SEEK_SET` Invariant
+
+| Failure Mode | Mechanism in Relative `SEEK_END` Pattern (`seek(-diff, SEEK_END)`) | Root Cause | Impact | Mitigation in `SEEK_SET` Monotonic Engine |
+| :--- | :--- | :--- | :--- | :--- |
+| **Moving Target Race Condition** | `stat_size = stat().st_size`<br/>Game flushes $\Delta$ bytes during seek.<br/>Seek uses new EOF: drops bytes between planned offset and new EOF. | Decoupled `stat()` reading and filesystem seek pointer resolution under active file growth. | **Silent Data Skipping / Event Loss**: Journal events are skipped and permanently lost from downstream pipelines. | **Atomic Absolute Positioning**: Seeks strictly to known `last_valid_offset` using `os.SEEK_SET`. Concurrent appends simply increase available readable bytes without shifting the read origin. |
+| **Rotation / Truncation Crash** | `diff = current_size - last_size`<br/>File rotates or resets (`current_size < last_size`), yielding `diff < 0`.<br/>Call `seek(-diff, SEEK_END)` attempts seek past file boundary. | File rotation or truncation invalidates previous size assumptions, generating invalid negative seek arithmetic. | **Fatal Engine Crash**: OS raises `OSError: [Errno 22] Invalid argument`, terminating the ingestion daemon. | **Zero-Arithmetic Pointer Binding**: Never performs relative subtraction against EOF. Truncation or rotation is detected via `current_size < last_valid_offset`, triggering immediate clean rotation without negative seek calls. |
+| **Half-Written Line Corruption** | Read slice cuts mid-line at EOF. Subsequent `SEEK_END` read calculates offset from next EOF, treating fragmented line halves as separate entries. | Game flushes write buffers across OS page boundaries without flush coordination. | **Corrupted Payloads**: Downstream decoders fail on partial JSON strings; line numbers drift out of sync with disk offsets. | **Fragment Accumulator & Re-seek**: Fragment without trailing `\n` is buffered in memory. Handle rewinds to `last_valid_offset` until the trailing `\n` is flushed to disk. |
+
+##### Fragment Accumulator & Quarantine Circuit Breaker Protocol
+
+To guarantee that broken writes or ungracefully terminated game processes cannot stall the ingestion engine in an infinite re-seek loop, journal line parsing is bounded by a strict two-factor circuit breaker:
+
+1. **Stagnant Fragment Timeout**: If an incomplete trailing fragment (bytes not ending in `\n`) remains uncompleted for $\ge 5.0$ seconds without new disk flushes, the fragment is classified as orphaned.
+2. **Buffer Ceiling Overflow**: If an uncompleted line exceeds $5\text{ MB}$ (exceeding any possible single journal entry payload), the accumulator trips immediately.
+3. **Quarantine Action**: Upon breaker trip:
+   - Emits `WatcherAuditEvent(action=LINE_QUARANTINED, detail="Orphaned trailing bytes quarantined")` to the control plane.
+   - Advances `last_valid_offset` past the quarantined slice to current EOF.
+   - Clears memory accumulator and resumes clean monotonic ingestion.
+
+```mermaid
+flowchart TD
+    Start["Wakeup: Read Slice (handle.read(64KB))"] --> CheckBytes{"Bytes Read > 0?"}
+    CheckBytes -->|No| CheckSpawn["Run Stale Handle / Successor Check"]
+    CheckBytes -->|Yes| AppendAcc["Append to In-Memory Accumulator"]
+
+    AppendAcc --> HasNewline{"Contains b'\\n'?"}
+
+    HasNewline -->|Yes| SplitLines["Split into Complete Lines at b'\\n'"]
+    SplitLines --> EmitLoop["For each complete line: Emit FileIngestionEvent"]
+    EmitLoop --> AdvanceOffset["Advance last_valid_offset to End of Last Complete Line"]
+    AdvanceOffset --> Remainder{"Remaining Trailing Bytes?"}
+    Remainder -->|No| ResetTimer["Clear Accumulator & Reset Stagnant Timer"]
+    Remainder -->|Yes| KeepFrag["Retain Fragment in Accumulator"]
+    KeepFrag --> UpdateHandle["handle.seek(last_valid_offset, SEEK_SET)"]
+
+    HasNewline -->|No| CheckBreaker{"Accumulator > 5MB OR Stagnant >= 5.0s?"}
+    CheckBreaker -->|No| Rewind["handle.seek(last_valid_offset, SEEK_SET)"]
+    Rewind --> AwaitFlush["Await Next Disk Flush / Reactor Tick"]
+
+    CheckBreaker -->|Yes| TripBreaker["Trip Circuit Breaker"]
+    TripBreaker --> EmitQuarantine["Emit WatcherAuditEvent(LINE_QUARANTINED)"]
+    EmitQuarantine --> DropFrag["Drop Accumulator & Advance last_valid_offset to EOF"]
+    DropFrag --> ResetTimer
+```
+
 ##### The Continuous Spawn & Stale Handle Retirement Protocol
 To prevent endlessly tailing a retired journal file when the game transitions parts or launches a new session, the engine implements a 3-trigger retirement workflow:
 
