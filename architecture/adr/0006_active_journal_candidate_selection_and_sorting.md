@@ -117,7 +117,9 @@ Candidate selection is not solely an initial boot operation; it is an active eva
    - **New Session**: Evaluates whether a candidate with a strictly newer timestamp exists.
 2. **Determinism Invariant**:
    The active journal must strictly satisfy:
-   $$\text{active\_journal} = \max(\text{candidate\_files}, \text{key}=\text{composite\_journal\_sort\_key})$$
+   ```python
+   active_journal = max(candidate_files, key=composite_journal_sort_key)
+   ```
    If any candidate ranks higher than the currently tailed file, the selector signals the engine to initiate retirement of the current file handle without blocking or throwing exceptions.
 
 ---
