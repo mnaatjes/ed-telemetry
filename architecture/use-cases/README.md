@@ -25,4 +25,4 @@ Governed by the Rational Unified Process (RUP) Use-Case Specification standard a
 | ID | Title | Status | Date | Primary Actor |
 | :---: | :--- | :---: | :---: | :--- |
 | **UC-0002** | [UC-0002: Resolve Elite Dangerous Game Journal Directory](0002_discover_game_directory.md) | **draft** | 2026-10-07 | Application Bootstrap |
-
+| **UC-0003** | [UC-0003: Declarative Journal Stream Positioning and Ingestion Modes](0003_stream_positioning_and_ingestion_modes.md) | **draft** | 2026-10-08 | Telemetry Ingestion Driver / Downstream Client |
