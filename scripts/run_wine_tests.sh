@@ -313,6 +313,46 @@ print('  - ApplicationServiceError hierarchy on Windows: PASS')
 print('Application Service Layer scaffolding successfully verified under Windows NT / Wine!')
 "
 
+echo "Executing Runtime Reflection Boundary Verification (ADR 0013 / SDD-011)..."
+wine "${PYTHON_EXE}" -c "
+import sys, os
+from dataclasses import dataclass
+from typing import Any
+sys.path.insert(0, os.path.join(r'${WIN_REPO_ROOT}', 'src'))
+sys.path.insert(0, r'${WIN_REPO_ROOT}')
+
+from services.bootstrap import build_application_context
+from services.dto.watcher import WatcherStatusDTO
+from services.watcher import WatcherService
+from tests.helpers.boundary_reflection import (
+    audit_context_gateway,
+    audit_dto_purity,
+    audit_service_constructor_shielding,
+    format_violation_diagnostic,
+)
+
+# 1. Junction 1: Context Gateway identifies active engine leak
+app_ctx = build_application_context()
+violations = audit_context_gateway(app_ctx)
+engine_violations = [v for v in violations if v.field_or_param_name == 'engine']
+assert len(engine_violations) == 1, 'Expected engine leak on ApplicationContext'
+v = engine_violations[0]
+assert v.leaked_type_name == 'TelemetryEngine'
+assert v.leaked_module_path == 'domain.engine'
+print('  - Junction 1: Context Gateway reflection audit on Windows: PASS')
+
+# 2. Junction 2: Query DTO Purity
+dto = WatcherStatusDTO(is_active=True, journal_dir=r'C:\Fake\Dir')
+assert len(audit_dto_purity(dto)) == 0
+print('  - Junction 2: Query DTO purity reflection audit on Windows: PASS')
+
+# 3. Junction 4: Service Constructor Shielding
+assert len(audit_service_constructor_shielding(WatcherService)) == 0
+print('  - Junction 4: Service constructor dependency shielding on Windows: PASS')
+
+print('Runtime Reflection Boundary Verification successfully verified under Windows NT / Wine!')
+"
+
 echo "============================================================"
 echo "[SUCCESS] Wine Windows verification passed cleanly!"
 echo "============================================================"

@@ -1,6 +1,6 @@
 ---
 title: "SDD-011: Runtime Reflection Verification for Object-Tunneling Boundary Invariants"
-status: "proposed"
+status: "approved"
 date: "2026-10-09"
 tags: ["architecture", "sdd", "reflection", "boundaries", "invariants", "runtime", "quality-gates"]
 ---
