@@ -1,8 +1,12 @@
+"""Composition root and application context factory."""
+
 from pathlib import Path
 
 from ed_domain.engine import TelemetryEngine
 from ed_egress.transmitter import NullTransmitter
 from ed_watcher.watcher import FileSystemWatcher
+
+from ed_app.context import ApplicationContext
 
 
 def build_engine(journal_dir: Path | None = None) -> TelemetryEngine:
@@ -14,3 +18,13 @@ def build_engine(journal_dir: Path | None = None) -> TelemetryEngine:
     watcher = FileSystemWatcher(journal_dir=journal_dir)
     egress_adapters = [NullTransmitter()]
     return TelemetryEngine(watcher=watcher, egress_ports=egress_adapters)
+
+
+def build_application_context(journal_dir: Path | None = None) -> ApplicationContext:
+    """Instantiate and assemble the full application context.
+
+    Guaranteed side-effect-free: does not bind network sockets,
+    create files, or launch background threads during construction.
+    """
+    engine = build_engine(journal_dir=journal_dir)
+    return ApplicationContext(engine=engine, services=())

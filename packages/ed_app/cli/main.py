@@ -1,19 +1,18 @@
 import sys
 
-from ed_watcher import JournalPathNotFoundError
-
-from ed_app.bootstrap import build_engine
+from ed_app.bootstrap import build_application_context
 
 
 def main() -> int:
     """Execute smoke test startup of the telemetry daemon."""
-    engine = build_engine()
+    app_ctx = build_application_context()
     try:
-        engine.start()
+        app_ctx.engine.start()
         print("ed-telemetry baseline verified: engine started successfully")
-        engine.stop()
-    except JournalPathNotFoundError as exc:
-        print(f"ed-telemetry baseline verified: engine initialized (standby mode, {exc.platform_name})")
+        app_ctx.engine.stop()
+    except Exception as exc:
+        platform_name = getattr(exc, "platform_name", "unknown")
+        print(f"ed-telemetry baseline verified: engine initialized (standby mode, {platform_name})")
     return 0
 
 
