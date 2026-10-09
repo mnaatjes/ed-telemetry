@@ -1,6 +1,8 @@
 ---
 title: "SDD-008: Application Service Layer, DTO Boundary Contracts, and Multi-Modal Orchestration"
+status: "approved"
 tags: ["architecture", "designs", "sdd", "application", "services", "dto", "context", "boundaries", "hexagonal"]
+
 created_at: "2026-10-09"
 last_updated_at: "2026-10-09"
 ---

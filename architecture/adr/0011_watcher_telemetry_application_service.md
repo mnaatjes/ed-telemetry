@@ -1,6 +1,6 @@
 ---
 title: "ADR 0011: Watcher Telemetry Application Service and Boundary Exposure"
-status: "proposed"
+status: "accepted"
 date: "2026-10-09"
 tags: ["architecture", "adr", "application", "services", "watcher", "dto", "boundaries", "madr"]
 ---

@@ -1,6 +1,6 @@
 ---
 title: "SDD-009: Watcher Telemetry Application Service and Boundary Exposure"
-status: "proposed"
+status: "approved"
 date: "2026-10-09"
 tags: ["architecture", "design", "sdd", "ed_app", "services", "watcher", "dto", "boundaries"]
 ---
