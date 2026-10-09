@@ -3,7 +3,7 @@
 import time
 from pathlib import Path
 
-from ed_watcher.engine import (
+from infrastructure.watcher.engine import (
     FileIngestionEvent,
     FileKind,
     JournalStreamContext,
@@ -16,7 +16,7 @@ from ed_watcher.engine import (
     WatcherIngestCommand,
     WatcherReactor,
 )
-from ed_watcher.selector import StreamPosition
+from infrastructure.watcher.selector import StreamPosition
 
 
 class TestSnapshotFreshnessTracker:

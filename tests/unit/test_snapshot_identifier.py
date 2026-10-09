@@ -4,14 +4,15 @@ import sys
 from pathlib import Path
 
 import pytest
-from ed_watcher.exceptions import (
+
+from infrastructure.watcher.exceptions import (
     InvalidSnapshotFileTypeError,
     SnapshotCollisionError,
     SnapshotDirectoryAccessError,
     SnapshotRegistrationError,
     UnregisteredSnapshotError,
 )
-from ed_watcher.snapshots import (
+from infrastructure.watcher.snapshots import (
     CANONICAL_AUXILIARY_SNAPSHOTS,
     SnapshotIdentifier,
     SnapshotRegistry,

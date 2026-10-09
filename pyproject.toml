@@ -21,10 +21,10 @@ dev = [
 ]
 
 [project.scripts]
-ed-telemetry = "ed_app.cli.main:main"
+ed-telemetry = "interfaces.cli.main:main"
 
 [tool.setuptools.packages.find]
-where = ["packages"]
+where = ["src"]
 
 [tool.ruff]
 line-length = 120
@@ -39,32 +39,33 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
-packages = ["ed_domain", "ed_watcher", "ed_egress", "ed_sdk", "ed_app"]
+mypy_path = "src"
+packages = ["domain", "services", "infrastructure", "interfaces", "sdk"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-pythonpath = ["packages"]
+pythonpath = ["src"]
 
 [tool.importlinter]
 include_external_packages = true
 root_packages = [
-    "ed_domain",
-    "ed_watcher",
-    "ed_egress",
-    "ed_sdk",
-    "ed_app",
+    "domain",
+    "services",
+    "infrastructure",
+    "interfaces",
+    "sdk",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Invariant A: Domain package must remain purely decoupled"
 type = "forbidden"
-source_modules = ["ed_domain"]
+source_modules = ["domain"]
 forbidden_modules = [
-    "ed_watcher",
-    "ed_egress",
-    "ed_app",
-    "ed_sdk",
+    "services",
+    "infrastructure",
+    "interfaces",
+    "sdk",
     "watchdog",
     "tkinter",
     "socket",
@@ -78,55 +79,59 @@ forbidden_modules = [
 name = "Invariant B: SDK forbidden in production packages"
 type = "forbidden"
 source_modules = [
-    "ed_domain",
-    "ed_watcher",
-    "ed_egress",
-    "ed_app",
+    "domain",
+    "services",
+    "infrastructure",
+    "interfaces",
 ]
-forbidden_modules = ["ed_sdk"]
+forbidden_modules = ["sdk"]
 
 [[tool.importlinter.contracts]]
 name = "Layered Architecture Boundaries"
 type = "layers"
 layers = [
-    "ed_app",
-    "ed_watcher | ed_egress",
-    "ed_domain",
+    "interfaces",
+    "services",
+    "infrastructure",
+    "domain",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Invariant G: Infrastructure adapter isolation"
 type = "forbidden"
 source_modules = [
-    "ed_app.cli",
-    "ed_app.services",
+    "interfaces.cli",
+    "services.watcher",
+    "services.base",
+    "services.dto",
+    "services.context",
+    "services.exceptions",
 ]
 forbidden_modules = [
-    "ed_watcher",
-    "ed_egress",
+    "infrastructure.watcher",
+    "infrastructure.egress",
 ]
 allow_indirect_imports = true
 
-
 [[tool.importlinter.contracts]]
-name = "Invariant D: Downward dependency within ed_app"
+name = "Invariant D: Downward dependency within services"
 type = "layers"
 layers = [
-    "ed_app.cli",
-    "ed_app.bootstrap",
-    "ed_app.context",
-    "ed_app.services",
-    "ed_app.dto",
-    "ed_app.exceptions",
+    "services.bootstrap",
+    "services.context",
+    "services.watcher",
+    "services.base",
+    "services.dto",
+    "services.exceptions",
 ]
-
 
 [[tool.importlinter.contracts]]
 name = "Invariant C: Services and DTOs forbidden from protocol frameworks"
 type = "forbidden"
 source_modules = [
-    "ed_app.services",
-    "ed_app.dto",
+    "services.watcher",
+    "services.base",
+    "services.dto",
 ]
 forbidden_modules = [
     "argparse",
@@ -135,8 +140,6 @@ forbidden_modules = [
     "starlette",
     "mcp",
 ]
-
-
 
 [tool.bumpversion]
 current_version = "0.2.0"
@@ -163,7 +166,7 @@ search = 'version = "{current_version}"'
 replace = 'version = "{new_version}"'
 
 [[tool.bumpversion.files]]
-filename = "packages/ed_domain/__init__.py"
+filename = "src/domain/__init__.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
 

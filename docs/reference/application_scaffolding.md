@@ -1,22 +1,22 @@
 ---
 title: "Application Service Layer Scaffolding Reference"
-tags: ["reference", "architecture", "ed_app", "scaffolding"]
+tags: ["reference", "architecture", "services", "scaffolding"]
 created_at: "2026-10-09"
 last_updated_at: "2026-10-09"
 ---
 
 # Application Service Layer Scaffolding Reference
 
-Technical specifications for the application service layer foundation, context composition, base protocols, and boundary contracts within `ed_app`. Governed by [ADR 0010](../../architecture/adr/0010_application_service_layer_and_boundary_contracts.md) and [SDD-008](../../architecture/designs/0008_application_service_layer_and_boundary_contracts.md).
+Technical specifications for the application service layer foundation, context composition, base protocols, and boundary contracts within `services`. Governed by [ADR 0010](../../architecture/adr/0010_application_service_layer_and_boundary_contracts.md) and [SDD-008](../../architecture/designs/0008_application_service_layer_and_boundary_contracts.md).
 
 ---
 
 ## 1. Module Layout
 
-The application service scaffolding resides within `packages/ed_app/`:
+The application service scaffolding resides within `src/services/`:
 
 ```
-packages/ed_app/
+src/services/
 ├── __init__.py           # Public exports (ApplicationContext, build_application_context, ApplicationServiceError)
 ├── bootstrap.py          # Composition root (build_application_context, build_engine)
 ├── context.py            # ApplicationContext container
@@ -38,7 +38,7 @@ packages/ed_app/
 
 ### `DataTransferObject` Protocol
 
-Defined in `ed_app.dto.base.DataTransferObject`. A `@runtime_checkable` protocol satisfied by frozen dataclasses:
+Defined in `services.dto.base.DataTransferObject`. A `@runtime_checkable` protocol satisfied by frozen dataclasses:
 
 ```python
 @runtime_checkable
@@ -54,7 +54,7 @@ class DataTransferObject(Protocol):
 
 ### `BaseApplicationService` Protocol
 
-Defined in `ed_app.services.base.BaseApplicationService`. A `@runtime_checkable` protocol satisfied by all domain application services:
+Defined in `services.base.BaseApplicationService`. A `@runtime_checkable` protocol satisfied by all domain application services:
 
 ```python
 @runtime_checkable
@@ -71,7 +71,7 @@ class BaseApplicationService(Protocol):
 
 ## 3. Application Context
 
-Defined in `ed_app.context.ApplicationContext`:
+Defined in `services.context.ApplicationContext`:
 
 ```python
 @dataclass(frozen=True)
@@ -90,7 +90,7 @@ class ApplicationContext:
 
 ## 4. Composition Root
 
-Defined in `ed_app.bootstrap`:
+Defined in `services.bootstrap`:
 
 ```python
 def build_engine(journal_dir: Path | None = None) -> TelemetryEngine:
@@ -109,7 +109,7 @@ def build_application_context(journal_dir: Path | None = None) -> ApplicationCon
 
 ## 5. Exception Hierarchy
 
-Defined in `ed_app.exceptions`:
+Defined in `services.exceptions`:
 
 ```
 ApplicationServiceError (Base)
@@ -126,6 +126,6 @@ Enforced by `import-linter` in `pyproject.toml`:
 
 | Invariant | Scope | Rule |
 | :--- | :--- | :--- |
-| **Invariant G** | Adapter Isolation | `ed_app.cli` and `ed_app.services` cannot directly import `ed_watcher` or `ed_egress`. Concrete adapters are isolated to `ed_app.bootstrap`. |
-| **Invariant D** | Downward Dependency | Downward dependency layering enforced across `ed_app.cli` -> `ed_app.bootstrap` -> `ed_app.context` -> `ed_app.services` -> `ed_app.dto` -> `ed_app.exceptions`. |
-| **Invariant C** | Protocol Neutrality | `ed_app.services` and `ed_app.dto` are forbidden from importing presentation frameworks (`argparse`, `click`, `fastapi`, `starlette`, `mcp`). |
+| **Invariant G** | Adapter Isolation | `services.cli` and `services` cannot directly import `infrastructure.watcher` or `infrastructure.egress`. Concrete adapters are isolated to `services.bootstrap`. |
+| **Invariant D** | Downward Dependency | Downward dependency layering enforced across `services.cli` -> `services.bootstrap` -> `services.context` -> `services` -> `services.dto` -> `services.exceptions`. |
+| **Invariant C** | Protocol Neutrality | `services` and `services.dto` are forbidden from importing presentation frameworks (`argparse`, `click`, `fastapi`, `starlette`, `mcp`). |

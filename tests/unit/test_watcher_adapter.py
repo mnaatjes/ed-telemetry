@@ -4,10 +4,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ed_domain.ports.watcher import WatcherPort
-from ed_watcher.engine.envelopes import FileIngestionEvent, FileKind, WatcherAuditEvent
-from ed_watcher.selector import StreamPosition
-from ed_watcher.watcher import FileSystemWatcher, JournalWatcher
+from domain.ports.watcher import WatcherPort
+from infrastructure.watcher.engine.envelopes import FileIngestionEvent, FileKind, WatcherAuditEvent
+from infrastructure.watcher.selector import StreamPosition
+from infrastructure.watcher.watcher import FileSystemWatcher, JournalWatcher
 
 
 class TestFileSystemWatcherContractAndProperties:

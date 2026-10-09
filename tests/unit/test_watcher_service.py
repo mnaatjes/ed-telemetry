@@ -4,14 +4,15 @@ import threading
 from pathlib import Path
 
 import pytest
-from ed_app.bootstrap import build_application_context
-from ed_app.context import ApplicationContext
-from ed_app.dto import DataTransferObject
-from ed_app.dto.watcher import WatcherStatusDTO
-from ed_app.exceptions import ServiceDependencyError
-from ed_app.services import BaseApplicationService
-from ed_app.services.watcher import WatcherService
-from ed_domain.ports.watcher import AuditEventHandler, IngestionEventHandler, WatcherPort
+
+from domain.ports.watcher import AuditEventHandler, IngestionEventHandler, WatcherPort
+from services import BaseApplicationService
+from services.bootstrap import build_application_context
+from services.context import ApplicationContext
+from services.dto import DataTransferObject
+from services.dto.watcher import WatcherStatusDTO
+from services.exceptions import ServiceDependencyError
+from services.watcher import WatcherService
 
 
 class MockWatcher(WatcherPort):

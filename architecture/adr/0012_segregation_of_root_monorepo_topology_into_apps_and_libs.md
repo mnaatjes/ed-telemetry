@@ -1,6 +1,6 @@
 ---
 title: "ADR 0012: Pure Hexagonal Source Topology and Satellite SDK Segregation"
-status: "proposed"
+status: "accepted"
 date: "2026-10-09"
 tags: ["architecture", "adr", "topology", "hexagonal", "packaging", "src", "sdk", "boundaries", "invariants", "madr"]
 supersedes: [
