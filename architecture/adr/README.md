@@ -31,4 +31,4 @@ Governed by Markdown Architectural Decision Records (MADR 3.0).
 | **0006** | [ADR 0006: Active Journal Candidate Selection and Sorting Strategy](0006_active_journal_candidate_selection_and_sorting.md) | **Accepted** | 2026-10-08 | — |
 | **0007** | [ADR 0007: Status and Auxiliary Snapshot File Identification and Casing Normalization](0007_status_and_snapshot_file_identification.md) | **Accepted** | 2026-10-08 | — |
 | **0008** | [ADR 0008: File Ingestion Engine, Concurrency Guards, and Reactive Reactor](0008_file_ingestion_io_freshness_and_concurrency.md) | **Accepted** | 2026-10-08 | — |
-| **0009** | [ADR 0009: Watcher Port Adapter and Threaded Lifecycle Management](0009_watcher_port_adapter_and_threaded_lifecycle.md) | **Proposed** | 2026-10-09 | — |
+| **0009** | [ADR 0009: Watcher Port Adapter and Threaded Lifecycle Management](0009_watcher_port_adapter_and_threaded_lifecycle.md) | **Accepted** | 2026-10-09 | — |
