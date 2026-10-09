@@ -12,3 +12,4 @@ Information-oriented technical descriptions, configuration specifications, and t
 | [Journal Candidate Selector API](watcher_journal_selector.md) | `JournalSelector`, `JournalCandidate`, sorting, and succession | Developers / SDK integrators |
 | [Status & Snapshot Identifier API](watcher_snapshot_identifier.md) | `SnapshotIdentifier`, `SnapshotRegistry`, casing normalization | Developers / SDK integrators |
 | [Ingestion Engine & Reactor API](watcher_engine.md) | `WatcherReactor`, `FileIngestionEvent`, `JournalTailer`, `SnapshotReader` | Developers / SDK integrators |
+| [FileSystemWatcher Driving Adapter API](watcher_filesystem_adapter.md) | `FileSystemWatcher`, `WatcherPort`, threading lifecycle, callbacks | Developers / SDK integrators |

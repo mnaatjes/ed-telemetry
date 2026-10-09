@@ -1,4 +1,5 @@
 import threading
+from pathlib import Path
 
 from ed_app.bootstrap import build_engine
 from ed_domain.engine import TelemetryEngine
@@ -25,9 +26,9 @@ def test_build_engine_side_effect_freedom() -> None:
     assert threading.active_count() == initial_threads
 
 
-def test_engine_lifecycle_smoke() -> None:
+def test_engine_lifecycle_smoke(tmp_path: Path) -> None:
     """Verify that engine starts and stops cleanly."""
-    engine = build_engine()
+    engine = build_engine(journal_dir=tmp_path)
     assert not engine.is_running
 
     engine.start()

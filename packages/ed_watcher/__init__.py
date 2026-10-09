@@ -48,7 +48,7 @@ from ed_watcher.snapshots import (
     SnapshotIdentifier,
     SnapshotRegistry,
 )
-from ed_watcher.watcher import JournalWatcher
+from ed_watcher.watcher import FileSystemWatcher, JournalWatcher
 
 __all__ = [
     "CANONICAL_AUXILIARY_SNAPSHOTS",
@@ -56,6 +56,7 @@ __all__ = [
     "DiscoveryResult",
     "FileIngestionEvent",
     "FileKind",
+    "FileSystemWatcher",
     "InvalidPathOverrideError",
     "InvalidSnapshotFileTypeError",
     "JournalCandidate",

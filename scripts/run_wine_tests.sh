@@ -197,6 +197,62 @@ with tempfile.TemporaryDirectory() as tmp_dir:
 print('File ingestion engine and reactor successfully verified under Windows NT / Wine!')
 "
 
+echo "Executing FileSystemWatcher threaded adapter tests (SDD-007 / ADR 0009)..."
+wine "${PYTHON_EXE}" -c "
+import sys, os, tempfile, time
+from pathlib import Path
+sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+
+from ed_watcher.watcher import FileSystemWatcher
+from ed_watcher.selector import StreamPosition
+from ed_watcher.engine.envelopes import FileKind
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    win_dir = Path(tmp_dir)
+    j1 = win_dir / 'Journal.2026-10-09T100000.01.log'
+    j1.write_bytes(b'{\"event\":\"FileHeader\",\"part\":1}\n')
+
+    events_received = []
+    audits_received = []
+
+    watcher = FileSystemWatcher(
+        journal_dir=win_dir,
+        stream_position=StreamPosition.HEAD,
+        poll_interval=0.05,
+        on_event=lambda ev: events_received.append(ev),
+        on_audit=lambda aud: audits_received.append(aud),
+        join_timeout=2.0,
+    )
+
+    watcher.start()
+    assert watcher.is_active is True
+
+    start_wait = time.time()
+    while time.time() - start_wait < 1.5:
+        if len(events_received) >= 1:
+            break
+        time.sleep(0.05)
+
+    # Append new line
+    with j1.open('a', encoding='utf-8') as fp:
+        fp.write('{\"event\":\"Music\",\"MusicTrack\":\"MainMenu\"}\n')
+        fp.flush()
+
+    start_wait = time.time()
+    while time.time() - start_wait < 1.5:
+        if len(events_received) >= 2:
+            break
+        time.sleep(0.05)
+
+    watcher.stop()
+    assert watcher.is_active is False
+    assert len(events_received) >= 2, f'Expected >= 2 events, got {len(events_received)}'
+    assert any(e.file_kind == FileKind.JOURNAL for e in events_received)
+    print(f'  - FileSystemWatcher background threading and dispatch on Windows ({len(events_received)} events): PASS')
+
+print('FileSystemWatcher adapter successfully verified under Windows NT / Wine!')
+"
+
 echo "============================================================"
 echo "[SUCCESS] Wine Windows verification passed cleanly!"
 echo "============================================================"
