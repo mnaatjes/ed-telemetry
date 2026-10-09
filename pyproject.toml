@@ -45,7 +45,7 @@ packages = ["domain", "services", "infrastructure", "interfaces", "sdk"]
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [".", "src"]
 
 [tool.importlinter]
 include_external_packages = true

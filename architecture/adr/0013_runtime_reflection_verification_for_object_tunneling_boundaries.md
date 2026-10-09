@@ -1,6 +1,6 @@
 ---
 title: "ADR 0013: Runtime Reflection Verification for Object-Tunneling Boundary Invariants"
-status: "proposed"
+status: "accepted"
 date: "2026-10-09"
 tags: ["architecture", "adr", "reflection", "boundaries", "invariants", "runtime", "tunneling", "quality-gates"]
 ---
