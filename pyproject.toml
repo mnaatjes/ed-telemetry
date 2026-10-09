@@ -114,11 +114,12 @@ type = "layers"
 layers = [
     "ed_app.cli",
     "ed_app.bootstrap",
-    "ed_app.services",
     "ed_app.context",
+    "ed_app.services",
     "ed_app.dto",
     "ed_app.exceptions",
 ]
+
 
 [[tool.importlinter.contracts]]
 name = "Invariant C: Services and DTOs forbidden from protocol frameworks"

@@ -275,11 +275,17 @@ from ed_app.services import BaseApplicationService
 # 1. ApplicationContext side-effect-free instantiation
 ctx = build_application_context()
 assert isinstance(ctx, ApplicationContext)
-assert ctx.services == ()
+assert len(ctx.services) == 1
+assert ctx.watcher_service in ctx.services
 assert not ctx.engine.is_running
 print('  - ApplicationContext instantiation and side-effect-freedom on Windows: PASS')
 
-# 2. Immutability
+# 2. WatcherService and WatcherStatusDTO verification
+status = ctx.watcher_service.get_status()
+assert status.to_dict() == {'is_active': False, 'journal_dir': None}
+print('  - WatcherService status query on Windows: PASS')
+
+# 3. Immutability
 try:
     ctx.services = ()  # type: ignore[misc]
     raise AssertionError('Expected FrozenInstanceError')
@@ -287,7 +293,7 @@ except FrozenInstanceError:
     pass
 print('  - ApplicationContext immutability on Windows: PASS')
 
-# 3. DTO Protocol
+# 4. DTO Protocol
 @dataclass(frozen=True)
 class WineDTO:
     id: str
@@ -298,10 +304,11 @@ dto = WineDTO(id='wine-test')
 assert isinstance(dto, DataTransferObject)
 print('  - DataTransferObject protocol compliance on Windows: PASS')
 
-# 4. Exception hierarchy
+# 5. Exception hierarchy
 err = ServiceDependencyError('wine test')
 assert isinstance(err, ApplicationServiceError)
 print('  - ApplicationServiceError hierarchy on Windows: PASS')
+
 
 print('Application Service Layer scaffolding successfully verified under Windows NT / Wine!')
 "

@@ -25,7 +25,7 @@ def test_build_application_context_instantiation() -> None:
     assert threading.active_count() == initial_threads
     assert isinstance(ctx, ApplicationContext)
     assert isinstance(ctx.engine, TelemetryEngine)
-    assert ctx.services == ()
+    assert len(ctx.services) == 1
     assert not ctx.engine.is_running
 
 
