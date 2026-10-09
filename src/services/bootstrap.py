@@ -6,6 +6,8 @@ from domain.engine import TelemetryEngine
 from infrastructure.egress.transmitter import NullTransmitter
 from infrastructure.watcher.watcher import FileSystemWatcher
 from services.context import ApplicationContext
+from services.registry.egress import EgressRegistry
+from services.registry.watcher import WatcherRegistry
 from services.watcher import WatcherService
 
 
@@ -15,9 +17,22 @@ def build_engine(journal_dir: Path | None = None) -> TelemetryEngine:
     Guaranteed side-effect-free: does not bind network sockets,
     create files, or launch background threads during construction.
     """
-    watcher = FileSystemWatcher(journal_dir=journal_dir)
-    egress_adapters = [NullTransmitter()]
-    return TelemetryEngine(watcher=watcher, egress_ports=egress_adapters)
+    # 1. Instantiate concrete driven adapters (src/infrastructure/)
+    watcher_adapter = FileSystemWatcher(journal_dir=journal_dir)
+    null_transmitter = NullTransmitter()
+
+    # 2. Populate driven adapter registries (src/services/registry/)
+    watcher_registry = WatcherRegistry()
+    watcher_registry.register("primary_watcher", watcher_adapter)
+
+    egress_registry = EgressRegistry()
+    egress_registry.register("null_transmitter", null_transmitter)
+
+    # 3. Inject adapters into engine from registries
+    return TelemetryEngine(
+        watcher=watcher_registry.get_active(),
+        egress_ports=list(egress_registry.get_transmitters()),
+    )
 
 
 def build_application_context(journal_dir: Path | None = None) -> ApplicationContext:
