@@ -1,6 +1,6 @@
 ---
 title: "ADR 0008: File Ingestion Engine, Concurrency Guards, and Reactive Reactor"
-status: "proposed"
+status: "accepted"
 date: "2026-10-08"
 tags: ["architecture", "adr", "watcher", "ingestion", "freshness", "io", "reactor", "driver", "auditing", "madr"]
 ---

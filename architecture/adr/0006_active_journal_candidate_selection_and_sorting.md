@@ -1,6 +1,6 @@
 ---
 title: "ADR 0006: Active Journal Candidate Selection and Sorting Strategy"
-status: "proposed"
+status: "accepted"
 date: "2026-10-08"
 tags: ["architecture", "adr", "watcher", "journal", "candidate-selection", "sorting", "madr"]
 ---

@@ -1,6 +1,6 @@
 ---
 title: "ADR 0004: OS Path Discovery and Filesystem Ground-Truth Research Framework"
-status: "proposed"
+status: "accepted"
 date: "2026-10-07"
 tags: ["architecture", "adr", "filesystem", "path-discovery", "research", "operating-systems"]
 ---
