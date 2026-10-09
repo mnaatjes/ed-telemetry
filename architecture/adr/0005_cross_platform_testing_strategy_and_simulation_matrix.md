@@ -1,6 +1,6 @@
 ---
 title: "ADR 0005: Cross-Platform Testing Strategy and Operating System Simulation Matrix"
-status: "proposed"
+status: "accepted"
 date: "2026-10-07"
 tags: ["architecture", "adr", "testing", "cross-platform", "windows", "linux", "ci-matrix", "simulation"]
 ---
@@ -13,7 +13,7 @@ With the implementation of the OS Path Discovery subsystem ([ADR 0004](0004_os_p
 1. **Microsoft Windows:** Depends on the Win32 NT kernel, ctypes invoking `shell32.dll` (`SHGetKnownFolderPath`), `ole32.dll` (`CoTaskMemFree`), and the native `winreg` module.
 2. **Linux / SteamOS:** Depends on POSIX filesystems, Steam `libraryfolders.vdf` parsing, Proton compatibility prefixes (`compatdata/359320`), and Flatpak sandbox paths.
 
-Our primary local development workstation (`prd-mgr-01`) is a Linux host (`Ubuntu / Debian`). While our unit test suite mocks `sys.platform` and filesystem trees via Pytest (`tmp_path`), **mocking alone does not test real binary C ABI packing or true platform API contracts**. 
+Our primary local development workstation (`prd-mgr-01`) is a Linux host (`Ubuntu / Debian`). While our unit test suite mocks `sys.platform` and filesystem trees via Pytest (`tmp_path`), **mocking alone does not test real binary C ABI packing or true platform API contracts**.
 
 We require an architectural decision that defines:
 * How Windows and Linux platform logic can be simulated and tested locally on a Linux workstation (`prd-mgr-01`).
@@ -141,7 +141,7 @@ flowchart LR
      runs-on: ${{ matrix.os }}
      ```
    - **True NT Kernel:** On the `windows-latest` runner, GitHub Actions boots an authentic Microsoft Windows Server 2022 / Windows 11 virtual machine.
-   - **Execution Overhead & Intensity:** 
+   - **Execution Overhead & Intensity:**
      - While it boots a full Windows VM in GitHub's cloud, for a Python library this is **neither complex nor resource-intensive**.
      - `actions/setup-python` caches and installs Python in ~5 seconds.
      - Running our complete Tier 2 quality gates (`scripts/verify.py`) on Windows takes **under 45–60 seconds total**.

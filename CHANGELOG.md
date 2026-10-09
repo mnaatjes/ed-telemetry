@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local Wine simulation environment setup script (`scripts/setup_wine_simulant.sh`) provisioning isolated prefix (`.cache/winepfx/`) with official Windows Python 3.11 embeddable package without root privilege.
 - Wine test launcher (`scripts/run_wine_tests.sh`) executing Windows path discovery strategies under native Windows Python via Wine.
 - Diátaxis How-To developer runbook (`docs/how-to/test_cross_platform_locally.md`) detailing cross-platform verification and Wine simulation procedures.
+- Active journal candidate selection and sorting engine (`packages/ed_watcher/selector.py`) implementing lexicographical sorting, part rollover ordering, and stream positioning modes (`StreamPosition`, `JournalCandidate`, `JournalSelector`) governed by ADR 0006 and SDD-004.
+- Use case specification for stream positioning and ingestion modes (`architecture/use-cases/0003_stream_positioning_and_ingestion_modes.md`) and Diátaxis Reference guide (`docs/reference/watcher_journal_selector.md`).
+- Status and auxiliary snapshot file identification subsystem (`packages/ed_watcher/snapshots/`) providing canonical snapshot definitions, case-normalization lookups, and registry tracking (`SnapshotCandidate`, `SnapshotRegistry`, `SnapshotIdentifier`) governed by ADR 0007 and SDD-005.
+- Diátaxis Reference documentation for snapshot identification and casing normalization (`docs/reference/watcher_snapshot_identifier.md`).
+- Unified file ingestion engine, reactive reactor loop, and audit telemetry system (`packages/ed_watcher/engine/`) implementing non-blocking streaming (`JournalTailer`), zero-byte atomic truncation guards (`SnapshotReader`), and hybrid inotify/fallback ticker scheduling (`WatcherReactor`, `WatcherIngestReceiver`) governed by ADR 0008 and SDD-006.
+- Ingestion telemetry models (`FileIngestionEvent`, `WatcherAuditEvent`, `FileKind`, `WatcherAuditAction`) and stream state context (`JournalStreamContext`, `SnapshotFreshnessTracker`).
+- Diátaxis Reference documentation for watcher engine and reactor loop (`docs/reference/watcher_engine.md`).
+- Extended Wine Windows NT test suite (`scripts/run_wine_tests.sh`) covering path discovery, journal selection, snapshot identification, and reactive ingestion engine execution.
 
 ## [0.2.0] - 2026-10-06
 

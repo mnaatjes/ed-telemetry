@@ -1,6 +1,6 @@
 ---
 title: "ADR 0007: Status and Auxiliary Snapshot File Identification and Casing Normalization"
-status: "proposed"
+status: "accepted"
 date: "2026-10-08"
 tags: ["architecture", "adr", "watcher", "snapshots", "status", "identification", "casing", "madr"]
 ---
