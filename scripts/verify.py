@@ -20,8 +20,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 CHECKS: list[tuple[str, list[str]]] = [
-    ("Ruff Lint", [sys.executable, "-m", "ruff", "check", "packages", "tests"]),
-    ("Ruff Format Check", [sys.executable, "-m", "ruff", "format", "--check", "packages", "tests"]),
+    ("Ruff Lint", [sys.executable, "-m", "ruff", "check", "src", "sdk", "tests"]),
+    ("Ruff Format Check", [sys.executable, "-m", "ruff", "format", "--check", "src", "sdk", "tests"]),
     ("Mypy Static Typing", [sys.executable, "-m", "mypy"]),
     (
         "Import Linter Boundaries",
@@ -32,7 +32,7 @@ CHECKS: list[tuple[str, list[str]]] = [
         ],
     ),
     ("Pytest Suite", [sys.executable, "-m", "pytest", "-v"]),
-    ("CLI Smoke Test", [sys.executable, "-m", "ed_app"]),
+    ("CLI Smoke Test", [sys.executable, "-m", "interfaces"]),
 ]
 
 

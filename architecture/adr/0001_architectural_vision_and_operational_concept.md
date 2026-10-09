@@ -7,6 +7,10 @@ tags: ["architecture", "adr", "vision", "operational-concept", "hexagonal", "ci"
 
 # ADR 0001: Architectural Vision, Operational Concept, and CI-Enforced Modular Boundaries
 
+> [!NOTE]
+> **Supersedence Notice (Topology & Layout):**
+> Sections 4, 5, and 6.1 regarding the physical monorepo `packages/` directory topology are formally **superseded** by [ADR 0012](0012_segregation_of_root_monorepo_topology_into_apps_and_libs.md) and [SDD-010](../designs/0010_pure_hexagonal_source_topology_and_satellite_sdk_migration.md). The application is now structured under a **Pure Hexagonal `src/` tree (`src/{domain,services,infrastructure,interfaces}`)** with satellite `sdk/`. The architectural invariants, division of labor, and Hexagonal principles defined herein remain fully active and governing.
+
 ## 1. Context and Problem Statement
 
 Legacy community tooling for Elite Dangerous (such as EDMarketConnector) evolved as a desktop-first monolithic application. In those codebases, user interfaces, operating system quirks, background file watchers, and network transmitters were tightly commingled in flat root scripts with circular import loops.

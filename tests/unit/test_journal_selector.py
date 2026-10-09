@@ -4,8 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from ed_watcher.exceptions import JournalDirectoryAccessError
-from ed_watcher.selector import (
+
+from infrastructure.watcher.exceptions import JournalDirectoryAccessError
+from infrastructure.watcher.selector import (
     JournalCandidate,
     JournalSelector,
     StreamPosition,

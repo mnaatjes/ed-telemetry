@@ -10,14 +10,14 @@ A modern, modular monorepo providing a decoupled, headless telemetry engine, fil
 
 ```text
 ed-telemetry/
-|-- pyproject.toml              # Minimal workspace configuration
+|-- pyproject.toml              # Build configuration & architectural boundary contracts
 |-- .github/                    # CI/CD automation pipelines
-|-- packages/                   # Decoupled domain packages
-|   |-- ed_domain/              # Pure domain models, enums, and journal event schemas
-|   |-- ed_watcher/             # Dedicated headless journal file watcher
-|   |-- ed_egress/              # Outbound service adapters (EDDN, Inara, EDSM)
-|   |-- ed_sdk/                 # Testing harness and MockJournalWriter
-|   \-- ed_server/              # Headless CLI, FastAPI REST, and MCP server
+|-- src/                        # Pure Hexagonal Application Topology
+|   |-- domain/                 # Pure domain models, enums, engine, and boundary ports
+|   |-- services/               # Application Service Layer (orchestration, DTOs, context)
+|   |-- infrastructure/         # Driven secondary adapters (watcher, egress)
+|   \-- interfaces/             # Driving primary surfaces (CLI, API, MCP)
+|-- sdk/                        # Satellite development harness and MockJournalWriter
 |-- architecture/               # Unified Process (UP) engineering plane
 |-- docs/                       # Diátaxis customer/operator documentation plane
 \-- tests/                      # Fast headless unit & integration test suites

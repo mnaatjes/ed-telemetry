@@ -7,6 +7,10 @@ tags: ["architecture", "adr", "tooling", "dependencies", "cicd", "versioning", "
 
 # ADR 0002: Verification Tooling, Dependency Topology, and Release Versioning Lifecycle
 
+> [!NOTE]
+> **Supersedence Notice (Topology & Tooling Configuration):**
+> Section 3.1 regarding the setuptools package discovery path (`packages/`) is formally **superseded** by [ADR 0012](0012_segregation_of_root_monorepo_topology_into_apps_and_libs.md) and [SDD-010](../designs/0010_pure_hexagonal_source_topology_and_satellite_sdk_migration.md). The application packaging is now configured to discover from `src/` (`where = ["src"]`) and boundary validation rules are structured around `src/{domain,services,infrastructure,interfaces}` with satellite `sdk/`. All tooling stack decisions and versioning lifecycles remain active.
+
 ## 1. Context and Problem Statement
 
 To prevent architectural drift and dependency bloat in `ed-telemetry`, we require an authoritative decision governing:

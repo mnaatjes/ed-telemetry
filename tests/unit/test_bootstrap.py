@@ -1,10 +1,10 @@
 import threading
 from pathlib import Path
 
-from ed_app.bootstrap import build_engine
-from ed_domain.engine import TelemetryEngine
-from ed_domain.ports.egress import EgressPort
-from ed_domain.ports.watcher import WatcherPort
+from domain.engine import TelemetryEngine
+from domain.ports.egress import EgressPort
+from domain.ports.watcher import WatcherPort
+from services.bootstrap import build_engine
 
 
 def test_build_engine_instantiation() -> None:

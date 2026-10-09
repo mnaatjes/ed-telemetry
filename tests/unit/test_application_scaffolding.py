@@ -4,17 +4,18 @@ import threading
 from dataclasses import FrozenInstanceError, dataclass
 
 import pytest
-from ed_app.bootstrap import build_application_context
-from ed_app.context import ApplicationContext
-from ed_app.dto import DataTransferObject
-from ed_app.exceptions import (
+
+from domain.engine import TelemetryEngine
+from services import BaseApplicationService
+from services.bootstrap import build_application_context
+from services.context import ApplicationContext
+from services.dto import DataTransferObject
+from services.exceptions import (
     ApplicationServiceError,
     ServiceDependencyError,
     ServicePayloadError,
     ServiceStateError,
 )
-from ed_app.services import BaseApplicationService
-from ed_domain.engine import TelemetryEngine
 
 
 def test_build_application_context_instantiation() -> None:

@@ -1,4 +1,4 @@
-"""Unit test suite for ed_watcher OS path discovery subsystem."""
+"""Unit test suite for infrastructure.watcher OS path discovery subsystem."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from ed_watcher.discovery import (
+
+from infrastructure.watcher.discovery import (
     DiscoveryResult,
     InvalidPathOverrideError,
     JournalPathNotFoundError,
@@ -18,11 +19,11 @@ from ed_watcher.discovery import (
     UnsupportedPlatformError,
     WatcherError,
 )
-from ed_watcher.discovery.strategies.linux import (
+from infrastructure.watcher.discovery.strategies.linux import (
     PROTON_REL_PFX,
     LinuxProtonPathStrategy,
 )
-from ed_watcher.discovery.strategies.windows import (
+from infrastructure.watcher.discovery.strategies.windows import (
     SUBDIR_REL_PATH,
     WindowsPathStrategy,
 )
