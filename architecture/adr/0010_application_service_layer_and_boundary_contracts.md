@@ -119,16 +119,39 @@ flowchart TD
   - Application services must return pure, serializable DTOs to driving surfaces, never mutable internal domain aggregates or raw telemetry entity pointers.
 * **Invariant F (Side-Effect-Free Service Instantiation):**
   - Service constructors (`__init__`) must strictly perform dependency assignment. No background threads, network sockets, or file I/O may be initiated during object construction.
+* **Invariant G (Driving Surface and Service Infrastructure Isolation):**
+  - Concrete infrastructure adapter packages (`ed_watcher`, `ed_egress`) are strictly forbidden from being imported by driving surfaces (`ed_app.cli`, `ed_app.api`, `ed_app.mcp`), application services (`ed_app.services`), and DTO models (`ed_app.dto`).
+  - The **only** module within `ed_app` authorized to import from `ed_watcher` or `ed_egress` is the Composition Root (`ed_app.bootstrap`).
+  - Driving surfaces and services must interact with watchers and transmitters strictly through domain ports (`ed_domain.ports.WatcherPort`, `ed_domain.ports.EgressPort`) or application services.
 
 ---
 
 ### 3.4 Mechanical Enforcement Matrix
 
-To ensure architectural integrity is never compromised over time, policies will be enforced across four automated tiers:
+To ensure architectural integrity is never compromised over time, policies will be enforced across automated CI quality gates:
+
+```toml
+# Machine-enforced import-linter boundary contract (pyproject.toml)
+[[tool.importlinter.contracts]]
+name = "Invariant G: Driving surfaces and services forbidden from concrete adapters"
+type = "forbidden"
+source_modules = [
+    "ed_app.cli",
+    "ed_app.api",
+    "ed_app.mcp",
+    "ed_app.services",
+    "ed_app.dto",
+]
+forbidden_modules = [
+    "ed_watcher",
+    "ed_egress",
+]
+```
 
 | Policy | Mechanical Enforcement Mechanism | Failure Surface |
 | :--- | :--- | :--- |
-| **Downward Dependency (Invariant D)** | `import-linter` contract in `pyproject.toml` forbidding `ed_app.services` from importing `ed_app.cli`, `ed_app.api`, `ed_app.mcp`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
+| **Infrastructure Isolation (Invariant G)** | `import-linter` contract forbidding `ed_app.cli`, `ed_app.api`, `ed_app.mcp`, `ed_app.services`, `ed_app.dto` from importing `ed_watcher` and `ed_egress`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
+| **Downward Dependency (Invariant D)** | `import-linter` contract forbidding `ed_app.services` from importing `ed_app.cli`, `ed_app.api`, `ed_app.mcp`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
 | **Protocol Neutrality (Invariant C)** | `import-linter` forbidden modules contract restricting `fastapi`, `starlette`, `click`, `argparse`, `mcp` from `ed_app.services` and `ed_app.dto`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
 | **Domain Direct Access Prohibition** | `import-linter` contract ensuring `ed_app.cli`, `ed_app.api`, `ed_app.mcp` only access domain via `ed_app.services` and `ed_domain.ports`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
 | **DTO Typing Purity** | Static type checking via `mypy --strict packages/ed_app`. | Tier 2 `scripts/verify.py` (`Mypy Static Typing`) |
