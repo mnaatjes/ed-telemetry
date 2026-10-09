@@ -10,3 +10,4 @@ Information-oriented technical descriptions, configuration specifications, and t
 | :--- | :--- | :--- |
 | [OS Path Discovery API](watcher_path_discovery.md) | `PathDiscoverer`, platform strategies, models, and exceptions | Developers / SDK integrators |
 | [Journal Candidate Selector API](watcher_journal_selector.md) | `JournalSelector`, `JournalCandidate`, sorting, and succession | Developers / SDK integrators |
+| [Status & Snapshot Identifier API](watcher_snapshot_identifier.md) | `SnapshotIdentifier`, `SnapshotRegistry`, casing normalization | Developers / SDK integrators |
