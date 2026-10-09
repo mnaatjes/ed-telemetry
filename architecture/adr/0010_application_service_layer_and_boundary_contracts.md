@@ -106,7 +106,52 @@ flowchart TD
 
 ---
 
-### 3.3 Governing Invariants & Policies
+### 3.3 The `ApplicationContext` Contract (`packages/ed_app/context.py`)
+
+To eliminate global state and prevent driving surfaces from having to manually assemble individual service dependencies, `ed_app` defines an immutable, strongly-typed `ApplicationContext`:
+
+```python
+"""Application Context: Bundles assembled services and engine handles."""
+
+from dataclasses import dataclass
+from ed_app.services.diagnostics import DiagnosticsService
+from ed_app.services.telemetry import TelemetryControlService
+from ed_app.services.query import GameStateQueryService
+from ed_domain.engine import TelemetryEngine
+
+
+@dataclass(frozen=True)
+class ApplicationContext:
+    """Immutable bundle of initialized application services and engine handles.
+
+    Provides driving surfaces (CLI, REST, MCP) with a single, strongly-typed
+    entry point to all application-layer capabilities without global state.
+    """
+
+    telemetry_control: TelemetryControlService
+    diagnostics: DiagnosticsService
+    game_state: GameStateQueryService
+    engine: TelemetryEngine
+```
+
+#### Composition Root Signature (`packages/ed_app/bootstrap.py`)
+The composition root exports a side-effect-free factory function:
+
+```python
+def build_application_context(
+    journal_dir_override: Path | None = None,
+) -> ApplicationContext:
+    """Instantiate ports, domain core, and application services into a frozen context.
+
+    Guaranteed side-effect-free: does not bind network sockets, create files,
+    or launch background threads during construction.
+    """
+    ...
+```
+
+---
+
+### 3.4 Governing Invariants & Policies
 
 * **Invariant C (Protocol Neutrality):**
   - Application Services must be 100% protocol-agnostic.
@@ -126,7 +171,7 @@ flowchart TD
 
 ---
 
-### 3.4 Mechanical Enforcement Matrix
+### 3.5 Mechanical Enforcement Matrix
 
 To ensure architectural integrity is never compromised over time, policies will be enforced across automated CI quality gates:
 
