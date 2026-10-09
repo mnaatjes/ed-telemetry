@@ -315,3 +315,4 @@ forbidden_modules = [
 | **6** | `packages/ed_app/bootstrap.py` | Add `build_application_context()` factory root. |
 | **7** | `tests/unit/test_application_scaffolding.py` | Author unit test suite verifying context, DTO protocol, and invariants. |
 | **8** | `docs/reference/application_scaffolding.md` | Author Diátaxis Reference guide for Application Scaffolding. |
+| **9** | `docs/how-to/add_application_service.md` | Author Diátaxis How-To runbook for adding a service to the Application Service Layer (post-implementation). |
