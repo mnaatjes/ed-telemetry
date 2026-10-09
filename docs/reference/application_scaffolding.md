@@ -79,10 +79,11 @@ class ApplicationContext:
     """Immutable application context holding the domain engine and registered services."""
 
     engine: TelemetryEngine
+    watcher_service: WatcherService
     services: tuple[Any, ...] = ()
 ```
 
-* **Pure Scaffolding State:** In this phase, `services` defaults to an empty tuple `()`. Concrete domain services are attached during subsequent feature milestones.
+* **Onboarded Services:** Exposes `watcher_service` (`WatcherService`) for inspecting watcher state and lifecycle.
 * **Immutability:** Reassigning fields or mutating state raises `dataclasses.FrozenInstanceError`.
 
 ---
@@ -126,5 +127,5 @@ Enforced by `import-linter` in `pyproject.toml`:
 | Invariant | Scope | Rule |
 | :--- | :--- | :--- |
 | **Invariant G** | Adapter Isolation | `ed_app.cli` and `ed_app.services` cannot directly import `ed_watcher` or `ed_egress`. Concrete adapters are isolated to `ed_app.bootstrap`. |
-| **Invariant D** | Downward Dependency | Downward dependency layering enforced across `ed_app.cli` -> `ed_app.bootstrap` -> `ed_app.services` -> `ed_app.context` -> `ed_app.dto` -> `ed_app.exceptions`. |
+| **Invariant D** | Downward Dependency | Downward dependency layering enforced across `ed_app.cli` -> `ed_app.bootstrap` -> `ed_app.context` -> `ed_app.services` -> `ed_app.dto` -> `ed_app.exceptions`. |
 | **Invariant C** | Protocol Neutrality | `ed_app.services` and `ed_app.dto` are forbidden from importing presentation frameworks (`argparse`, `click`, `fastapi`, `starlette`, `mcp`). |

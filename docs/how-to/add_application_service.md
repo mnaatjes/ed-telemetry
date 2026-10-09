@@ -50,6 +50,8 @@ class ExampleDTO:
         return {"id": self.id, "status": self.status}
 ```
 
+5. Export the new DTO in `packages/ed_app/dto/__init__.py` and include it in `__all__`.
+
 ---
 
 ### Step 2: Define Service-Specific Domain Exceptions
@@ -72,6 +74,7 @@ Create your service in `packages/ed_app/services/<service_name>.py`:
 2. Invert dependencies: take domain engine, repositories, or port dependencies in the `__init__` constructor.
 3. Accept and return primitive values or frozen DTOs from `ed_app.dto`.
 4. **Forbidden:** Do not import `ed_watcher`, `ed_egress`, `ed_app.cli`, `ed_app.api`, or `ed_app.mcp` (Invariants G and D).
+5. Export the new service in `packages/ed_app/services/__init__.py` and include it in `__all__`.
 
 ```python
 # packages/ed_app/services/example.py
@@ -101,6 +104,10 @@ class ExampleService(BaseApplicationService):
 
 1. Update `packages/ed_app/context.py` to type the service field:
    ```python
+   from ed_app.services.example import ExampleService
+   from ed_domain.engine import TelemetryEngine
+
+
    @dataclass(frozen=True)
    class ApplicationContext:
        engine: TelemetryEngine
@@ -118,6 +125,8 @@ class ExampleService(BaseApplicationService):
            services=(example_service,),
        )
    ```
+3. Re-export public types from `packages/ed_app/__init__.py`.
+
 
 ---
 

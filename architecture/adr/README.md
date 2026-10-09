@@ -2,7 +2,7 @@
 title: "Architectural Decision Records Governance and Index"
 tags: ["architecture", "adr", "governance", "index"]
 created_at: "2026-10-06"
-last_updated_at: "2026-10-06"
+last_updated_at: "2026-10-09"
 ---
 
 # Architectural Decision Records Governance and Index
@@ -32,4 +32,5 @@ Governed by Markdown Architectural Decision Records (MADR 3.0).
 | **0007** | [ADR 0007: Status and Auxiliary Snapshot File Identification and Casing Normalization](0007_status_and_snapshot_file_identification.md) | **Accepted** | 2026-10-08 | — |
 | **0008** | [ADR 0008: File Ingestion Engine, Concurrency Guards, and Reactive Reactor](0008_file_ingestion_io_freshness_and_concurrency.md) | **Accepted** | 2026-10-08 | — |
 | **0009** | [ADR 0009: Watcher Port Adapter and Threaded Lifecycle Management](0009_watcher_port_adapter_and_threaded_lifecycle.md) | **Accepted** | 2026-10-09 | — |
-| **0010** | [ADR 0010: Application Service Layer Architecture, Boundary Contracts, and Multi-Modal Orchestration](0010_application_service_layer_and_boundary_contracts.md) | **Proposed** | 2026-10-09 | — |
+| **0010** | [ADR 0010: Application Service Layer Architecture, Boundary Contracts, and Multi-Modal Orchestration](0010_application_service_layer_and_boundary_contracts.md) | **Accepted** | 2026-10-09 | — |
+| **0011** | [ADR 0011: Watcher Telemetry Application Service and Boundary Exposure](0011_watcher_telemetry_application_service.md) | **Proposed** | 2026-10-09 | — |

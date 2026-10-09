@@ -7,6 +7,7 @@ from ed_egress.transmitter import NullTransmitter
 from ed_watcher.watcher import FileSystemWatcher
 
 from ed_app.context import ApplicationContext
+from ed_app.services.watcher import WatcherService
 
 
 def build_engine(journal_dir: Path | None = None) -> TelemetryEngine:
@@ -27,4 +28,9 @@ def build_application_context(journal_dir: Path | None = None) -> ApplicationCon
     create files, or launch background threads during construction.
     """
     engine = build_engine(journal_dir=journal_dir)
-    return ApplicationContext(engine=engine, services=())
+    watcher_service = WatcherService(watcher=engine.watcher)
+    return ApplicationContext(
+        engine=engine,
+        watcher_service=watcher_service,
+        services=(watcher_service,),
+    )
