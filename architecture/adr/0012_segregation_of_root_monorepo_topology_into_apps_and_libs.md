@@ -104,18 +104,41 @@ architecture/                # ENGINEERING PLANE (ADRs, SDDs, RFCs, Use Cases, R
 
 ## 5. Architectural Boundary & Invariant Alignment Ledger
 
-To guarantee that zero boundary guarantees are diluted or compromised during this refactor, the following master matrix defines how existing policies are mapped and how new SDK satellite policies are established:
+To guarantee that zero boundary guarantees are diluted or compromised during this refactor, the following master matrix defines how all established static, runtime, and adapter-local policies are mapped to the new topology:
+
+### 5.1 Static Architectural Boundaries (Enforced by `import-linter` & `mypy`)
 
 | Invariant / Policy | Scope & Intent | Declaration Location | Enforcement Mechanism | Current Rule (`packages/`) | New Rule (`src/` & `sdk/`) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Invariant A** | **Domain Purity**<br/>(Zero external I/O or sibling imports) | ADR 0001, ADR 0010 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_domain"]`<br/>`forbidden = ["ed_watcher", "ed_egress", "ed_app", "ed_sdk", "httpx", ...]` | `source = ["domain"]`<br/>`forbidden = ["infrastructure", "services", "interfaces", "sdk", "httpx", "socket", ...]` |
-| **Invariant B** | **SDK Satellite Isolation**<br/>(Production code forbidden from SDK) | ADR 0001, ADR 0004 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_domain", "ed_watcher", "ed_egress", "ed_app"]`<br/>`forbidden = ["ed_sdk"]` | `source = ["domain", "infrastructure", "services", "interfaces"]`<br/>`forbidden = ["sdk"]`<br/>*(Entire `src/` tree forbidden from `sdk/`)* |
-| **Invariant G** | **Infrastructure Adapter Isolation**<br/>(Interfaces & services cannot import adapters) | ADR 0010, ADR 0011 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_app.cli", "ed_app.services"]`<br/>`forbidden = ["ed_watcher", "ed_egress"]` | `source = ["interfaces", "services.watcher", "services.dto"]`<br/>`forbidden = ["infrastructure"]`<br/>*(Only `services.bootstrap` may import `infrastructure`)* |
-| **Invariant D** | **Downward Dependency Layering**<br/>(Strict downward ordering within application) | ADR 0010, ADR 0011 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `layers = ["ed_app.cli", "bootstrap", "context", "services", "dto", "exceptions"]` | `layers = ["interfaces", "services.bootstrap", "services.context", "services.watcher", "services.dto", "services.exceptions"]` |
-| **Invariant C** | **Protocol Framework Neutrality**<br/>(Services/DTOs forbidden from CLI/web libs) | ADR 0010, SDD-008 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_app.services", "ed_app.dto"]`<br/>`forbidden = ["click", "fastapi", "mcp", "argparse", ...]` | `source = ["services", "services.dto"]`<br/>`forbidden = ["click", "fastapi", "starlette", "mcp", "argparse"]` |
-| **Layered Boundary** | **High-Level Hexagonal Flow**<br/>(Coarse layered flow) | ADR 0001, SDD-001 | `import-linter`<br/>`pyproject.toml` | `layers = ["ed_app", "ed_watcher \| ed_egress", "ed_domain"]` | `layers = ["interfaces", "services", "infrastructure", "domain"]` |
-| **Static Typing** | **Strict Type Safety** | ADR 0002 | `mypy`<br/>`pyproject.toml` | `packages = ["ed_domain", "ed_watcher", "ed_egress", "ed_sdk", "ed_app"]` | `mypy_path = ["src", "sdk"]`<br/>`packages = ["domain", "services", "infrastructure", "interfaces", "sdk"]` |
-| **Domain Clean Isolation** | **Runtime Sibling Module Guard** | ADR 0001 | `tests/unit/test_domain_isolation.py` | Asserts `sys.modules` contains 0 sibling packages on `import ed_domain` | Asserts `sys.modules` contains 0 `infrastructure`, `services`, `interfaces`, or `sdk` on `import domain` |
+| **Invariant A** | **Domain Purity**<br/>(Zero external I/O or sibling imports) | ADR 0001 (Sec 6.1)<br/>ADR 0010 (Sec 3.5) | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_domain"]`<br/>`forbidden = ["ed_watcher", "ed_egress", "ed_app", "ed_sdk", "httpx", "socket", ...]` | `source = ["domain"]`<br/>`forbidden = ["infrastructure", "services", "interfaces", "sdk", "httpx", "socket", "watchdog", ...]` |
+| **Invariant B** | **SDK Satellite Isolation**<br/>(Production code forbidden from SDK) | ADR 0001 (Sec 6.1)<br/>ADR 0004 (Sec 2) | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_domain", "ed_watcher", "ed_egress", "ed_app"]`<br/>`forbidden = ["ed_sdk"]` | `source = ["domain", "infrastructure", "services", "interfaces"]`<br/>`forbidden = ["sdk"]`<br/>*(Entire `src/` tree forbidden from `sdk/`)* |
+| **Invariant G** | **Infrastructure Adapter Isolation**<br/>(Interfaces & services cannot import adapters) | ADR 0010 (Sec 3.5)<br/>ADR 0011 (Sec 3) | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_app.cli", "ed_app.services"]`<br/>`forbidden = ["ed_watcher", "ed_egress"]` | `source = ["interfaces", "services.watcher", "services.dto"]`<br/>`forbidden = ["infrastructure"]`<br/>*(Only `services.bootstrap` may import `infrastructure`)* |
+| **Invariant D** | **Downward Dependency Layering**<br/>(Strict downward ordering within application) | ADR 0010 (Sec 3.5)<br/>ADR 0011 (Sec 5) | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `layers = ["ed_app.cli", "bootstrap", "context", "services", "dto", "exceptions"]` | `layers = ["interfaces", "services.bootstrap", "services.context", "services.watcher", "services.dto", "services.exceptions"]` |
+| **Invariant C** | **Protocol Framework Neutrality**<br/>(Services/DTOs forbidden from CLI/web libs) | ADR 0010 (Sec 3.5)<br/>SDD-008 (Sec 5.1) | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_app.services", "ed_app.dto"]`<br/>`forbidden = ["click", "fastapi", "mcp", "argparse", ...]` | `source = ["services", "services.dto"]`<br/>`forbidden = ["click", "fastapi", "starlette", "mcp", "argparse"]` |
+| **Layered Flow** | **High-Level Hexagonal Layering**<br/>(Coarse inward dependency flow) | ADR 0001 (Sec 6.1)<br/>SDD-001 | `import-linter`<br/>`pyproject.toml` | `layers = ["ed_app", "ed_watcher \| ed_egress", "ed_domain"]` | `layers = ["interfaces", "services", "infrastructure", "domain"]` |
+| **Static Typing** | **Strict Type Safety Across Monorepo** | ADR 0002 (Sec 3.2) | `mypy`<br/>`pyproject.toml` | `packages = ["ed_domain", "ed_watcher", "ed_egress", "ed_sdk", "ed_app"]` | `mypy_path = ["src", "sdk"]`<br/>`packages = ["domain", "services", "infrastructure", "interfaces", "sdk"]` |
+
+---
+
+### 5.2 Runtime & Behavioral Invariants (Enforced by Unit & Wine Test Suites)
+
+| Invariant / Policy | Scope & Intent | Declaration Location | Enforcement Mechanism | Verification Assertion |
+| :--- | :--- | :--- | :--- | :--- |
+| **Invariant E** | **DTO Boundary Isolation**<br/>(Services return frozen DTOs, never mutable domain entities) | ADR 0010 (Sec 3.5)<br/>SDD-008 | `tests/unit/test_watcher_service.py`<br/>`scripts/run_wine_tests.sh` | Asserts return type satisfies `DataTransferObject` protocol and `isinstance(res, WatcherStatusDTO)` |
+| **Invariant F** | **Side-Effect-Free Construction**<br/>(0 threads, 0 sockets, 0 disk I/O on bootstrap) | ADR 0003 (Sec 3.1)<br/>ADR 0010 (Sec 3.5) | `tests/unit/test_bootstrap.py`<br/>`tests/unit/test_application_scaffolding.py` | Asserts `threading.active_count()` before and after `build_application_context()` is invariant |
+| **Domain Clean Isolation** | **Interpreter Module Quarantine**<br/>(Importing domain loads zero sibling packages) | ADR 0001 (Sec 6.2) | `tests/unit/test_domain_isolation.py` | Inspects `sys.modules` ensuring `import domain` loads zero `infrastructure`, `services`, or `sdk` |
+
+---
+
+### 5.3 Adapter-Local Encapsulation Policies (Preserved Inside `src/infrastructure/`)
+
+| Policy | Scope & Intent | Declaration Location | Enforcement Location | Encapsulation Rule |
+| :--- | :--- | :--- | :--- | :--- |
+| **Succession Invariant** | Successor journals (`02.log`, `03.log`) must always start at byte 0 (`HEAD`) | SDD-004 (Sec 3)<br/>SDD-006 (Sec 4) | `tests/unit/test_journal_selector.py`<br/>`tests/unit/test_ingestion_engine.py` | Encapsulated entirely inside `src/infrastructure/watcher/selector.py` and `tailer.py`. Never leaks to `domain/`. |
+| **BLAKE2b Freshness Gate** | Identical 64-bit snapshot hashes are deduplicated without re-emission | ADR 0008 (Sec 3)<br/>SDD-006 (Sec 4) | `tests/unit/test_ingestion_engine.py`<br/>`tests/unit/test_snapshot_identifier.py` | Encapsulated inside `src/infrastructure/watcher/engine/freshness.py`. Never leaks to `domain/`. |
+| **Atomic Read Envelope** | Zero-byte or non-bracketed (`{...}`) snapshot writes retry with exponential backoff | ADR 0008 (Sec 3)<br/>SDD-006 (Sec 4) | `tests/unit/test_ingestion_engine.py` | Encapsulated inside `src/infrastructure/watcher/engine/snapshot_reader.py`. Never leaks to `domain/`. |
+| **Adapter-Local Models** | `StreamPosition`, `JournalCandidate`, `SnapshotCandidate` remain adapter-private | ADR 0012 (Sec 1) | AST Linter / Mypy | Declared strictly in `src/infrastructure/watcher/`. Forbidden from migrating to `src/domain/`. |
+
 
 ---
 
