@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ingestion telemetry models (`FileIngestionEvent`, `WatcherAuditEvent`, `FileKind`, `WatcherAuditAction`) and stream state context (`JournalStreamContext`, `SnapshotFreshnessTracker`).
 - Diátaxis Reference documentation for watcher engine and reactor loop (`docs/reference/watcher_engine.md`).
 - Extended Wine Windows NT test suite (`scripts/run_wine_tests.sh`) covering path discovery, journal selection, snapshot identification, and reactive ingestion engine execution.
+- Formal driving port protocol contract (`packages/ed_domain/ports/watcher.py`) adding `register_event_handler`, `register_audit_handler`, and handler callable types (`IngestionEventHandler`, `AuditEventHandler`) governed by ADR 0009 and SDD-007.
+- Concrete driving adapter implementation (`packages/ed_watcher/watcher.py`) with `FileSystemWatcher` managing background daemon worker threads, auto-discovery path resolution, exception shielding, and deterministic join on shutdown.
+- Updated composition root (`packages/ed_app/bootstrap.py`) wiring `FileSystemWatcher` into `TelemetryEngine`.
+- Comprehensive unit test suite (`tests/unit/test_watcher_adapter.py`) and Windows NT Wine runner test step verifying asynchronous watcher dispatch and thread lifecycle.
+- Diátaxis Reference documentation for `FileSystemWatcher` (`docs/reference/watcher_filesystem_adapter.md`).
+- Developer integration guide with copy-pasteable runnable code patterns (`architecture/notes/watcher_developer_integration_guide.md`).
 
 ## [0.2.0] - 2026-10-06
 

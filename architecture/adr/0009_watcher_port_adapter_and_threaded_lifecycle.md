@@ -1,6 +1,6 @@
 ---
 title: "ADR 0009: Watcher Port Adapter and Threaded Lifecycle Management"
-status: "proposed"
+status: "accepted"
 date: "2026-10-09"
 tags: ["architecture", "adr", "watcher", "adapter", "port", "threading", "lifecycle", "madr"]
 ---
