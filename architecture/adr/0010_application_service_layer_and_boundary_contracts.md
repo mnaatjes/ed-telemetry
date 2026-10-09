@@ -1,6 +1,6 @@
 ---
 title: "ADR 0010: Application Service Layer Architecture, Boundary Contracts, and Multi-Modal Orchestration"
-status: "proposed"
+status: "accepted"
 date: "2026-10-09"
 tags: ["architecture", "adr", "application", "services", "hexagonal", "dto", "boundaries", "invariants", "madr"]
 ---

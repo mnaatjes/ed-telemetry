@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive unit test suite (`tests/unit/test_watcher_adapter.py`) and Windows NT Wine runner test step verifying asynchronous watcher dispatch and thread lifecycle.
 - Diátaxis Reference documentation for `FileSystemWatcher` (`docs/reference/watcher_filesystem_adapter.md`).
 - Developer integration guide with copy-pasteable runnable code patterns (`architecture/notes/watcher_developer_integration_guide.md`).
+- Application Service Layer architecture, base protocols, and boundary invariants (`packages/ed_app/`) implementing pure `DataTransferObject` protocol, `BaseApplicationService` protocol, `ApplicationContext` container, and `ApplicationServiceError` hierarchy governed by ADR 0010 and SDD-008.
+- Boundary enforcement contracts via `import-linter`: Invariant G (infrastructure adapter isolation forbidding driving surfaces and services from importing `ed_watcher`/`ed_egress`), Invariant D (downward layering), and Invariant C (protocol neutrality).
+- Diátaxis Reference documentation for application scaffolding (`docs/reference/application_scaffolding.md`) and Diátaxis How-To developer runbook (`docs/how-to/add_application_service.md`).
+- Onboarded `WatcherService` (`packages/ed_app/services/watcher.py`) and `WatcherStatusDTO` (`packages/ed_app/dto/watcher.py`) to the Application Service Layer, exposing watcher state and lifecycle through `WatcherPort` without adapter coupling governed by ADR 0011 and SDD-009.
+- Updated `build_application_context()` composition root in `packages/ed_app/bootstrap.py` wiring `WatcherService` into `ApplicationContext`.
+- Extended test suites (`tests/unit/test_application_scaffolding.py`, `tests/unit/test_watcher_service.py`) and Wine Windows runner (`scripts/run_wine_tests.sh`) validating side-effect-free context construction and watcher service execution under Windows NT.
+
 
 ## [0.2.0] - 2026-10-06
 
