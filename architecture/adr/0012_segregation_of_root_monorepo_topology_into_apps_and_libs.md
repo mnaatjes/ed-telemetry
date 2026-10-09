@@ -1,98 +1,152 @@
 ---
-title: "ADR 0012: Segregation of Root Monorepo Topology into apps/ and libs/"
+title: "ADR 0012: Pure Hexagonal Source Topology and Satellite SDK Segregation"
 status: "proposed"
 date: "2026-10-09"
-tags: ["architecture", "adr", "topology", "monorepo", "packaging", "apps", "libs", "madr"]
+tags: ["architecture", "adr", "topology", "hexagonal", "packaging", "src", "sdk", "boundaries", "invariants", "madr"]
 supersedes: [
     "architecture/adr/0001_architectural_vision_and_operational_concept.md",
     "architecture/adr/0002_verification_tooling_and_versioning_lifecycle.md"
 ]
 ---
 
-# ADR 0012: Segregation of Root Monorepo Topology into apps/ and libs/
+# ADR 0012: Pure Hexagonal Source Topology and Satellite SDK Segregation
 
 ## 1. Context and Problem Statement
 
 In [ADR 0001](0001_architectural_vision_and_operational_concept.md) and [ADR 0002](0002_verification_tooling_and_versioning_lifecycle.md), the repository established a flat monorepo layout placing all Python codebases under a single root directory: `packages/` (`ed_domain`, `ed_watcher`, `ed_egress`, `ed_sdk`, `ed_app`).
 
-Following the completion of the Application Service Layer scaffolding ([ADR 0010](0010_application_service_layer_and_boundary_contracts.md)) and the onboarding of `WatcherService` ([ADR 0011](0011_watcher_telemetry_application_service.md)), a fundamental architectural asymmetry has emerged:
+Following the completion of the Application Service Layer scaffolding ([ADR 0010](0010_application_service_layer_and_boundary_contracts.md)) and the onboarding of `WatcherService` ([ADR 0011](0011_watcher_telemetry_application_service.md)), critical architectural tensions have emerged in this physical layout:
 
 1. **Category Confusion in Geographic Proximity:**
-   - `ed_domain`, `ed_watcher`, `ed_egress`, and `ed_sdk` are **passive, reusable libraries**. They contain domain rules, hardware/OS adapters, and client stubs. None of them define execution entry points (`__main__.py`).
-   - `ed_app` is an **active, executable application target**. It contains the Composition Root (`bootstrap.py`), the Application Service Layer, and multiple Driving Surfaces (CLI entry point, future REST API, future MCP server).
-2. **Cognitive Friction for Operators and Integrators:**
-   Co-locating an executable application target alongside passive domain and infrastructure libraries in a flat `packages/` folder obscures the system hierarchy. It creates the false impression that `ed_app` is simply another peer library rather than the top-level deployable runtime that imports and orchestrates the libraries.
-3. **Packaging Ambiguity:**
-   External tooling and developers cannot distinguish by directory inspection which folders are distributable reusable libraries versus deployable application binaries.
+   - `packages/ed_app/` currently houses both **Driving Surfaces** (`ed_app.cli`, future `ed_app.api`, `ed_app.mcp`) and the **Application Service Layer** (`ed_app.services`, `ed_app.context`, `ed_app.dto`, `ed_app.bootstrap`).
+   - Co-locating an executable application target alongside passive domain (`ed_domain`) and infrastructure (`ed_watcher`, `ed_egress`) libraries in a single flat `packages/` folder obscures the Hexagonal hierarchy.
+2. **The SDK "Odd-Man-Out" Tension:**
+   - In [ADR 0001](0001_architectural_vision_and_operational_concept.md) and [ADR 0004](0004_os_path_discovery_and_filesystem_research_framework.md), `ed_sdk` was conceived as a development, research, and simulation harness.
+   - However, placing `ed_sdk` inside `packages/` treats it as a production runtime package. This creates structural awkwardness: production packages are strictly forbidden from importing `ed_sdk` (Invariant B), while `ed_sdk` needs to import and exercise adapters across the codebase for test fixtures and mock streams.
+3. **Domain Pollution vs. Adapter-Local Models:**
+   - `ed_watcher` contains necessary internal concepts (`StreamPosition`, `JournalCandidate`, `SnapshotIdentifier`, `FileIngestionEvent`). These are **adapter-local models** specific to operating system file I/O, not universal game entities.
+   - In a pure architecture, these must remain private to the infrastructure layer and must **never** be moved to the core domain, while the overall directory tree must visibly reflect the 4 Clean Architecture quadrants.
 
-We need an architectural decision establishing whether to maintain the flat `packages/` layout or segregate the repository topology into distinct `apps/` and `libs/` roots.
+We need an architectural decision establishing the canonical physical layout of the repository: replacing the flat `packages/` directory with a **Pure Hexagonal `src/` tree** and a dedicated **Satellite `sdk/` tree**.
 
 ---
 
 ## 2. Decision Drivers
 
-* **Topological Self-Documentation:** The directory tree should immediately communicate the difference between deployable application binaries and passive libraries without reading implementation code.
-* **Preservation of Architectural Invariants:** The refactoring must preserve 100% of the boundary rules established in Invariants A, B, C, D, and G.
-* **Zero Breaking Changes to Python Import Statements:** Python module names (`ed_domain`, `ed_watcher`, `ed_app`) must remain identical across all source and test files.
-* **Minimal Operational Friction:** Path adjustments must be confined to build and discovery configurations (`pyproject.toml`, test scripts, verification runners).
+* **Topological 1-to-1 Mapping with Hexagonal Architecture:** The directory structure must physically mirror the 4 quadrants of Clean / Hexagonal Architecture without conflating layers.
+* **Domain Purity Preservation:** Filesystem-specific models (`StreamPosition`, `JournalCandidate`) must remain encapsulated within the infrastructure adapter and never pollute the core domain.
+* **Clean Separation of the Satellite SDK:** The SDK must be recognized as a **Satellite Development Kit & Simulation Harness**, residing strictly outside the production `src/` runtime while maintaining full power to simulate, mock, and test the production layers.
+* **Deterministic Machine Enforcement:** All existing boundary invariants (A, B, C, D, G) must be mechanically mapped and preserved across `import-linter`, `mypy`, and `verify.py`.
+* **Zero Ambiguity for Integrators:** Any engineer inspecting the root filesystem must immediately know:
+  - Where pure domain rules live (`src/domain/`).
+  - Where use cases and DTOs live (`src/services/`).
+  - Where OS/hardware adapters live (`src/infrastructure/`).
+  - Where user front doors live (`src/interfaces/`).
+  - Where developer test/simulation harnesses live (`sdk/`).
 
 ---
 
 ## 3. Considered Options
 
 * **Option 1: Retain Flat `packages/` Directory (Status Quo)**
-  - *Pros:* Zero immediate changes to configuration or paths.
-  - *Cons:* Ongoing cognitive friction; executable application target remains conflated with reusable libraries.
-* **Option 2: Physical Segregation into `apps/` and `libs/` Roots (Recommended)**
-  - *Pros:* Aligns with enterprise monorepo standards (Bazel, Cargo, Nx); separates runnable targets (`apps/ed_app`) from passive reusable libraries (`libs/ed_*`); immediately intuitive mental model.
-  - *Cons:* Requires updating path configurations in `pyproject.toml`, `scripts/verify.py`, `scripts/run_wine_tests.sh`, and documentation links.
+  - *Pros:* Zero immediate file movements.
+  - *Cons:* Ongoing cognitive friction; Driving Surfaces, Services, and Infrastructure remain geographically conflated.
+* **Option 2: Coarse `apps/` and `libs/` Segregation**
+  - *Pros:* Separates executable `ed_app` from libraries.
+  - *Cons:* Still conflates Domain, Infrastructure, and Application Services inside `libs/`; does not solve the SDK satellite boundary.
+* **Option 3: Pure Hexagonal `src/` with Satellite `sdk/` (Chosen)**
+  - *Pros:* Textbook Hexagonal / Clean Architecture; physically segregates Core Domain, Application Services, Infrastructure Adapters, and Driving Surfaces; places the SDK into an explicit satellite development role outside production runtime code; eliminates all architectural ambiguity.
+  - *Cons:* Requires updating Python module import paths across the codebase and realigning `import-linter` contracts.
 
 ---
 
 ## 4. Decision Outcome
 
-Chosen Option: **Option 2: Physical Segregation into `apps/` and `libs/` Roots.**
+Chosen Option: **Option 3: Pure Hexagonal `src/` with Satellite `sdk/`.**
 
-We will decommission the flat `packages/` root directory and establish two distinct top-level directories:
+We will decommission the flat `packages/` directory and establish the following root directory topology:
 
 ```
-apps/
-└── ed_app/          # Executable Application Target (Composition Root, Services, CLI, API, MCP)
+src/                         # 100% PRODUCTION RUNTIME (The Production Hexagon)
+├── domain/                  # 100% PURE CORE (Hexagon Center)
+│   ├── engine.py            # TelemetryEngine
+│   └── ports/               # WatcherPort, EgressPort
+│
+├── services/                # 100% APPLICATION SERVICE LAYER (Use Cases & DTOs)
+│   ├── bootstrap.py         # Composition Root (build_application_context, build_engine)
+│   ├── context.py           # ApplicationContext (frozen dataclass)
+│   ├── exceptions.py        # ApplicationServiceError hierarchy
+│   ├── dto/                 # DataTransferObject protocols, WatcherStatusDTO
+│   └── watcher.py           # WatcherService (queries WatcherPort)
+│
+├── infrastructure/          # 100% DRIVEN ADAPTERS (Secondary / External I/O)
+│   ├── watcher/             # FileSystemWatcher, PathDiscoverer, JournalSelector, Reactor
+│   └── egress/              # NullTransmitter, future HttpTransmitter
+│
+└── interfaces/              # 100% DRIVING SURFACES (Primary Adapters / Front Doors)
+    ├── cli/                 # Terminal commands & daemon smoke runner
+    ├── api/                 # Future: FastAPI REST server
+    └── mcp/                 # Future: Model Context Protocol AI tools
 
-libs/
-├── ed_domain/       # Pure Domain Core Library (Entities, State Engine, Ports)
-├── ed_watcher/      # Inbound Infrastructure Adapter Library (OS Discovery, Journal Ingestion)
-├── ed_egress/       # Outbound Infrastructure Adapter Library (Transmitters, Sinks)
-└── ed_sdk/          # Client SDK & Simulation Harness Library
+sdk/                         # SATELLITE DEVELOPMENT KIT (Simulation & Recon Harness)
+├── recon/                   # Offline log acquisition & anonymization
+└── simulation/              # Synthetic journal streams, Wine simulant helpers
+
+tests/                       # VERIFICATION SUITES
+├── unit/                    # Fast isolated tests
+└── integration/             # End-to-end and Wine cross-platform tests
+
+docs/                        # DIÁTAXIS OPERATOR PLANE (Living Runbooks & References)
+architecture/                # ENGINEERING PLANE (ADRs, SDDs, RFCs, Use Cases, Risk)
 ```
-
-### 4.1 Supersedence of Prior Decisions
-
-This ADR formally supersedes the following structural sections of prior ADRs:
-1. **[ADR 0001 Section 4 & 6.1](0001_architectural_vision_and_operational_concept.md):** The physical layout table placing all modules under `packages/` is superseded by the `apps/` and `libs/` division.
-2. **[ADR 0002 Section 3.1](0002_verification_tooling_and_versioning_lifecycle.md):** The packaging structure specifying `where = ["packages"]` and verification targets is superseded.
-
-All logical invariants (Invariant A, Invariant B, Invariant C, Invariant D, Invariant G) defined in ADR 0001, ADR 0010, and ADR 0011 remain in full legal force.
 
 ---
 
-## 5. Consequences
+## 5. Architectural Boundary & Invariant Alignment Ledger
+
+To guarantee that zero boundary guarantees are diluted or compromised during this refactor, the following master matrix defines how existing policies are mapped and how new SDK satellite policies are established:
+
+| Invariant / Policy | Scope & Intent | Declaration Location | Enforcement Mechanism | Current Rule (`packages/`) | New Rule (`src/` & `sdk/`) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Invariant A** | **Domain Purity**<br/>(Zero external I/O or sibling imports) | ADR 0001, ADR 0010 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_domain"]`<br/>`forbidden = ["ed_watcher", "ed_egress", "ed_app", "ed_sdk", "httpx", ...]` | `source = ["domain"]`<br/>`forbidden = ["infrastructure", "services", "interfaces", "sdk", "httpx", "socket", ...]` |
+| **Invariant B** | **SDK Satellite Isolation**<br/>(Production code forbidden from SDK) | ADR 0001, ADR 0004 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_domain", "ed_watcher", "ed_egress", "ed_app"]`<br/>`forbidden = ["ed_sdk"]` | `source = ["domain", "infrastructure", "services", "interfaces"]`<br/>`forbidden = ["sdk"]`<br/>*(Entire `src/` tree forbidden from `sdk/`)* |
+| **Invariant G** | **Infrastructure Adapter Isolation**<br/>(Interfaces & services cannot import adapters) | ADR 0010, ADR 0011 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_app.cli", "ed_app.services"]`<br/>`forbidden = ["ed_watcher", "ed_egress"]` | `source = ["interfaces", "services.watcher", "services.dto"]`<br/>`forbidden = ["infrastructure"]`<br/>*(Only `services.bootstrap` may import `infrastructure`)* |
+| **Invariant D** | **Downward Dependency Layering**<br/>(Strict downward ordering within application) | ADR 0010, ADR 0011 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `layers = ["ed_app.cli", "bootstrap", "context", "services", "dto", "exceptions"]` | `layers = ["interfaces", "services.bootstrap", "services.context", "services.watcher", "services.dto", "services.exceptions"]` |
+| **Invariant C** | **Protocol Framework Neutrality**<br/>(Services/DTOs forbidden from CLI/web libs) | ADR 0010, SDD-008 | `import-linter`<br/>`pyproject.toml`<br/>`scripts/verify.py` | `source = ["ed_app.services", "ed_app.dto"]`<br/>`forbidden = ["click", "fastapi", "mcp", "argparse", ...]` | `source = ["services", "services.dto"]`<br/>`forbidden = ["click", "fastapi", "starlette", "mcp", "argparse"]` |
+| **Layered Boundary** | **High-Level Hexagonal Flow**<br/>(Coarse layered flow) | ADR 0001, SDD-001 | `import-linter`<br/>`pyproject.toml` | `layers = ["ed_app", "ed_watcher \| ed_egress", "ed_domain"]` | `layers = ["interfaces", "services", "infrastructure", "domain"]` |
+| **Static Typing** | **Strict Type Safety** | ADR 0002 | `mypy`<br/>`pyproject.toml` | `packages = ["ed_domain", "ed_watcher", "ed_egress", "ed_sdk", "ed_app"]` | `mypy_path = ["src", "sdk"]`<br/>`packages = ["domain", "services", "infrastructure", "interfaces", "sdk"]` |
+| **Domain Clean Isolation** | **Runtime Sibling Module Guard** | ADR 0001 | `tests/unit/test_domain_isolation.py` | Asserts `sys.modules` contains 0 sibling packages on `import ed_domain` | Asserts `sys.modules` contains 0 `infrastructure`, `services`, `interfaces`, or `sdk` on `import domain` |
+
+---
+
+## 6. Supersedence of Prior Decisions
+
+This ADR formally supersedes the physical packaging topology defined in:
+1. **[ADR 0001 Section 4 & 6.1](0001_architectural_vision_and_operational_concept.md):** The physical layout placing all packages under `packages/` is superseded by the `src/` (4-quadrant Hexagon) and `sdk/` (Satellite Development Kit) structure.
+2. **[ADR 0002 Section 3.1](0002_verification_tooling_and_versioning_lifecycle.md):** The packaging structure specifying `where = ["packages"]` is superseded by `where = ["src", "sdk"]`.
+
+All semantic requirements, behavioral contracts, and quality invariants established in ADRs 0001 through 0011 remain in full legal force.
+
+---
+
+## 7. Consequences
 
 ### Positive
-* **Immediate Structural Clarity:** Clear distinction between what executes (`apps/`) and what is imported (`libs/`).
-* **Clean Packaging Boundaries:** Packaging wheels or container builds can target `apps/*` or `libs/*` independently.
-* **Preserved Code Invariants:** Zero changes to internal Python `import` statements; zero changes to `import-linter` module rules.
+* **Architectural Purity:** The directory layout is a direct, intuitive 1:1 physical reflection of Clean / Hexagonal Architecture.
+* **Elimination of Packaging Ambiguity:** Reusable domain logic, application use cases, infrastructure I/O adapters, and driving surfaces each have their own dedicated, unpolluted top-level directory.
+* **True Satellite SDK:** The SDK is clearly delineated as a companion development and simulation harness residing outside the production `src/` tree, with Invariant B preventing runtime coupling.
+* **Adapter Encapsulation:** File-tailing and snapshot models remain safely private inside `infrastructure/watcher/` without polluting `domain/`.
 
 ### Negative / Trade-Offs
-* Requires path updates across `pyproject.toml` (`packages.find`, `pythonpath`, `bumpversion`).
-* Requires updating target arguments in `scripts/verify.py` and path insertions in `scripts/run_wine_tests.sh`.
-* Requires updating directory references in `docs/` and future SDDs.
+* Requires updating module import paths across existing Python files (`from ed_watcher...` $\to$ `from infrastructure.watcher...`, `from ed_domain...` $\to$ `from domain...`, `from ed_app...` $\to$ `from services...` / `from interfaces...`).
+* Requires updating path references across `pyproject.toml`, test scripts, Wine test runners, and Diátaxis documentation.
 
 ---
 
-## 6. Migration and Verification Gates
+## 8. Elaboration Gate & Phased Execution
 
-Upon approval of this ADR, the transition will be executed under a dedicated Software Design Document (SDD) during the Elaboration phase, requiring:
-1. Full pass of `scripts/verify.py` (Ruff linting, Ruff formatting, Mypy static typing, Import-Linter 6 contracts, 78 Pytest tests, CLI smoke test).
-2. Clean execution of `scripts/run_wine_tests.sh` under Windows Python 3.11 via Wine.
-3. Updated Diátaxis runbooks and reference documentation in `docs/`.
+Upon approval of this ADR, implementation will NOT proceed immediately in this phase. The project will advance into the **Unified Process Elaboration Phase**, requiring:
+
+1. **SDD-009 / SDD-010 Specification:** A detailed Software Design Document outlining the atomic file-movement map, automated search-and-replace AST script, and verification gates.
+2. **Implementation Execution:** Execution of directory moves, import updates, and configuration adjustments on a dedicated feature branch.
+3. **Verification Acceptance:** Complete passage of `scripts/verify.py` (Ruff, Mypy, Import-Linter 6 contracts, Pytest, CLI smoke test) and `scripts/run_wine_tests.sh` under Windows Python via Wine.
