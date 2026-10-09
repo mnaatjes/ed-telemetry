@@ -39,9 +39,9 @@ print(f'Winreg:   {\"available\" if \"winreg\" in sys.builtin_module_names else 
 echo "Executing path discovery tests..."
 wine "${PYTHON_EXE}" -c "
 import sys
-sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from ed_watcher.discovery.strategies.windows import WindowsPathStrategy
+from infrastructure.watcher.discovery.strategies.windows import WindowsPathStrategy
 strat = WindowsPathStrategy()
 print(f'Strategy platform: {strat.platform_name}')
 candidates = strat.find_candidates()
@@ -55,9 +55,9 @@ echo "Executing journal candidate selector tests (SDD-004 / ADR 0006)..."
 wine "${PYTHON_EXE}" -c "
 import sys, os, tempfile
 from pathlib import Path
-sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from ed_watcher.selector import JournalSelector, StreamPosition
+from infrastructure.watcher.selector import JournalSelector, StreamPosition
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -101,9 +101,9 @@ echo "Executing status and snapshot identifier tests (SDD-005 / ADR 0007)..."
 wine "${PYTHON_EXE}" -c "
 import sys, os, tempfile
 from pathlib import Path
-sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from ed_watcher.snapshots import SnapshotIdentifier, SnapshotRegistry
+from infrastructure.watcher.snapshots import SnapshotIdentifier, SnapshotRegistry
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -143,10 +143,10 @@ echo "Executing file ingestion engine and reactor tests (SDD-006 / ADR 0008)..."
 wine "${PYTHON_EXE}" -c "
 import sys, os, tempfile
 from pathlib import Path
-sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from ed_watcher.engine import WatcherReactor, FileKind
-from ed_watcher.selector import StreamPosition
+from infrastructure.watcher.engine import WatcherReactor, FileKind
+from infrastructure.watcher.selector import StreamPosition
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -201,11 +201,11 @@ echo "Executing FileSystemWatcher threaded adapter tests (SDD-007 / ADR 0009)...
 wine "${PYTHON_EXE}" -c "
 import sys, os, tempfile, time
 from pathlib import Path
-sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from ed_watcher.watcher import FileSystemWatcher
-from ed_watcher.selector import StreamPosition
-from ed_watcher.engine.envelopes import FileKind
+from infrastructure.watcher.watcher import FileSystemWatcher
+from infrastructure.watcher.selector import StreamPosition
+from infrastructure.watcher.engine.envelopes import FileKind
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -259,18 +259,18 @@ wine "${PYTHON_EXE}" -c "
 import sys, os
 from dataclasses import FrozenInstanceError, dataclass
 
-sys.path.insert(0, os.path.join(r'${WIN_REPO_ROOT}', 'packages'))
+sys.path.insert(0, os.path.join(r'${WIN_REPO_ROOT}', 'src'))
 
-from ed_app.bootstrap import build_application_context
-from ed_app.context import ApplicationContext
-from ed_app.dto import DataTransferObject
-from ed_app.exceptions import (
+from services.bootstrap import build_application_context
+from services.context import ApplicationContext
+from services.dto import DataTransferObject
+from services.exceptions import (
     ApplicationServiceError,
     ServiceDependencyError,
     ServicePayloadError,
     ServiceStateError,
 )
-from ed_app.services import BaseApplicationService
+from services import BaseApplicationService
 
 # 1. ApplicationContext side-effect-free instantiation
 ctx = build_application_context()
