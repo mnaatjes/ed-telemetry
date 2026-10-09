@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-09
+
 ### Changed
 - Refactored entire codebase topology from legacy flat `packages/` monorepo to Pure Hexagonal `src/` layout (`src/{domain,services,infrastructure,interfaces}`) and satellite `sdk/` governed by ADR 0012 and SDD-010.
 - Migrated namespaces: `ed_domain` -> `domain`, `ed_services`/`ed_app` -> `services`, `ed_watcher` -> `infrastructure.watcher`, `ed_egress` -> `infrastructure.egress`, `ed_cli` -> `interfaces.cli`, `ed_sdk` -> `sdk`.
