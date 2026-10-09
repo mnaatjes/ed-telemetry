@@ -11,41 +11,43 @@ tags: ["architecture", "adr", "application", "services", "hexagonal", "dto", "bo
 
 `ed-telemetry` is designed as a multi-modal telemetry core supporting four co-equal front doors ([ADR 0001](0001_architectural_vision_and_operational_concept.md)):
 1. **Interactive CLI**: Operational inspection, real-time event tailing, and daemon execution.
-2. **Local REST API**: HTTP endpoints (`/health`, `/status`) and server-sent telemetry streams (`/events`).
-3. **Model Context Protocol (MCP) Server**: Exposing telemetry tools (`get_flight_state`, `list_events`, `check_game_status`) directly to AI coding agents.
-4. **Desktop UI / TUI**: High-density cockpits and event burst dashboards.
+2. **Local REST API**: HTTP endpoints and server-sent telemetry streams.
+3. **Model Context Protocol (MCP) Server**: Telemetry query and streaming tools exposed directly to AI coding agents.
+4. **Desktop UI / TUI**: Cockpits and live event dashboards.
 
-With the completion and sealing of the inbound driving adapter subsystem `ed_watcher` ([ADR 0008](0008_file_ingestion_io_freshness_and_concurrency.md), [ADR 0009](0009_watcher_port_adapter_and_threaded_lifecycle.md)), we face a critical structural decision before introducing the domain telemetry parser and operational use-cases:
+With the completion and sealing of the inbound driving adapter subsystem `ed_watcher` ([ADR 0008](0008_file_ingestion_io_freshness_and_concurrency.md), [ADR 0009](0009_watcher_port_adapter_and_threaded_lifecycle.md)), we face a critical structural decision before introducing domain parsers and concrete use-cases:
 
 If driving surfaces (CLI, REST, MCP) implement their own coordination logic ad-hoc:
-- **Logic Duplication (DRY Violation):** `ed-telemetry doctor`, HTTP `GET /health`, and MCP tool `check_game_status` would write redundant, diverging logic to inspect path discovery and telemetry health.
+- **Logic Duplication (DRY Violation):** CLI commands, REST endpoints, and MCP tools would write redundant, diverging logic to query or control the system.
 - **Protocol Coupling:** Infrastructure frameworks (FastAPI request contexts, Click/Argparse flags, MCP JSON-RPC schemas) risk leaking into domain workflows.
 - **Architectural Erosion:** Driving surfaces might bypass domain boundaries and call low-level adapters (`PathDiscoverer`, `JournalSelector`) directly, corrupting the Hexagonal model.
 
-We require an architectural decision establishing the formal **Application Service Layer** in `packages/ed_app/`: defining its semantic responsibilities, structural taxonomy, boundary scope, governing invariants, and mechanical CI enforcement policies.
+We require an architectural decision establishing the formal **structural scaffolding of the Application Service Layer** in `packages/ed_app/`: defining its semantic responsibilities, structural taxonomy, boundary scope, governing invariants, and mechanical CI enforcement policies.
 
 ---
 
 ## 2. Decision Drivers
 
 * **Strict Hexagonal Integrity:** Preserve the clean boundary where `ed_domain` remains 100% pure, infrastructure adapters remain decoupled behind ports, and driving surfaces remain ultra-thin protocol translators.
-* **Co-Equal Multi-Modal Parity:** Ensure every capability available in the CLI is identically available via REST API and MCP tools with zero divergent business logic.
-* **Protocol Neutrality:** Application services must have zero knowledge of HTTP headers, CLI terminal codes, or JSON-RPC transport layers.
+* **Co-Equal Multi-Modal Parity:** Ensure any capability implemented in the future is identically available via CLI, REST API, and MCP with zero divergent business logic.
+* **Protocol Neutrality:** Application services and DTOs must have zero knowledge of HTTP headers, CLI terminal codes, or JSON-RPC transport layers.
 * **Deterministic Machine Enforcement:** Architectural policies governing the Application Service Layer must be mechanically enforced by CI linters and test suites rather than relying on developer discipline.
 
 ---
 
 ## 3. Decision Outcome
 
-Chosen Option: **Mediated Application Service Layer with Pure Data Transfer Objects (DTOs) and CI-Enforced Submodule Boundaries**.
+Chosen Option: **Mediated Application Service Layer with Pure Data Transfer Objects (DTOs), Typed `ApplicationContext`, and CI-Enforced Submodule Boundaries**.
 
-We will formally structure `packages/ed_app/` into dedicated submodules:
-1. `packages/ed_app/services/`: Protocol-agnostic application workflows and use-case orchestrators.
+We will formally structure `packages/ed_app/` into dedicated architectural submodules:
+1. `packages/ed_app/services/`: Protocol-agnostic application workflows and use-case orchestrators inheriting from a common base contract.
 2. `packages/ed_app/dto/`: Strongly-typed, serializable Data Transfer Objects decoupling internal domain models from external presentation.
-3. `packages/ed_app/bootstrap.py`: Side-effect-free Composition Root assembling ports, domain engines, and services.
-4. `packages/ed_app/cli/`: Ultra-thin CLI driving adapter (translates CLI flags $\to$ Service calls $\to$ stdout).
-5. `packages/ed_app/api/`: Ultra-thin REST/HTTP driving adapter (translates HTTP requests $\to$ Service calls $\to$ JSON responses).
-6. `packages/ed_app/mcp/`: Ultra-thin MCP server driving adapter (translates JSON-RPC tool calls $\to$ Service calls $\to$ tool results).
+3. `packages/ed_app/context.py`: Strongly-typed, immutable `ApplicationContext` container bundling pre-wired services.
+4. `packages/ed_app/bootstrap.py`: Side-effect-free Composition Root factory (`build_application_context()`).
+5. `packages/ed_app/exceptions.py`: Pure application-level exception hierarchy (`ApplicationServiceError`).
+6. `packages/ed_app/cli/`: Ultra-thin CLI driving adapter (translates CLI flags $\to$ Service calls $\to$ stdout).
+7. `packages/ed_app/api/`: Ultra-thin REST/HTTP driving adapter (future; translates HTTP requests $\to$ Service calls $\to$ JSON responses).
+8. `packages/ed_app/mcp/`: Ultra-thin MCP server driving adapter (future; translates JSON-RPC tool calls $\to$ Service calls $\to$ tool results).
 
 ---
 
@@ -54,42 +56,44 @@ We will formally structure `packages/ed_app/` into dedicated submodules:
 ```mermaid
 flowchart TD
     subgraph DrivingSurfaces["Outer Boundary: Driving Surfaces (Thin Adapters)"]
-        CLI["ed_app.cli<br/>(Argparse / Click)"]
-        REST["ed_app.api<br/>(FastAPI / Starlette)"]
-        MCP["ed_app.mcp<br/>(FastMCP / JSON-RPC)"]
+        CLI["ed_app.cli<br/>(Terminal Output)"]
+        REST["ed_app.api<br/>(HTTP Endpoints)"]
+        MCP["ed_app.mcp<br/>(Agent Tools)"]
     end
 
-    subgraph AppLayer["Application Boundary (packages/ed_app/)"]
-        subgraph DTOPlane["DTO Plane (ed_app.dto)"]
-            DTOs["Immutable Typed DTOs<br/>(HealthDTO, StateDTO, EventDTO)"]
+    subgraph AppBoundary["Application Boundary (packages/ed_app/)"]
+        subgraph ContextPlane["Context & Bootstrap"]
+            Context["ApplicationContext<br/>(Frozen Dataclass)"]
+            Boot["bootstrap.build_application_context()"]
         end
 
         subgraph ServicePlane["Application Services (ed_app.services)"]
-            DiagService["DiagnosticsService<br/>inspect_environment()"]
-            ControlService["TelemetryControlService<br/>start(), stop(), get_metrics()"]
-            QueryService["GameStateQueryService<br/>get_flight_state(), get_commander()"]
+            Services["ApplicationService Protocols / Base<br/>(Protocol-Neutral Use-Case Orchestration)"]
         end
 
-        Boot["bootstrap.build_application_context()"]
+        subgraph DTOPlane["DTO Models (ed_app.dto)"]
+            DTOs["Immutable Data Transfer Objects<br/>(Standard Library Primitives Only)"]
+        end
     end
 
     subgraph DomainCore["Domain Core (packages/ed_domain/)"]
         Engine["TelemetryEngine"]
-        StateAgg["GameStateAggregate"]
-        Parser["TelemetryParser"]
+        StateAgg["Domain Aggregates / Parsers"]
         Ports["WatcherPort / EgressPort"]
     end
 
-    CLI -->|Invokes| ServicePlane
-    REST -->|Invokes| ServicePlane
-    MCP -->|Invokes| ServicePlane
+    CLI -->|Consumes| Context
+    REST -->|Consumes| Context
+    MCP -->|Consumes| Context
 
-    ServicePlane -->|Returns| DTOs
-    ServicePlane -->|Coordinates| Engine
-    ServicePlane -->|Queries| StateAgg
-    ServicePlane -->|Validates| Ports
+    Boot -->|Assembles| Context
+    Context -->|Holds| Services
+    Context -->|Holds| Engine
 
-    Boot -->|Wires| ServicePlane
+    Services -->|Returns| DTOs
+    Services -->|Coordinates| Engine
+    Services -->|Queries| StateAgg
+    Services -->|Validates| Ports
 ```
 
 ---
@@ -98,15 +102,25 @@ flowchart TD
 
 | Component | Allowed Inbound Callers | Allowed Outbound Imports | Strict Prohibitions |
 | :--- | :--- | :--- | :--- |
-| **`ed_app.dto`** | `ed_app.services`, `ed_app.cli`, `ed_app.api`, `ed_app.mcp`, external SDK | Standard library (`dataclasses`, `datetime`, `typing`, `pydantic`) | Must NEVER import `ed_domain`, `ed_watcher`, `ed_egress`, or web/CLI frameworks. |
-| **`ed_app.services`** | `ed_app.cli`, `ed_app.api`, `ed_app.mcp`, `bootstrap.py` | `ed_domain` (all modules), `ed_app.dto` | Must NEVER import driving surface frameworks (`fastapi`, `click`, `sys.exit`) or concrete infrastructure adapters. |
-| **`ed_app.cli`** | CLI executable entrypoints | `ed_app.services`, `ed_app.dto`, `bootstrap.py` | Must NEVER import `ed_domain` directly or make raw calls to infrastructure adapters. |
-| **`ed_app.api`** | HTTP ASGI server | `ed_app.services`, `ed_app.dto`, `bootstrap.py` | Must NEVER import `ed_domain` directly or make raw calls to infrastructure adapters. |
-| **`ed_app.mcp`** | MCP daemon runner | `ed_app.services`, `ed_app.dto`, `bootstrap.py` | Must NEVER import `ed_domain` directly or make raw calls to infrastructure adapters. |
+| **`ed_app.dto`** | `ed_app.services`, `ed_app.cli`, `ed_app.api`, `ed_app.mcp`, external SDK | Standard library only (`dataclasses`, `datetime`, `typing`, `pydantic`) | Must NEVER import `ed_domain`, `ed_watcher`, `ed_egress`, or web/CLI frameworks. |
+| **`ed_app.services`** | `ed_app.cli`, `ed_app.api`, `ed_app.mcp`, `bootstrap.py` | `ed_domain` (all modules), `ed_app.dto`, `ed_app.exceptions` | Must NEVER import driving surface frameworks (`fastapi`, `click`, `sys.exit`) or concrete infrastructure adapters. |
+| **`ed_app.cli`** | CLI executable entrypoints | `ed_app.services`, `ed_app.dto`, `ed_app.context`, `bootstrap.py` | Must NEVER import `ed_domain` directly or make raw calls to infrastructure adapters. |
+| **`ed_app.api`** | HTTP ASGI server | `ed_app.services`, `ed_app.dto`, `ed_app.context`, `bootstrap.py` | Must NEVER import `ed_domain` directly or make raw calls to infrastructure adapters. |
+| **`ed_app.mcp`** | MCP daemon runner | `ed_app.services`, `ed_app.dto`, `ed_app.context`, `bootstrap.py` | Must NEVER import `ed_domain` directly or make raw calls to infrastructure adapters. |
 
 ---
 
-### 3.3 The `ApplicationContext` Contract (`packages/ed_app/context.py`)
+### 3.3 The DTO Architectural Standard (`packages/ed_app/dto/`)
+
+To guarantee strict boundary isolation between domain aggregates and presentation protocols:
+1. **Pure Data Containers:** All DTOs are declared as immutable dataclasses (`@dataclass(frozen=True)`).
+2. **Primitive Typing:** DTO fields must strictly use standard library primitive types (`str`, `int`, `float`, `bool`, `datetime`, `UUID`, `tuple`). Internal domain entities or aggregate pointers must never escape through DTO boundaries.
+3. **Framework Agnostic:** DTOs are completely independent of web serialization libraries (Pydantic models, JSON-RPC schemas) or terminal styling codes.
+4. **Serialization Readiness:** DTOs must provide standard conversion methods (`as_dict()`, `as_json()`) without requiring external dependencies.
+
+---
+
+### 3.4 The `ApplicationContext` Contract (`packages/ed_app/context.py`)
 
 To eliminate global state and prevent driving surfaces from having to manually assemble individual service dependencies, `ed_app` defines an immutable, strongly-typed `ApplicationContext`:
 
@@ -114,9 +128,7 @@ To eliminate global state and prevent driving surfaces from having to manually a
 """Application Context: Bundles assembled services and engine handles."""
 
 from dataclasses import dataclass
-from ed_app.services.diagnostics import DiagnosticsService
-from ed_app.services.telemetry import TelemetryControlService
-from ed_app.services.query import GameStateQueryService
+from typing import Any
 from ed_domain.engine import TelemetryEngine
 
 
@@ -128,10 +140,8 @@ class ApplicationContext:
     entry point to all application-layer capabilities without global state.
     """
 
-    telemetry_control: TelemetryControlService
-    diagnostics: DiagnosticsService
-    game_state: GameStateQueryService
     engine: TelemetryEngine
+    services: tuple[Any, ...]  # Typed tuple of initialized BaseApplicationService instances
 ```
 
 #### Composition Root Signature (`packages/ed_app/bootstrap.py`)
@@ -151,15 +161,15 @@ def build_application_context(
 
 ---
 
-### 3.4 Governing Invariants & Policies
+### 3.5 Governing Invariants & Policies
 
 * **Invariant C (Protocol Neutrality):**
-  - Application Services must be 100% protocol-agnostic.
+  - Application Services and DTOs must be 100% protocol-agnostic.
   - Services must never raise HTTP exceptions (`fastapi.HTTPException`), execute CLI exits (`sys.exit()`), or serialize MCP JSON-RPC schemas.
   - Failures inside services must raise strongly-typed application exceptions inheriting from `ApplicationServiceError` (`packages/ed_app/exceptions.py`).
 * **Invariant D (Downward Dependency Rule):**
-  - High-level orchestration services must never depend on the driving surfaces that call them.
-  - `ed_app.services` $\to$ `ed_app.cli` / `ed_app.api` / `ed_app.mcp` imports are strictly forbidden.
+  - High-level orchestration services and DTOs must never depend on the driving surfaces that call them.
+  - `ed_app.services` and `ed_app.dto` $\to$ `ed_app.cli` / `ed_app.api` / `ed_app.mcp` imports are strictly forbidden.
 * **Invariant E (DTO Boundary Isolation):**
   - Application services must return pure, serializable DTOs to driving surfaces, never mutable internal domain aggregates or raw telemetry entity pointers.
 * **Invariant F (Side-Effect-Free Service Instantiation):**
@@ -171,9 +181,9 @@ def build_application_context(
 
 ---
 
-### 3.5 Mechanical Enforcement Matrix
+### 3.6 Mechanical Enforcement Matrix
 
-To ensure architectural integrity is never compromised over time, policies will be enforced across automated CI quality gates:
+To ensure architectural integrity is never compromised over time, policies are enforced across automated CI quality gates:
 
 ```toml
 # Machine-enforced import-linter boundary contract (pyproject.toml)
@@ -191,12 +201,40 @@ forbidden_modules = [
     "ed_watcher",
     "ed_egress",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Invariant D: Application services forbidden from driving surfaces"
+type = "forbidden"
+source_modules = [
+    "ed_app.services",
+    "ed_app.dto",
+]
+forbidden_modules = [
+    "ed_app.cli",
+    "ed_app.api",
+    "ed_app.mcp",
+]
+
+[[tool.importlinter.contracts]]
+name = "Invariant C: Services and DTOs forbidden from protocol frameworks"
+type = "forbidden"
+source_modules = [
+    "ed_app.services",
+    "ed_app.dto",
+]
+forbidden_modules = [
+    "argparse",
+    "click",
+    "fastapi",
+    "starlette",
+    "mcp",
+]
 ```
 
 | Policy | Mechanical Enforcement Mechanism | Failure Surface |
 | :--- | :--- | :--- |
 | **Infrastructure Isolation (Invariant G)** | `import-linter` contract forbidding `ed_app.cli`, `ed_app.api`, `ed_app.mcp`, `ed_app.services`, `ed_app.dto` from importing `ed_watcher` and `ed_egress`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
-| **Downward Dependency (Invariant D)** | `import-linter` contract forbidding `ed_app.services` from importing `ed_app.cli`, `ed_app.api`, `ed_app.mcp`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
+| **Downward Dependency (Invariant D)** | `import-linter` contract forbidding `ed_app.services` and `ed_app.dto` from importing `ed_app.cli`, `ed_app.api`, `ed_app.mcp`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
 | **Protocol Neutrality (Invariant C)** | `import-linter` forbidden modules contract restricting `fastapi`, `starlette`, `click`, `argparse`, `mcp` from `ed_app.services` and `ed_app.dto`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
 | **Domain Direct Access Prohibition** | `import-linter` contract ensuring `ed_app.cli`, `ed_app.api`, `ed_app.mcp` only access domain via `ed_app.services` and `ed_domain.ports`. | Tier 2 `scripts/verify.py` (`Import Linter Boundaries`) |
 | **DTO Typing Purity** | Static type checking via `mypy --strict packages/ed_app`. | Tier 2 `scripts/verify.py` (`Mypy Static Typing`) |
@@ -207,12 +245,12 @@ forbidden_modules = [
 ## 4. Architectural Consequences
 
 ### Positive
-* **Complete Interface Parity:** New capabilities (e.g. state querying, historical replay, live event filtering) implemented in an Application Service immediately become available across CLI, REST API, and MCP with zero duplicate logic.
-* **Pluggable Driving Surfaces:** CLI, REST, and MCP implementations can be added, updated, or refactored independently without touching domain logic.
-* **Machine-Guarded Integrity:** Developers cannot accidentally cross layer boundaries because CI actively breaks on unauthorized imports.
+* **Pure Architectural Scaffolding:** Establishes the formal boundary interfaces, typing rules, and mechanical enforcement before implementing specific domain use cases.
+* **Complete Interface Parity:** When use-case services are introduced, they automatically become accessible across CLI, REST API, and MCP with zero duplicate logic.
+* **Machine-Guarded Integrity:** Developers cannot accidentally cross layer boundaries or leak concrete adapters into driving surfaces because CI actively breaks on unauthorized imports.
 
 ### Negative / Trade-Offs
-* **Additional Indirection:** Adding a new query or command requires defining a DTO, a service method, and the surface mapping rather than directly accessing domain classes. This overhead is accepted to guarantee long-term stability and protocol decoupling.
+* **Additional Indirection:** Operations flow through DTO boundaries rather than directly manipulating domain objects. This structure is accepted to guarantee decoupling.
 
 ---
 
