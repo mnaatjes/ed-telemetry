@@ -158,24 +158,24 @@ To guarantee sub-50ms event latency while remaining immune to dropped kernel fil
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Loop as Reactor Event Loop
+    participant ReactorLoop as Reactor Event Loop
     participant Queue as Command Queue
     participant Watchdog as Watchdog Listener
     participant Ticker as Fallback Ticker (0.5s / 1.0s)
 
-    Note over Loop: Waiting on Event Signal with Bounded Timeout
+    Note over ReactorLoop: Waiting on Event Signal with Bounded Timeout
     alt OS Event Fires
-        Watchdog-->>Loop: on_modified / on_created
+        Watchdog-->>ReactorLoop: on_modified / on_created
     else Timeout Expires
-        Ticker-->>Loop: Heartbeat Fallback Tick
+        Ticker-->>ReactorLoop: Heartbeat Fallback Tick
     else Inbound Hint Enqueued
-        Queue-->>Loop: Queue Non-Empty Wakeup
+        Queue-->>ReactorLoop: Queue Non-Empty Wakeup
     end
 
-    Loop->>Loop: Process Bounded Command Queue
-    Loop->>Loop: Step Journal Stream Tailer
-    Loop->>Loop: Check Status Heartbeat (~1.0 Hz)
-    Loop->>Loop: Check Auxiliary Snapshot Candidates
+    ReactorLoop->>ReactorLoop: Process Bounded Command Queue
+    ReactorLoop->>ReactorLoop: Step Journal Stream Tailer
+    ReactorLoop->>ReactorLoop: Check Status Heartbeat (~1.0 Hz)
+    ReactorLoop->>ReactorLoop: Check Auxiliary Snapshot Candidates
 ```
 
 ### 4.2 Journal Streaming & Line Fragment Invariant
