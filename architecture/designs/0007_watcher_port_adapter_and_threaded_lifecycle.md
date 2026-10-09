@@ -28,20 +28,20 @@ This Software Design Document formalizes the implementation of **[ADR 0009](../a
 
 ```mermaid
 flowchart TD
-    subgraph Host Process / Entry Points
+    subgraph Host["Host Process / Entry Points"]
         CLI["CLI / Daemon Entry Point"]
         Boot["ed_app.bootstrap.build_engine()"]
     end
 
-    subgraph Application & Domain Plane (ed_domain)
+    subgraph Domain["Application & Domain Plane (ed_domain)"]
         Engine["TelemetryEngine"]
         Port["WatcherPort (Protocol)"]
     end
 
-    subgraph Infrastructure / Driving Adapter Plane (ed_watcher)
+    subgraph Infra["Infrastructure / Driving Adapter Plane (ed_watcher)"]
         Adapter["FileSystemWatcher"]
         Worker["Background Worker Thread"]
-        subgraph Internal Engine
+        subgraph EngineCore["Internal Engine"]
             Discoverer["PathDiscoverer"]
             Selector["JournalSelector"]
             Snapshots["SnapshotIdentifier"]
