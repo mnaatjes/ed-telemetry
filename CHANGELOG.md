@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Refactored entire codebase topology from legacy flat `packages/` monorepo to Pure Hexagonal `src/` layout (`src/{domain,services,infrastructure,interfaces}`) and satellite `sdk/` governed by ADR 0012 and SDD-010.
+- Migrated namespaces: `ed_domain` -> `domain`, `ed_services`/`ed_app` -> `services`, `ed_watcher` -> `infrastructure.watcher`, `ed_egress` -> `infrastructure.egress`, `ed_cli` -> `interfaces.cli`, `ed_sdk` -> `sdk`.
+- Reconfigured single-package discovery in `pyproject.toml` (`where = ["src"]`) and updated entrypoints and import-linter boundary contracts.
+- Updated all verification harnesses (`scripts/verify.py`, `scripts/run_wine_tests.sh`, `scripts/print_dependency_graph.py`) to target the Pure Hexagonal topology.
+- Formally superseded layout sections of ADR 0001 and ADR 0002 with ADR 0012.
+
 ### Added
 - Architectural research on Frontier Developments telemetry file specifications (`architecture/research/journal_and_snapshot_filename_spec.md`) documenting canonical regex patterns, Horizons/Odyssey naming variances, and part rollover semantics.
 - Telemetry metadata specification (`architecture/research/target_files_metadata_spec.md`) detailing software/build context (`Fileheader`), account identification (`Commander.FID`), and snapshot envelope attributes.
