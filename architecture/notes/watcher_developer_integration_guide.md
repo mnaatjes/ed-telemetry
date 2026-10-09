@@ -9,7 +9,7 @@ last_updated_at: "2026-10-09"
 
 This document demonstrates how to instantiate, configure, and execute the `ed_watcher` subsystem from a developer's perspective. It covers:
 1. Low-level direct execution using `WatcherReactor`.
-2. High-level execution using the lifecycle-managed `JournalWatcher` port adapter ([ADR 0009](../adr/0009_watcher_port_adapter_and_threaded_lifecycle.md)).
+2. High-level execution using the lifecycle-managed `FileSystemWatcher` port adapter ([ADR 0009](../adr/0009_watcher_port_adapter_and_threaded_lifecycle.md)).
 3. Full application execution through the `ed_app.bootstrap` composition root.
 4. Handling and rendering realtime event bursts.
 
@@ -26,7 +26,6 @@ Directly instantiate the reactor loop and consume events via generator.
 """
 
 from pathlib import Path
-import time
 from ed_watcher.path_discoverer import PathDiscoverer
 from ed_watcher.selector import JournalSelector, StreamPosition
 from ed_watcher.snapshots.identifier import SnapshotIdentifier
@@ -81,17 +80,17 @@ if __name__ == "__main__":
 
 ## 2. Pattern B: Threaded Port Adapter Execution (Planned ADR 0009)
 
-In an application service, GUI, or daemon, you do not want to block the main thread. The `JournalWatcher` adapter runs the reactor inside a managed background thread:
+In an application service, GUI, or daemon, you do not want to block the main thread. The `FileSystemWatcher` adapter runs the reactor inside a managed background thread:
 
 ```python
 """scripts/run_threaded_watcher.py
 
-Execute the watcher asynchronously via the JournalWatcher port adapter.
+Execute the watcher asynchronously via the FileSystemWatcher port adapter.
 """
 
 import time
 from pathlib import Path
-from ed_watcher.watcher import JournalWatcher
+from ed_watcher.watcher import FileSystemWatcher
 from ed_watcher.selector import StreamPosition
 from ed_watcher.engine.envelopes import FileIngestionEvent, WatcherAuditEvent
 
@@ -109,14 +108,15 @@ def on_audit_event(event: WatcherAuditEvent) -> None:
 def main() -> None:
     # 1. Instantiate the watcher with optional custom overrides
     # Zero arguments uses auto PathDiscoverer and default settings.
-    watcher = JournalWatcher(
+    # Optional parameters: journal_dir=Path(...), snapshot_registry=...
+    watcher = FileSystemWatcher(
         stream_position=StreamPosition.LATEST,
         on_event=on_telemetry_event,
         on_audit=on_audit_event,
     )
 
     # 2. Start background thread (non-blocking)
-    print("[*] Starting JournalWatcher background worker...")
+    print("[*] Starting FileSystemWatcher background worker...")
     watcher.start()
     assert watcher.is_active
 
@@ -151,7 +151,7 @@ from ed_app.bootstrap import build_engine
 
 
 def main() -> None:
-    # 1. Build the engine (wires JournalWatcher and EgressTransmitters)
+    # 1. Build the engine (wires FileSystemWatcher and EgressTransmitters)
     # Guaranteed side-effect free: does not start threads or bind sockets yet.
     engine = build_engine()
 
@@ -190,7 +190,7 @@ from rich.live import Live
 from rich.table import Table
 from rich.console import Console
 import time
-from ed_watcher.watcher import JournalWatcher
+from ed_watcher.watcher import FileSystemWatcher
 from ed_watcher.engine.envelopes import FileIngestionEvent
 
 console = Console()
@@ -218,7 +218,7 @@ def generate_dashboard() -> Table:
 
 
 def main() -> None:
-    watcher = JournalWatcher(on_event=handle_event)
+    watcher = FileSystemWatcher(on_event=handle_event)
     watcher.start()
 
     with Live(generate_dashboard(), refresh_per_second=4, console=console) as live:
