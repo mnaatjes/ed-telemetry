@@ -139,6 +139,64 @@ with tempfile.TemporaryDirectory() as tmp_dir:
 print('Status and snapshot identifier successfully verified under Windows NT / Wine!')
 "
 
+echo "Executing file ingestion engine and reactor tests (SDD-006 / ADR 0008)..."
+wine "${PYTHON_EXE}" -c "
+import sys, os, tempfile
+from pathlib import Path
+sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+
+from ed_watcher.engine import WatcherReactor, FileKind
+from ed_watcher.selector import StreamPosition
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    win_dir = Path(tmp_dir)
+    print(f'Temporary Windows Test Directory: {win_dir}')
+
+    # 1. Create initial journal part 01
+    j1 = win_dir / 'Journal.2026-10-09T120000.01.log'
+    j1.write_bytes(b'{\"event\":\"FileHeader\",\"part\":1}\n{\"event\":\"Commander\"}\n')
+
+    events = []
+    reactor = WatcherReactor(
+        journal_dir=win_dir,
+        stream_position=StreamPosition.HEAD,
+        data_listener=events.append,
+    )
+    reactor.start()
+    assert reactor.is_running is True
+
+    step1_events = reactor.step_once()
+    assert len(step1_events) == 2
+    assert step1_events[0].line_number == 1
+    assert step1_events[1].line_number == 2
+    print(f'  - Journal stream line reading on Windows ({len(step1_events)} lines): PASS')
+
+    # 2. Test status heartbeat ingestion
+    status_file = win_dir / 'Status.json'
+    status_file.write_bytes(b'{\"event\":\"Status\",\"Flags\":16}')
+
+    step2_events = reactor.step_once()
+    status_events = [e for e in step2_events if e.file_kind == FileKind.STATUS]
+    assert len(status_events) == 1
+    assert status_events[0].raw_payload == b'{\"event\":\"Status\",\"Flags\":16}'
+    print('  - Status heartbeat ingestion on Windows: PASS')
+
+    # 3. Test part rollover transition
+    j2 = win_dir / 'Journal.2026-10-09T120000.02.log'
+    j2.write_bytes(b'{\"event\":\"FileHeader\",\"part\":2}\n')
+
+    step3_events = reactor.step_once()
+    rollover_events = [e for e in step3_events if e.part == 2]
+    assert len(rollover_events) == 1
+    assert rollover_events[0].raw_payload == b'{\"event\":\"FileHeader\",\"part\":2}\n'
+    print('  - Part rollover drain-and-switch on Windows: PASS')
+
+    reactor.stop()
+    assert reactor.is_running is False
+
+print('File ingestion engine and reactor successfully verified under Windows NT / Wine!')
+"
+
 echo "============================================================"
 echo "[SUCCESS] Wine Windows verification passed cleanly!"
 echo "============================================================"
