@@ -94,6 +94,49 @@ layers = [
     "ed_domain",
 ]
 
+[[tool.importlinter.contracts]]
+name = "Invariant G: Infrastructure adapter isolation"
+type = "forbidden"
+source_modules = [
+    "ed_app.cli",
+    "ed_app.services",
+]
+forbidden_modules = [
+    "ed_watcher",
+    "ed_egress",
+]
+allow_indirect_imports = true
+
+
+[[tool.importlinter.contracts]]
+name = "Invariant D: Downward dependency within ed_app"
+type = "layers"
+layers = [
+    "ed_app.cli",
+    "ed_app.bootstrap",
+    "ed_app.services",
+    "ed_app.context",
+    "ed_app.dto",
+    "ed_app.exceptions",
+]
+
+[[tool.importlinter.contracts]]
+name = "Invariant C: Services and DTOs forbidden from protocol frameworks"
+type = "forbidden"
+source_modules = [
+    "ed_app.services",
+    "ed_app.dto",
+]
+forbidden_modules = [
+    "argparse",
+    "click",
+    "fastapi",
+    "starlette",
+    "mcp",
+]
+
+
+
 [tool.bumpversion]
 current_version = "0.2.0"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"

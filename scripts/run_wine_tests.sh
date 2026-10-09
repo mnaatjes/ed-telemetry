@@ -253,6 +253,59 @@ with tempfile.TemporaryDirectory() as tmp_dir:
 print('FileSystemWatcher adapter successfully verified under Windows NT / Wine!')
 "
 
+echo "Executing Application Service Layer scaffolding tests (SDD-008 / ADR 0010)..."
+wine "${PYTHON_EXE}" -c "
+
+import sys, os
+from dataclasses import FrozenInstanceError, dataclass
+
+sys.path.insert(0, os.path.join(r'${WIN_REPO_ROOT}', 'packages'))
+
+from ed_app.bootstrap import build_application_context
+from ed_app.context import ApplicationContext
+from ed_app.dto import DataTransferObject
+from ed_app.exceptions import (
+    ApplicationServiceError,
+    ServiceDependencyError,
+    ServicePayloadError,
+    ServiceStateError,
+)
+from ed_app.services import BaseApplicationService
+
+# 1. ApplicationContext side-effect-free instantiation
+ctx = build_application_context()
+assert isinstance(ctx, ApplicationContext)
+assert ctx.services == ()
+assert not ctx.engine.is_running
+print('  - ApplicationContext instantiation and side-effect-freedom on Windows: PASS')
+
+# 2. Immutability
+try:
+    ctx.services = ()  # type: ignore[misc]
+    raise AssertionError('Expected FrozenInstanceError')
+except FrozenInstanceError:
+    pass
+print('  - ApplicationContext immutability on Windows: PASS')
+
+# 3. DTO Protocol
+@dataclass(frozen=True)
+class WineDTO:
+    id: str
+    def to_dict(self):
+        return {'id': self.id}
+
+dto = WineDTO(id='wine-test')
+assert isinstance(dto, DataTransferObject)
+print('  - DataTransferObject protocol compliance on Windows: PASS')
+
+# 4. Exception hierarchy
+err = ServiceDependencyError('wine test')
+assert isinstance(err, ApplicationServiceError)
+print('  - ApplicationServiceError hierarchy on Windows: PASS')
+
+print('Application Service Layer scaffolding successfully verified under Windows NT / Wine!')
+"
+
 echo "============================================================"
 echo "[SUCCESS] Wine Windows verification passed cleanly!"
 echo "============================================================"
