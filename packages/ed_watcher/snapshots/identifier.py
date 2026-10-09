@@ -76,7 +76,14 @@ class SnapshotIdentifier:
 
         fast_path = self.journal_dir / canonical_name
         if fast_path.exists():
-            return self._inspect_node(fast_path, canonical_name, is_canonical_casing=True)
+            # Verify if the physical on-disk filename matches canonical casing exactly
+            # (On Windows NTFS, exists() returns True even for lowercase filenames).
+            try:
+                # Fast check using entry or resolve
+                is_exact_casing = fast_path.resolve().name == canonical_name
+            except OSError:
+                is_exact_casing = True
+            return self._inspect_node(fast_path, canonical_name, is_canonical_casing=is_exact_casing)
 
         # On non-POSIX (Windows), if fast_path.exists() is False, the file does not exist
         if not self.posix_mode:

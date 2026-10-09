@@ -1,5 +1,6 @@
 """Unit tests for Status and Auxiliary Snapshot Identification (ADR 0007 / SDD-005)."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -120,6 +121,7 @@ class TestSnapshotIdentifier:
         assert cand_market.resolved_path == market_lower
         assert cand_market.is_canonical_casing is False
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="Windows NTFS is case-insensitive")
     def test_canonical_pascal_case_priority_on_collision(self, tmp_path: Path) -> None:
         # Both Status.json AND status.json exist on case-sensitive POSIX filesystem
         status_canonical = tmp_path / "Status.json"
@@ -135,6 +137,9 @@ class TestSnapshotIdentifier:
         assert cand.resolved_path == status_canonical
         assert cand.is_canonical_casing is True
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Windows NTFS is case-insensitive and cannot create same-name casing collisions"
+    )
     def test_ambiguous_casing_collision_raises_error(self, tmp_path: Path) -> None:
         # Multiple non-canonical variations exist without canonical PascalCase
         f1 = tmp_path / "status.json"
