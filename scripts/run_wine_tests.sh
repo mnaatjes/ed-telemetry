@@ -97,6 +97,48 @@ with tempfile.TemporaryDirectory() as tmp_dir:
 print('Journal candidate selection successfully verified under Windows NT / Wine!')
 "
 
+echo "Executing status and snapshot identifier tests (SDD-005 / ADR 0007)..."
+wine "${PYTHON_EXE}" -c "
+import sys, os, tempfile
+from pathlib import Path
+sys.path.insert(0, r'${WIN_REPO_ROOT}\packages')
+
+from ed_watcher.snapshots import SnapshotIdentifier, SnapshotRegistry
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    win_dir = Path(tmp_dir)
+    print(f'Temporary Windows Test Directory: {win_dir}')
+
+    ident = SnapshotIdentifier(win_dir)
+
+    # 1. Test empty directory returns None
+    assert ident.resolve_status() is None
+    assert ident.resolve_auxiliary('Market.json') is None
+    print('  - Empty snapshot resolution test: PASS')
+
+    # 2. Test status and auxiliary snapshot discovery
+    (win_dir / 'Status.json').write_text('{\"event\": \"Status\"}')
+    (win_dir / 'Market.json').write_text('{\"event\": \"Market\"}')
+    (win_dir / 'Cargo.json').write_text('{\"event\": \"Cargo\"}')
+
+    status_cand = ident.resolve_status()
+    assert status_cand is not None
+    assert status_cand.canonical_name == 'Status.json'
+    assert status_cand.size > 0
+    print(f'  - Status snapshot resolution ({status_cand.canonical_name}): PASS')
+
+    market_cand = ident.resolve_auxiliary('Market.json')
+    assert market_cand is not None
+    assert market_cand.canonical_name == 'Market.json'
+    print(f'  - Auxiliary snapshot resolution ({market_cand.canonical_name}): PASS')
+
+    all_cands = ident.resolve_all_available()
+    assert len(all_cands) == 3
+    print(f'  - All available snapshots resolution ({len(all_cands)} found): PASS')
+
+print('Status and snapshot identifier successfully verified under Windows NT / Wine!')
+"
+
 echo "============================================================"
 echo "[SUCCESS] Wine Windows verification passed cleanly!"
 echo "============================================================"
