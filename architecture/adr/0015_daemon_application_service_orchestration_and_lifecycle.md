@@ -111,7 +111,7 @@ The following 12 rules govern `DaemonService` across five boundary categories, e
 
 ```text
 src/services/
-├── base.py                   # BaseApplicationService protocol
+├── base.py                   # BaseApplicationService and SupervisedService protocols
 ├── context.py                # ApplicationContext (exposes daemon_service, watcher_service)
 ├── daemon.py                 # DaemonService (Master Lifecycle Supervisor & Orchestrator)
 ├── watcher.py                # WatcherService (Refactored: Query-Only Subsystem Service)
@@ -121,6 +121,74 @@ src/services/
 └── registry/
     ├── egress.py             # EgressRegistry (EgressPort sinks)
     └── watcher.py            # WatcherRegistry (WatcherPort sources)
+```
+
+### 6.2 Common Protocol Pedigree & `SupervisedService` Specification
+
+To guarantee that supervised sub-services expose predictable, uniform lifecycle hooks without violating the Interface Segregation Principle (ISP) for stateless or query-only services, `src/services/base.py` establishes a specialized protocol hierarchy:
+
+```mermaid
+classDiagram
+    direction TB
+    class BaseApplicationService {
+        <<protocol>>
+        +service_name: str
+    }
+
+    class SupervisedService {
+        <<protocol>>
+        +start() None
+        +stop() None
+        +is_running: bool
+    }
+
+    BaseApplicationService <|-- SupervisedService : specializes / inherits
+```
+
+1. **`BaseApplicationService(Protocol)` (Universal Base):**
+   - Applies universally to all application services placed on `ApplicationContext`.
+   - Requires solely `service_name: str` for identification, logging, and metrics.
+   - Stateless or query-only services (e.g. `WatcherService`) implement `BaseApplicationService` directly, free of artificial `start()` / `stop()` stubs.
+
+2. **`SupervisedService(BaseApplicationService, Protocol)` (Specialized Worker Contract):**
+   - Inherits directly from `BaseApplicationService`, maintaining pedigree alignment across the type system.
+   - Requires concrete lifecycle and supervision capabilities:
+     - `start() -> None`: Starts background threads or streaming workers.
+     - `stop() -> None`: Gracefully stops and joins background workers.
+     - `is_running: bool`: Property reporting active execution state.
+   - Services managing long-running background workers or network connections conform to `SupervisedService`, enabling `DaemonService` to supervise arbitrary collections of worker services in a predictable, uniform loop.
+
+```python
+# src/services/base.py
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class BaseApplicationService(Protocol):
+    """Universal contract satisfied by all application services."""
+
+    @property
+    def service_name(self) -> str:
+        """Unique alphanumeric identifier for the service."""
+        ...
+
+
+@runtime_checkable
+class SupervisedService(BaseApplicationService, Protocol):
+    """Specialized contract for services managed by DaemonService."""
+
+    def start(self) -> None:
+        """Start background workers or streaming channels."""
+        ...
+
+    def stop(self) -> None:
+        """Gracefully stop and join background workers."""
+        ...
+
+    @property
+    def is_running(self) -> bool:
+        """Return True if background workers are active."""
+        ...
 ```
 
 ```mermaid
@@ -161,7 +229,7 @@ flowchart TD
     E_REG -.->|Holds| NULL_TX
 ```
 
-### 6.2 Master Lifecycle State Machine
+### 6.3 Master Lifecycle State Machine
 
 ```mermaid
 stateDiagram-v2
@@ -182,7 +250,7 @@ stateDiagram-v2
     RUNNING --> ERROR: Uncaught background worker crash
 ```
 
-### 6.3 WatcherService Refactoring Contract
+### 6.4 WatcherService Refactoring Contract
 
 `WatcherService` is refactored to remove lifecycle execution:
 ```python
@@ -210,7 +278,7 @@ class WatcherService(BaseApplicationService):
     # NOTE: start() and stop() are permanently removed.
 ```
 
-### 6.4 Event Pipeline Wiring & Health Scaffolding in `DaemonService`
+### 6.5 Event Pipeline Wiring & Health Scaffolding in `DaemonService`
 
 ```python
 # src/services/daemon.py (Architectural Blueprint)
