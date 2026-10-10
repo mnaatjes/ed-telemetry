@@ -58,15 +58,36 @@ classDiagram
         +is_active: bool
     }
 
+    class DiscreteSinkPort {
+        <<protocol / capability>>
+        +send(payload: Mapping[str, Any]) None
+    }
+
+    class StreamSourcePort {
+        <<protocol / capability>>
+        +register_event_handler(handler) None
+        +register_audit_handler(handler) None
+    }
+
+    class ConnectionPort {
+        <<protocol / capability>>
+        +connect() None
+        +disconnect() None
+        +is_connected: bool
+    }
+
+    class TransactionalPort {
+        <<protocol / capability>>
+        +commit() None
+        +rollback() None
+    }
+
     class EgressPort {
         <<domain port / discrete sink>>
-        +send(payload: Mapping[str, Any]) None
     }
 
     class WatcherPort {
         <<domain port / active stream source>>
-        +register_event_handler(handler) None
-        +register_audit_handler(handler) None
     }
 
     class FileSystemWatcher {
@@ -86,15 +107,22 @@ classDiagram
     }
 
     Port <|-- LifecyclePort : specializes
-    Port <|-- EgressPort : specializes (passive, zero lifecycle)
-    LifecyclePort <|-- WatcherPort : specializes (active worker)
-    Port <|-- WatcherPort : satisfies Port via LifecyclePort
+    Port <|-- DiscreteSinkPort : specializes
+    Port <|-- StreamSourcePort : specializes
+    Port <|-- ConnectionPort : specializes
+    Port <|-- TransactionalPort : specializes
+
+    DiscreteSinkPort <|-- EgressPort : specializes
+    LifecyclePort <|-- WatcherPort : composes
+    StreamSourcePort <|-- WatcherPort : composes
 
     WatcherPort <|.. FileSystemWatcher : implements
     LifecyclePort <|.. FileSystemWatcher : implements
+    StreamSourcePort <|.. FileSystemWatcher : implements
     Port <|.. FileSystemWatcher : implements
 
     EgressPort <|.. NullTransmitter : implements
+    DiscreteSinkPort <|.. NullTransmitter : implements
     Port <|.. NullTransmitter : implements
 ```
 
@@ -105,33 +133,31 @@ classDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Orch as Orchestrator / DaemonService (services)
-    participant Reg as WatcherRegistry (services.registry)
-    participant Port as WatcherPort (domain.ports)
-    participant Adp as FileSystemWatcher (infrastructure.watcher)
+    participant Orch as Orchestrator / DaemonService
+    participant Reg as WatcherRegistry
+    participant Adp as FileSystemWatcher
 
     Note over Orch: Verify Active Adapter Capability
     Orch->>Reg: get_active()
-    Reg-->>Orch: adapter instance
-    Orch->>Orch: isinstance(adapter, LifecyclePort)?
+    Reg-->>Orch: adapter
+    Note over Orch: Check isinstance(adapter, LifecyclePort)
 
     alt Adapter implements LifecyclePort
-        Note over Orch: Execute Policy L1 (Idempotent Start)
+        Note over Orch,Adp: Policy L1: Idempotent Start
         Orch->>Adp: start()
-        Adp->>Adp: Verify not already active; spawn worker thread
+        Adp->>Adp: Spawn worker thread if inactive
         Adp-->>Orch: return
 
-        Note over Orch: Operational Phase (Streaming Events)
-        Adp->>Orch: Dispatch Ingestion Events
+        Note over Orch,Adp: Operational Streaming Phase
+        Adp->>Orch: Ingestion event callback
 
-        Note over Orch: Execute Policy L2 & L3 (Deterministic & Shielded Stop)
+        Note over Orch,Adp: Policy L2 & L3: Deterministic & Shielded Stop
         Orch->>Adp: stop()
-        Adp->>Adp: Set stop_event
-        Adp->>Adp: Join worker thread with timeout (5.0s)
-        Adp->>Adp: Suppress internal teardown errors (Policy L3)
+        Adp->>Adp: Set stop event & join thread (5.0s timeout)
+        Adp->>Adp: Suppress teardown errors
         Adp-->>Orch: return
-    else Passive Port (No Lifecycle)
-        Note over Orch: Passively invoke operational methods directly
+    else Passive Port
+        Note over Orch,Adp: Passive invocation (e.g. send) without lifecycle management
     end
 ```
 
@@ -158,7 +184,11 @@ src/domain/ports/
 Governed by ADR 0015 and SDD-013.
 """
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Callable, Mapping
+from typing import Any, Protocol, runtime_checkable
+
+IngestionEventHandler = Callable[[Any], None]
+AuditEventHandler = Callable[[Any], None]
 
 
 @runtime_checkable
@@ -186,6 +216,59 @@ class LifecyclePort(Port, Protocol):
     def is_active(self) -> bool:
         """Return True if background workers are actively executing."""
         ...
+
+
+@runtime_checkable
+class DiscreteSinkPort(Port, Protocol):
+    """Capability protocol for discrete, outbound point-in-time transmission sinks."""
+
+    def send(self, payload: Mapping[str, Any]) -> None:
+        """Transmit a payload to downstream consumers."""
+        ...
+
+
+@runtime_checkable
+class StreamSourcePort(Port, Protocol):
+    """Capability protocol for continuous inbound event streaming sources."""
+
+    def register_event_handler(self, handler: IngestionEventHandler) -> None:
+        """Register a callback for raw file ingestion events."""
+        ...
+
+    def register_audit_handler(self, handler: AuditEventHandler) -> None:
+        """Register a callback for operational audit events."""
+        ...
+
+
+@runtime_checkable
+class ConnectionPort(Port, Protocol):
+    """Capability protocol for stateful, persistent network connections."""
+
+    def connect(self) -> None:
+        """Establish persistent network connection."""
+        ...
+
+    def disconnect(self) -> None:
+        """Cleanly close persistent network connection."""
+        ...
+
+    @property
+    def is_connected(self) -> bool:
+        """Return True if persistent connection is active and ready."""
+        ...
+
+
+@runtime_checkable
+class TransactionalPort(Port, Protocol):
+    """Capability protocol for atomic, scoped persistence resources."""
+
+    def commit(self) -> None:
+        """Commit pending changes atomically."""
+        ...
+
+    def rollback(self) -> None:
+        """Roll back pending changes."""
+        ...
 ```
 
 ### 5.3 Refactored `WatcherPort` (`src/domain/ports/watcher.py`)
@@ -193,28 +276,27 @@ class LifecyclePort(Port, Protocol):
 ```python
 """Abstract ports for inbound telemetry watchers."""
 
-from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-from domain.ports.base import LifecyclePort
+from domain.ports.base import (
+    AuditEventHandler,
+    IngestionEventHandler,
+    LifecyclePort,
+    StreamSourcePort,
+)
 
-IngestionEventHandler = Callable[[Any], None]
-AuditEventHandler = Callable[[Any], None]
+__all__ = ["WatcherPort", "IngestionEventHandler", "AuditEventHandler"]
 
 
 @runtime_checkable
-class WatcherPort(LifecyclePort, Protocol):
-    """Contract for inbound file and telemetry watchers."""
+class WatcherPort(LifecyclePort, StreamSourcePort, Protocol):
+    """Contract for inbound file and telemetry watchers.
 
-    def register_event_handler(self, handler: IngestionEventHandler) -> None:
-        """Register a callback for raw file ingestion events."""
-        ...
+    Composes LifecyclePort (worker archetype) and StreamSourcePort (event streaming).
+    """
 
-    def register_audit_handler(self, handler: AuditEventHandler) -> None:
-        """Register a callback for watcher operational audit events."""
-        ...
-
-    # NOTE: start(), stop(), and is_active are inherited from LifecyclePort.
+    # NOTE: start(), stop(), is_active inherited from LifecyclePort.
+    # NOTE: register_event_handler, register_audit_handler inherited from StreamSourcePort.
 ```
 
 ### 5.4 Refactored `EgressPort` (`src/domain/ports/egress.py`)
@@ -222,21 +304,22 @@ class WatcherPort(LifecyclePort, Protocol):
 ```python
 """Abstract ports for outbound telemetry egress."""
 
-from collections.abc import Mapping
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-from domain.ports.base import Port
+from domain.ports.base import DiscreteSinkPort
+
+__all__ = ["EgressPort"]
 
 
 @runtime_checkable
-class EgressPort(Port, Protocol):
-    """Contract for transmitting telemetry payloads to external endpoints."""
+class EgressPort(DiscreteSinkPort, Protocol):
+    """Contract for transmitting telemetry payloads to external endpoints.
 
-    def send(self, payload: Mapping[str, Any]) -> None:
-        """Transmit a payload to downstream consumers."""
-        ...
+    Specializes DiscreteSinkPort (pure outbound sink archetype).
+    Zero lifecycle hooks declared.
+    """
 
-    # Zero lifecycle hooks declared. Pure Discrete Sink Archetype.
+    # NOTE: send(payload) inherited from DiscreteSinkPort.
 ```
 
 ### 5.5 Refactored `BaseAdapterRegistry[T]` (`src/services/registry/base.py`)
@@ -282,10 +365,11 @@ class BaseAdapterRegistry(Generic[T]):
 * **Milestone 1 (Design Documentation):**
   - Author and merge SDD-013 in `architecture/designs/`.
 * **Milestone 2 (Protocol Construction):**
-  - Implement `src/domain/ports/base.py`.
-  - Refactor `src/domain/ports/watcher.py` and `src/domain/ports/egress.py`.
-  - Update `src/domain/ports/__init__.py`.
+  - Implement `src/domain/ports/base.py` defining `Port`, `LifecyclePort`, `DiscreteSinkPort`, `StreamSourcePort`, `ConnectionPort`, and `TransactionalPort`.
+  - Refactor `src/domain/ports/watcher.py` (composing `LifecyclePort` and `StreamSourcePort`).
+  - Refactor `src/domain/ports/egress.py` (specializing `DiscreteSinkPort`).
+  - Update `src/domain/ports/__init__.py` exporting all root marker and capability protocols.
 * **Milestone 3 (Registry Alignment & Test Suite):**
   - Refactor `src/services/registry/base.py` (`T = TypeVar("T", bound=Port)`).
-  - Implement `tests/unit/test_domain_ports.py`.
+  - Implement `tests/unit/test_domain_ports.py` covering `TEST-PORT-01` through `TEST-PORT-05`.
   - Verify all quality gates pass via `scripts/verify.py`.
