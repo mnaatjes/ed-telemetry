@@ -36,4 +36,5 @@ Governed by Markdown Architectural Decision Records (MADR 3.0).
 | **0011** | [ADR 0011: Watcher Telemetry Application Service and Boundary Exposure](0011_watcher_telemetry_application_service.md) | **Accepted** | 2026-10-09 | — |
 | **0012** | [ADR 0012: Pure Hexagonal Source Topology and Satellite SDK Segregation](0012_segregation_of_root_monorepo_topology_into_apps_and_libs.md) | **Accepted** | 2026-10-09 | ADR 0001, ADR 0002 |
 | **0013** | [ADR 0013: Runtime Reflection Verification for Object-Tunneling Boundary Invariants](0013_runtime_reflection_verification_for_object_tunneling_boundaries.md) | **Accepted** | 2026-10-09 | — |
-| **0014** | [ADR 0014: Driven Adapter Registry Architecture and Composition Root Integration](0014_driven_adapter_registry_architecture_and_composition_root.md) | **Proposed** | 2026-10-09 | — |
+| **0014** | [ADR 0014: Driven Adapter Registry Architecture and Composition Root Integration](0014_driven_adapter_registry_architecture_and_composition_root.md) | **Accepted** | 2026-10-09 | — |
+| **0015** | [ADR 0015: Domain Port Protocol Genealogy, Capability Taxonomy, and Lifecycle Governance](0015_domain_port_protocol_genealogy_and_lifecycle_governance.md) | **Proposed** | 2026-10-10 | — |

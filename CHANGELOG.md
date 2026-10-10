@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Runtime reflection boundary verification harness (`tests/helpers/boundary_reflection.py` and `tests/unit/test_boundary_reflection.py`) auditing memory graphs across four architectural junctions to detect and prevent transitive runtime object tunneling, governed by ADR 0013 and SDD-011.
+- Driven Adapter Registry subsystem (`src/services/registry/`) implementing generic protocol `BaseAdapterRegistry[T]` with automated runtime driven adapter reflection enforcement (`_assert_driven_adapter`), governed by ADR 0014 and SDD-012.
+- Specialized port-family registries: `WatcherRegistry` (managing $1 \rightarrow 1$ active input stream watcher sources) and `EgressRegistry` (managing $1 \rightarrow N$ outbound broadcast sinks).
+- Composition root wiring (`src/services/bootstrap.py`) staging adapter instantiation, registry enrollment, and service injection while strictly shielding registries and concrete infrastructure adapters from `ApplicationContext`.
+- Comprehensive unit test suite (`tests/unit/test_adapter_registry.py`) covering tests `TEST-REG-01` through `TEST-REG-05`.
+- Diátaxis How-To runbooks: `docs/how-to/register_driven_adapter.md` (authoring and registering driven adapters) and `docs/how-to/create_driven_adapter_registry.md` (creating new port-family registries).
+
 ## [0.3.0] - 2026-10-09
 
 ### Changed
