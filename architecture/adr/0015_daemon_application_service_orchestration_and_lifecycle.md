@@ -87,9 +87,9 @@ The following 12 rules govern `DaemonService` across five boundary categories, e
 
 ### Category 4: Lifecycle & State Supervision
 
-9. **Rule 4.1: Operational State & Health Supervision:**
-   * *Rule:* `DaemonService` tracks operational metrics only (lifecycle status, uptime, active watcher key, transmitter count, processed event count, error count). It scaffolds basic health status (`HEALTHY`, `DEGRADED`, `UNHEALTHY`) without heavy diagnostics.
-   * *Enforcement:* Verified via `DaemonStatusDTO` inspection tests asserting all exposed fields represent runtime infrastructure telemetry.
+9. **Rule 4.1: Operational State & Pure Lifecycle Supervision:**
+   * *Rule:* `DaemonService` tracks operational daemon metrics only (`state`, `uptime_seconds`, `events_processed`). It strictly avoids leaky fields tied to specific subsystems (e.g. `transmitter_count` or `active_watcher_key`). Driving interfaces query subsystem details exclusively via dedicated peer application services on `ApplicationContext` (e.g. `WatcherService.get_status()`). Basic health status (`HEALTHY`, `DEGRADED`, `UNHEALTHY`) is scaffolded via `DaemonHealthDTO`.
+   * *Enforcement:* Verified via `DaemonStatusDTO` inspection tests asserting that all exposed fields represent pure daemon lifecycle state and contain zero subsystem-specific attributes.
 10. **Rule 4.2: Deterministic Master State Machine:**
     * *Rule:* Global state transitions adhere strictly to: `STOPPED` $\rightleftharpoons$ `STARTING` $\rightarrow$ `RUNNING` $\rightarrow$ `STOPPING` $\rightarrow$ `STOPPED` (or `ERROR`), with operational `PAUSED` state support. `start()` and `stop()` calls are idempotent.
     * *Enforcement:* Exhaustive lifecycle transition test suite in `tests/unit/test_daemon_service.py`.
@@ -333,9 +333,8 @@ class DaemonService(BaseApplicationService):
         """Return operational state metrics."""
         return DaemonStatusDTO(
             state=self._state.value,
+            uptime_seconds=self._calculate_uptime(),
             events_processed=self._events_processed,
-            active_watcher_key=self._watcher_registry.active_key,
-            transmitter_count=len(self._egress_registry),
         )
 
     def get_health(self) -> DaemonHealthDTO:
