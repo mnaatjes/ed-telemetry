@@ -111,19 +111,15 @@ The interaction paths are governed by four mandatory policies, each enforced by 
 
 ---
 
-### Policy P2: Passive Sink Purity Invariant
+### Policy P2: Passive Sink Capability Invariant
 
 * **Statement:**
-  Driven adapters implementing `DiscreteSinkPort` (e.g. telemetry transmitters, broadcast sinks) must remain completely passive (`send()` only). They must never declare lifecycle methods (`start()`, `stop()`). Outbound sinks must be registered exclusively in `EgressRegistry` and broadcast to by Path 1 pipelines.
+  Driven adapters implementing `DiscreteSinkPort` (e.g. telemetry transmitters, webhook sinks) are point-in-time outbound receivers (`send()` only). They must not declare background execution loops or lifecycle management methods (`start()`, `stop()`). Outbound sinks are stateless or externally managed, and may be consumed directly by individual application services or orchestrated via collection registries.
 * **Architectural Rationale:**
-  Upholds the Interface Segregation Principle (ISP) established in ADR 0015. Outbound transmitters do not own background threads and should not force artificial lifecycle management upon consumers.
+  Upholds the Interface Segregation Principle (ISP) established in ADR 0015. Outbound sinks do not own background execution threads and must not force artificial lifecycle management upon consumers.
 * **Machine Enforcement:**
-  1. **MRO Inspection Test:** `tests/unit/test_domain_ports.py` asserts:
-     ```python
-     assert DiscreteSinkPort in EgressPort.__mro__
-     assert LifecyclePort not in EgressPort.__mro__
-     ```
-  2. **Registry Type Guard:** `EgressRegistry.register()` asserts `isinstance(adapter, DiscreteSinkPort)` and raises `TypeError` if the adapter attempts to declare `LifecyclePort`.
+  1. **Structural Capability Verification:** `tests/unit/test_domain_ports.py` (`test_egress_adapters_are_passive`) validates that concrete driven egress adapters satisfy `DiscreteSinkPort` while remaining untainted by `LifecyclePort` (`assert isinstance(tx, DiscreteSinkPort)` and `assert not isinstance(tx, LifecyclePort)`).
+  2. **Compile-Time Static Typing:** `mypy --strict` guarantees that consumers holding references typed as `EgressPort` or `DiscreteSinkPort` cannot invoke `.start()` or `.stop()`.
 
 ---
 
