@@ -144,3 +144,31 @@ When designing or onboarding new adapters, the following anti-patterns violate t
 ### Anti-Pattern 4: The "Dangling Sink" (Direct Outbound Transmission)
 * **Violation:** A functional service directly grabbing a transmitter adapter from `EgressRegistry` and calling `.send()` ad-hoc.
 * **Correction:** Outbound broadcasting is coordinated as part of the telemetry pipeline managed by **Path 1 (`DaemonService`)**.
+
+---
+
+## 6. Disambiguation Rules for Creating Companion Use-Case Facades
+
+When an adapter implements `LifecyclePort` (e.g. `FileSystemWatcher`), architects must determine which capabilities belong in the macro lifecycle loop vs. a companion Path 2 Use-Case Facade:
+
+### Rule 1: The Actor Intent Test (Cockburn Sea-Level Use-Case)
+Does an external human actor (CLI operator) or driving client have a discrete, non-continuous operational goal that completes in a single request-response cycle?
+* Continuous process supervision (`ed-telemetry run`) belongs in **Path 1 (`DaemonService`)**.
+* Discrete status inquiry (`ed-telemetry status`) or pre-flight doctor checks (`ed-telemetry doctor`) justify a **Path 2 Facade (`WatcherService`)**.
+
+### Rule 2: The Lifecycle Exclusion Boundary
+Use-case facades for lifecycle adapters are restricted strictly to capabilities that are **not** part of the continuous event loop:
+* **Lifecycle Loop (Path 1):** Spawning worker threads, stopping threads, joining threads, continuous event dispatching.
+* **Companion Facade (Path 2):** Introspection (`get_status()`, reading current journal path, query lines read), declarative configuration adjustments, or on-demand cache flushing.
+
+### Rule 3: The Multi-Adapter Aggregation Principle
+When a business query requires checking the state of multiple adapters across different registries (e.g. checking both inbound watcher health and outbound network transmitter readiness), encapsulate that aggregation into a single specialized facade (e.g. `HealthDiagnosticService`) rather than forcing the caller to query multiple low-level services.
+
+### Decision Checklist for Companion Facade Creation
+
+| Step | Evaluation Question | If YES | If NO |
+| :---: | :--- | :--- | :--- |
+| **1** | Is the operation part of starting, stopping, or running the continuous event loop? | **DO NOT create a facade method.** Belongs in `DaemonService`. | Proceed to Step 2. |
+| **2** | Does a driving client (CLI/REST) require on-demand access to this capability? | Proceed to Step 3. | **DO NOT expose.** Keep internal to adapter. |
+| **3** | Is it a read-only query (status, health metrics, current file)? | **Create a Query Method** on a Path 2 facade (`get_status()`). | Proceed to Step 4. |
+| **4** | Is it a point-in-time command (rescan directory, adjust polling interval)? | **Create an Action Method** on a Path 2 facade (`rescan()`). | Keep internal to adapter. |

@@ -100,6 +100,8 @@ The interaction paths are governed by four mandatory policies, each enforced by 
 
 * **Statement:**
   Only driven adapters conforming to `LifecyclePort` (`start()`, `stop()`, `@property is_active`) may encapsulate background execution loops or OS worker threads. Furthermore, lifecycle invocation (`.start()`, `.stop()`) is **strictly exclusive** to Path 1 Lifecycle Supervisors (`DaemonService`). No Path 2 functional facade, Path 3 domain facade, or Driving Adapter may directly instantiate threads or invoke lifecycle hooks.
+* **Clause P1.1 (Scope of Companion Path 2 Facades):**
+  Driven adapters conforming to `LifecyclePort` may still be encapsulated by companion Path 2 functional facades (e.g. `WatcherService`) strictly for on-demand capabilities that reside outside the continuous lifecycle loop (such as read-only status introspection, pre-flight diagnostics, or declarative configuration). Such companion facades must never expose or invoke execution lifecycle methods.
 * **Architectural Rationale:**
   Permitting arbitrary services or driving controllers to trigger background workers creates competing thread owners, dangling pipelines, and non-deterministic process shutdown leaks.
 * **Machine Enforcement:**
