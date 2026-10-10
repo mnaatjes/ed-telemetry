@@ -1,12 +1,12 @@
 ---
-title: "ADR 0016: Daemon Application Service Orchestration and Lifecycle Supervision"
-status: "proposed"
+title: "Draft ADR: Daemon Application Service Orchestration and Lifecycle Supervision"
+status: "pending"
 date: "2026-10-10"
 supersedes: ["architecture/adr/0011_watcher_telemetry_application_service.md"]
 tags: ["architecture", "adr", "daemon", "services", "orchestrator", "lifecycle", "supervisor", "composition-root"]
 ---
 
-# ADR 0016: Daemon Application Service Orchestration and Lifecycle Supervision
+# Draft ADR: Daemon Application Service Orchestration and Lifecycle Supervision
 
 ## 1. Context and Problem Statement
 
