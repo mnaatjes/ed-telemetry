@@ -183,3 +183,17 @@ The interaction paths are governed by four mandatory policies, each enforced by 
 ### Negative
 * Requires writing explicit Outbound DTO mappers for all service query methods, increasing initial boilerplate.
 * Pure domain services must be strictly partitioned from I/O services, preventing quick "convenience" disk reads inside schema evaluators.
+
+---
+
+## 8. Documentation and Contributor Enablement Plan
+
+To enable contributors and maintainers to apply these policies and disambiguation rules consistently, the following Diátaxis runbooks will be authored:
+
+1. **`docs/how-to/determine_use_case_facades.md` (Diátaxis How-To):**
+   - Practical decision checklist for determining whether an adapter requires a companion Path 2 use-case facade based on The Three Disambiguation Rules.
+   - Guidelines on structuring query DTOs and shielding lifecycle execution.
+   - Concrete example walkthrough contrasting `FileSystemWatcher` (Path 1) with `WatcherService` (Path 2).
+
+2. **`docs/how-to/classify_driven_adapter_interaction_path.md` (Diátaxis How-To):**
+   - Step-by-step procedure for classifying newly authored driven adapters into Paths 1 through 4 based on port capability protocols and execution cadence.
