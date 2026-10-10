@@ -154,23 +154,97 @@ Every driven adapter implementing `LifecyclePort` must comply with three mandato
    * *Rule:* The `stop()` method must never raise unhandled exceptions resulting from underlying thread crashes or closed OS handles during teardown. Teardown errors must be captured and forwarded to audit handlers or suppressed.
    * *Enforcement:* Automated unit tests verifying `stop()` executes cleanly even when simulated adapter errors occur.
 
+## 7. Refactoring Specifications for Existing Ports & Registries
+
+To align existing domain ports with the new genealogy and machine-enforced policies, the following concrete refactorings must be executed:
+
+### 7.1 `WatcherPort` Refactoring (`src/domain/ports/watcher.py`)
+* **Current State:** Standalone `@runtime_checkable class WatcherPort(Protocol)` that redundantly declares `start()`, `stop()`, and `is_active` alongside its event subscription handlers.
+* **Target Refactored Pedigree:**
+  ```python
+  from domain.ports.base import LifecyclePort
+
+
+  @runtime_checkable
+  class WatcherPort(LifecyclePort, Protocol):
+      """Contract for inbound file and telemetry watchers."""
+
+      def register_event_handler(self, handler: IngestionEventHandler) -> None:
+          """Register a callback for raw file ingestion events."""
+          ...
+
+      def register_audit_handler(self, handler: AuditEventHandler) -> None:
+          """Register a callback for watcher operational audit events."""
+          ...
+
+      # NOTE: start(), stop(), and is_active are inherited directly from LifecyclePort.
+  ```
+* **Enforcement Mechanism:**
+  - `assert issubclass(WatcherPort, LifecyclePort)` and `issubclass(WatcherPort, Port)`.
+  - Driven adapter `FileSystemWatcher` is verified with `isinstance(adapter, LifecyclePort)`.
+  - Conformance to Policies L1, L2, L3 verified in `tests/unit/test_watcher_adapter.py`.
+
+### 7.2 `EgressPort` Refactoring (`src/domain/ports/egress.py`)
+* **Current State:** Standalone `@runtime_checkable class EgressPort(Protocol)` with no root marker link.
+* **Target Refactored Pedigree:**
+  ```python
+  from domain.ports.base import Port
+
+
+  @runtime_checkable
+  class EgressPort(Port, Protocol):
+      """Contract for transmitting telemetry payloads to external endpoints."""
+
+      def send(self, payload: Mapping[str, Any]) -> None:
+          """Transmit a payload to downstream consumers."""
+          ...
+
+      # Zero lifecycle hooks declared. Pure Discrete Sink Archetype.
+  ```
+* **Enforcement Mechanism:**
+  - `assert issubclass(EgressPort, Port)`.
+  - `assert not issubclass(EgressPort, LifecyclePort)` (proving zero lifecycle pollution).
+  - Driven adapters (`NullTransmitter`) satisfy `isinstance(adapter, Port)` and `isinstance(adapter, EgressPort)`, but strictly evaluate `False` for `isinstance(adapter, LifecyclePort)`.
+
+### 7.3 `BaseAdapterRegistry[T]` Refactoring (`src/services/registry/base.py`)
+* **Current State:** Parameterized over an unbounded `T = TypeVar("T")`.
+* **Target Refactored Bound:**
+  ```python
+  from domain.ports.base import Port
+
+  T = TypeVar("T", bound=Port)
+
+
+  class BaseAdapterRegistry(Generic[T]): ...
+  ```
+* **Enforcement Mechanism:**
+  - Statically enforced by `mypy --strict`: attempting to instantiate `BaseAdapterRegistry[SomeNonPortClass]` triggers a type-check compiler error.
+  - Runtime validation in `register()` asserts both `_assert_driven_adapter(adapter)` (module starts with `infrastructure.`) and `isinstance(adapter, Port)`.
+
+### 7.4 Dedicated Verification Suite (`tests/unit/test_domain_ports.py`)
+Introduce a new test suite verifying the port genealogy:
+1. `test_port_marker_pedigree`: Verifies `LifecyclePort`, `WatcherPort`, and `EgressPort` are subclasses of `Port`.
+2. `test_active_vs_passive_discrimination`: Proves that `WatcherPort` is a `LifecyclePort` while `EgressPort` is not.
+3. `test_driven_adapters_satisfy_genealogy`: Asserts `FileSystemWatcher` satisfies `(Port, LifecyclePort, WatcherPort)` and `NullTransmitter` satisfies `(Port, EgressPort)`.
+
 ---
 
-## 7. Migration and Implementation Plan
+## 8. Migration and Implementation Plan
 
 1. **Phase 1: Base Port & Capability Protocols:**
    - Author `src/domain/ports/base.py` containing `Port` and `LifecyclePort`.
-   - Update `src/domain/ports/__init__.py` to export `Port` and `LifecyclePort`.
+   - Update `src/domain/ports/__init__.py` to export `Port`, `LifecyclePort`, `WatcherPort`, `EgressPort`.
 2. **Phase 2: Port Refactoring:**
-   - Update `src/domain/ports/egress.py`: Define `class EgressPort(Port, Protocol)`.
-   - Update `src/domain/ports/watcher.py`: Define `class WatcherPort(LifecyclePort, Protocol)`.
-3. **Phase 3: Registry & Reflection Alignment:**
-   - Parameterize `BaseAdapterRegistry[T]` with `T = TypeVar("T", bound=Port)`.
-   - Add unit tests in `tests/unit/test_domain_ports.py` asserting protocol inheritance, runtime checkability, and structural conformance.
+   - Refactor `src/domain/ports/egress.py` to inherit from `Port`.
+   - Refactor `src/domain/ports/watcher.py` to inherit from `LifecyclePort`.
+3. **Phase 3: Registry Bound & Verification Suite:**
+   - Bind `BaseAdapterRegistry[T]` type variable to `T = TypeVar("T", bound=Port)`.
+   - Implement `tests/unit/test_domain_ports.py`.
+   - Verify all existing unit tests and quality gates pass via `scripts/verify.py`.
 
 ---
 
-## 8. Consequences
+## 9. Consequences
 
 ### Positive
 * **Unified Genealogy:** Every domain port descends structurally from `Port`, providing clean polymorphic bounds for registries and services.
