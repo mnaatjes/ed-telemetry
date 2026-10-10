@@ -57,10 +57,10 @@ flowchart TD
     end
 
     %% Driving connections
-    CLI -->|Calls .start() / .stop()| CTX
-    CLI -->|Calls .discover_path()| CTX
-    REST -->|Calls .validate()| CTX
-    TUI -->|Subscribes .subscribe()| CTX
+    CLI -->|"Calls start or stop"| CTX
+    CLI -->|"Calls discover_path"| CTX
+    REST -->|"Calls validate"| CTX
+    TUI -->|"Subscribes"| CTX
 
     CTX --> P1
     CTX --> P2
