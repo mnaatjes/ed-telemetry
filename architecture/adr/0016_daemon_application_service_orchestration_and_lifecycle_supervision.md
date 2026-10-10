@@ -1,22 +1,24 @@
 ---
-title: "ADR 0015: Daemon Application Service Orchestration and Lifecycle Supervision"
+title: "ADR 0016: Daemon Application Service Orchestration and Lifecycle Supervision"
 status: "proposed"
 date: "2026-10-10"
 supersedes: ["architecture/adr/0011_watcher_telemetry_application_service.md"]
 tags: ["architecture", "adr", "daemon", "services", "orchestrator", "lifecycle", "supervisor", "composition-root"]
 ---
 
-# ADR 0015: Daemon Application Service Orchestration and Lifecycle Supervision
+# ADR 0016: Daemon Application Service Orchestration and Lifecycle Supervision
 
 ## 1. Context and Problem Statement
 
 In Pure Hexagonal Architecture ([ADR 0012](0012_segregation_of_root_monorepo_topology_into_apps_and_libs.md)), external driving entrypoints (`src/interfaces/`) must interact exclusively with the Application Service Layer (`src/services/`).
 
-Currently, `ed-telemetry` retains an architectural defect and boundary violation:
+With the completion of Domain Port Protocol Genealogy ([ADR 0015](0015_domain_port_protocol_genealogy_and_lifecycle_governance.md)) and Driven Adapter Registries ([ADR 0014](0014_driven_adapter_registry_architecture_and_composition_root.md)), domain boundary ports are cleanly segregated into granular capability protocols (`LifecyclePort`, `StreamSourcePort`, `DiscreteSinkPort`). `WatcherPort` specializes `LifecyclePort` and `StreamSourcePort`, while `EgressPort` specializes `DiscreteSinkPort`. Adapter registries (`WatcherRegistry`, `EgressRegistry`) provide bounded runtime management over driven adapters.
+
+However, `ed-telemetry` retains an architectural defect and boundary violation:
 1. **Transitive Runtime Object Tunneling (Junction 1):** `ApplicationContext` exposes `engine: TelemetryEngine`. Because `TelemetryEngine` is located in `src/domain/engine.py`, external driving surfaces (e.g. `src/interfaces/cli/main.py`) directly invoke domain entity methods (`app_ctx.engine.start()`, `app_ctx.engine.stop()`) without importing domain modules. This active leak was identified and benchmarked in [ADR 0013](0013_runtime_reflection_verification_for_object_tunneling_boundaries.md) and [SDD-011](../designs/0011_runtime_reflection_verification_for_object_tunneling_boundaries.md).
 2. **Conflated Responsibilities in `TelemetryEngine`:** `TelemetryEngine` (originally stubbed in ADR 0001, ADR 0003, and ADR 0008) serves multiple mismatched roles—it manages OS process/thread lifecycles, retains background thread state, directly binds to inbound and outbound driven ports, and attempts to coordinate event routing. In pure domain architecture, domain entities must remain pure business logic and must never supervise long-running OS processes or thread lifecycles.
 3. **Competing Lifecycle Ownership Defect in `WatcherService` (ADR 0011):** [ADR 0011](0011_watcher_telemetry_application_service.md) introduced `WatcherService` with its own `start()` and `stop()` methods delegating directly to `WatcherPort`. Exposing `start()` and `stop()` on both `ApplicationContext.engine` and `ApplicationContext.watcher_service` creates an architectural conflict: two competing services claiming authority over background threads without coordinated pipeline wiring or centralized state management. Calling `watcher_service.stop()` stops the background thread while leaving `engine.is_running` reporting `True`.
-4. **Missing Master Orchestrator:** Now that driven adapters are organized into specialized port-family registries ([ADR 0014](0014_driven_adapter_registry_architecture_and_composition_root.md), [SDD-012](../designs/0012_driven_adapter_registry_and_composition_root.md)), the system requires a designated **Master Lifecycle Supervisor** to coordinate operational state, supervise background workers, wire the active event pipeline from `WatcherRegistry` to `EgressRegistry`, scaffold health reporting, and provide an immutable query/command boundary.
+4. **Missing Master Orchestrator:** Now that driven adapters are organized into specialized port-family registries ([ADR 0014](0014_driven_adapter_registry_architecture_and_composition_root.md)) and governed by standardized capability protocols ([ADR 0015](0015_domain_port_protocol_genealogy_and_lifecycle_governance.md)), the system requires a designated **Master Lifecycle Supervisor** to coordinate operational state, supervise `LifecyclePort` workers, wire the active event pipeline from `WatcherRegistry` to `EgressRegistry`, scaffold health reporting, and provide an immutable query/command boundary.
 
 We must decide the formal architectural boundaries, invariants, lifecycle state machine, and enforcement mechanisms for `DaemonService`, while formally superseding the conflicting lifecycle methods of ADR 0011 and decommissioning `TelemetryEngine`.
 
@@ -25,19 +27,19 @@ We must decide the formal architectural boundaries, invariants, lifecycle state 
 ## 2. Superseded Architectural Decisions
 
 This ADR formally records the following supersedence:
-* **ADR 0011 (Section 3.2.2 - `WatcherService` Lifecycle Methods):** **SUPERSEDED.** `WatcherService` is stripped of `start()` and `stop()`. It is refactored into a dedicated read-only Subsystem Query Service exposing `get_status() -> WatcherStatusDTO`.
+* **ADR 0011 (Section 3.2.2 - `WatcherService` Lifecycle Methods):** **SUPERSEDED.** `WatcherService` is stripped of `start()` and `stop()`. It is refactored into a dedicated read-only Subsystem Query Service exposing `get_status() -> WatcherStatusDTO` querying the active watcher registered in `WatcherRegistry`.
 * **ADR 0001, ADR 0003, ADR 0008 (`TelemetryEngine` Lifecycle and Wiring):** **SUPERSEDED & RETIRED.** `TelemetryEngine` is decommissioned. Process lifecycle, thread supervision, and event pipeline orchestration move entirely to `DaemonService`.
 
 ---
 
 ## 3. Decision Drivers
 
-* **Master Lifecycle Supervision:** A single, authoritative service (`DaemonService`) must hold exclusive ownership of process-level `start()` and `stop()`, eliminating competing out-of-band lifecycle controls.
+* **Master Lifecycle Supervision:** A single, authoritative service (`DaemonService`) must hold exclusive ownership of process-level `start()` and `stop()`, supervising active adapters implementing `LifecyclePort` and eliminating competing out-of-band lifecycle controls.
 * **Eradication of Junction 1 Tunneling:** Completely remove `engine: TelemetryEngine` from `ApplicationContext` and decommission `TelemetryEngine`, restoring strict zero-tolerance boundary validation (`assert len(engine_violations) == 0`).
-* **Active Event Pipeline Orchestration:** `DaemonService` must wire event emissions from `WatcherRegistry.get_active()` directly into `EgressRegistry.broadcast()`.
+* **Active Event Pipeline Orchestration:** `DaemonService` must wire event emissions from `WatcherRegistry.get_active()` (conforming to `StreamSourcePort`) directly into `EgressRegistry.broadcast()` (conforming to `DiscreteSinkPort`).
 * **Clean Separation of Concerns:** Sub-services (e.g. `WatcherService`) act strictly as query and diagnostic providers, not independent thread spawners.
 * **Operational Controls & Scaffolding for Health Reporting:** Expose operational controls (`start`, `stop`, `pause`, `resume`) and scaffold basic health reporting (`DaemonHealthDTO` / operational status flags) for future elaboration.
-* **Cooperative Thread Supervision:** Deterministic join on shutdown (`SIGINT`/`SIGTERM`) preventing thread or descriptor leaks.
+* **Cooperative Thread Supervision:** Deterministic join on shutdown (`SIGINT`/`SIGTERM`) adhering to Policy L1, L2, L3 lifecycle invariants (ADR 0015).
 * **Machine-Enforced Invariants:** Every architectural rule governing the orchestrator must be backed by an automated enforcement mechanism.
 
 ---
@@ -55,7 +57,7 @@ The following 12 rules govern `DaemonService` across five boundary categories, e
 ### Category 1: Dependency & Directionality Invariants
 
 1. **Rule 1.1: Downward Layering Only (Invariant D):**
-   * *Rule:* `DaemonService` resides in `src/services/daemon.py`. It may depend strictly downward on `src/domain/` entities and ports. It must never depend on or import from Driving Interfaces (`src/interfaces/`).
+   * *Rule:* `DaemonService` resides in `src/services/daemon.py`. It may depend strictly downward on `src/domain/` entities and ports (`LifecyclePort`, `StreamSourcePort`, `DiscreteSinkPort`). It must never depend on or import from Driving Interfaces (`src/interfaces/`).
    * *Enforcement:* Verified statically on every commit by `import-linter` via contract `Contracts.downward_layering`.
 2. **Rule 1.2: Adapter Shielding (Invariant G):**
    * *Rule:* `DaemonService` must never import or directly instantiate concrete driven adapters (`src/infrastructure/`). It receives adapters strictly via abstract domain ports or port-family registries (`src/services/registry/`) injected at construction.
@@ -97,7 +99,7 @@ The following 12 rules govern `DaemonService` across five boundary categories, e
 ### Category 5: Concurrency & Fault Isolation
 
 11. **Rule 5.1: Master Thread Supervision:**
-    * *Rule:* Exclusively coordinates startup and shutdown of background adapter threads. Shutdown must guarantee deterministic worker join with a configurable timeout, preventing lingering daemon threads or file descriptor leaks.
+    * *Rule:* Exclusively coordinates startup and shutdown of background adapter threads conforming to `LifecyclePort`. Shutdown must guarantee deterministic worker join with a configurable timeout, preventing lingering daemon threads or file descriptor leaks (Policies L1–L3).
     * *Enforcement:* Thread leak assertion tests in `tests/unit/test_daemon_service.py` comparing `threading.active_count()` before `start()` and after `stop()`.
 12. **Rule 5.2: Service Exception Hierarchy:**
     * *Rule:* Uncaught exceptions during startup or background coordination are mapped to `ApplicationServiceError` subclasses (`DaemonLifecycleError`, `DaemonStartupError`), preventing raw OS or socket exceptions from bubbling untransformed to driving surfaces.
