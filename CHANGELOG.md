@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Domain Port Protocol Genealogy and Capability Taxonomy (`src/domain/ports/base.py`) establishing root polymorphic marker `Port` and granular capability protocols (`LifecyclePort`, `DiscreteSinkPort`, `StreamSourcePort`, `ConnectionPort`, `TransactionalPort`), governed by ADR 0015 and SDD-013.
+- Refactored `WatcherPort` (`src/domain/ports/watcher.py`) composing `LifecyclePort` and `StreamSourcePort`, and `EgressPort` (`src/domain/ports/egress.py`) specializing `DiscreteSinkPort`.
+- Refactored generic `BaseAdapterRegistry[T]` (`src/services/registry/base.py`) bounding `T = TypeVar("T", bound=Port)` and enforcing domain capability protocol conformance during adapter registration.
+- Comprehensive unit test suite (`tests/unit/test_domain_ports.py`) covering port marker pedigree (`TEST-PORT-01`), active vs. passive discrimination (`TEST-PORT-02`), driven adapter satisfaction (`TEST-PORT-03`), registry generic bound enforcement (`TEST-PORT-04`), and behavioral lifecycle policies L1/L2/L3 (`TEST-PORT-05`).
 - Runtime reflection boundary verification harness (`tests/helpers/boundary_reflection.py` and `tests/unit/test_boundary_reflection.py`) auditing memory graphs across four architectural junctions to detect and prevent transitive runtime object tunneling, governed by ADR 0013 and SDD-011.
 - Driven Adapter Registry subsystem (`src/services/registry/`) implementing generic protocol `BaseAdapterRegistry[T]` with automated runtime driven adapter reflection enforcement (`_assert_driven_adapter`), governed by ADR 0014 and SDD-012.
 - Specialized port-family registries: `WatcherRegistry` (managing $1 \rightarrow 1$ active input stream watcher sources) and `EgressRegistry` (managing $1 \rightarrow N$ outbound broadcast sinks).
