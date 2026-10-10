@@ -1,35 +1,26 @@
-"""Abstract ports for inbound telemetry watchers."""
+"""Abstract ports for inbound telemetry watchers.
 
-from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+Governed by ADR 0015 and SDD-013.
+"""
 
-# Type aliases for event handlers
-# Handlers accept unparsed event envelopes or domain payloads
-IngestionEventHandler = Callable[[Any], None]
-AuditEventHandler = Callable[[Any], None]
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
+from domain.ports.base import (
+    AuditEventHandler,
+    IngestionEventHandler,
+    LifecyclePort,
+    StreamSourcePort,
+)
+
+__all__ = ["WatcherPort", "IngestionEventHandler", "AuditEventHandler"]
 
 
 @runtime_checkable
-class WatcherPort(Protocol):
-    """Contract for inbound file and telemetry watchers."""
+class WatcherPort(LifecyclePort, StreamSourcePort, Protocol):
+    """Contract for inbound file and telemetry watchers.
 
-    def register_event_handler(self, handler: IngestionEventHandler) -> None:
-        """Register a callback for raw file ingestion events."""
-        ...
-
-    def register_audit_handler(self, handler: AuditEventHandler) -> None:
-        """Register a callback for watcher operational audit events."""
-        ...
-
-    def start(self) -> None:
-        """Start listening or polling for telemetry events asynchronously."""
-        ...
-
-    def stop(self) -> None:
-        """Stop listening or polling and wait for background workers to exit."""
-        ...
-
-    @property
-    def is_active(self) -> bool:
-        """Return True if watcher is actively listening."""
-        ...
+    Composes LifecyclePort (worker archetype) and StreamSourcePort (event streaming).
+    Lifecycle hooks (start, stop, is_active) are inherited directly from LifecyclePort.
+    """

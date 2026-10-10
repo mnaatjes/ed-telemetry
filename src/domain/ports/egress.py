@@ -1,13 +1,21 @@
-"""Abstract ports for outbound telemetry egress."""
+"""Abstract ports for outbound telemetry egress.
 
-from collections.abc import Mapping
-from typing import Any, Protocol, runtime_checkable
+Governed by ADR 0015 and SDD-013.
+"""
+
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
+from domain.ports.base import DiscreteSinkPort
+
+__all__ = ["EgressPort"]
 
 
 @runtime_checkable
-class EgressPort(Protocol):
-    """Contract for transmitting telemetry payloads to external endpoints."""
+class EgressPort(DiscreteSinkPort, Protocol):
+    """Contract for transmitting telemetry payloads to external endpoints.
 
-    def send(self, payload: Mapping[str, Any]) -> None:
-        """Transmit a payload to downstream consumers."""
-        ...
+    Specializes DiscreteSinkPort (pure outbound sink archetype).
+    Zero lifecycle hooks declared.
+    """

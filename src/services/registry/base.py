@@ -8,7 +8,16 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from typing import Generic, TypeVar
 
-T = TypeVar("T")
+from domain.ports.base import (
+    ConnectionPort,
+    DiscreteSinkPort,
+    LifecyclePort,
+    Port,
+    StreamSourcePort,
+    TransactionalPort,
+)
+
+T = TypeVar("T", bound=Port)
 
 
 class BaseAdapterRegistry(Generic[T]):
@@ -33,6 +42,11 @@ class BaseAdapterRegistry(Generic[T]):
         if key in self._adapters:
             raise KeyError(f"Adapter with key '{key}' is already registered.")
         self._assert_driven_adapter(adapter)
+        if not isinstance(
+            adapter,
+            (LifecyclePort, DiscreteSinkPort, StreamSourcePort, ConnectionPort, TransactionalPort),
+        ):
+            raise TypeError(f"Adapter must satisfy domain.ports.base.Port, got: {type(adapter).__name__}")
         self._adapters[key] = adapter
 
     def get(self, key: str) -> T:
