@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Domain Port Protocol Genealogy and Capability Taxonomy (`src/domain/ports/base.py`) establishing root polymorphic marker `Port` and granular capability protocols (`LifecyclePort`, `DiscreteSinkPort`, `StreamSourcePort`, `ConnectionPort`, `TransactionalPort`), governed by ADR 0015 and SDD-013.
+- Hexagonal Interaction Path Governance and Enforcement Policies (`architecture/adr/0016_interaction_path_governance_and_enforcement_policies.md` and `architecture/designs/0014_interaction_path_governance_and_enforcement_policies.md`) codifying the Four Canonical Paths and binding Policies P1 through P4.
+- Static AST Lifecycle Exclusivity checker (`scripts/lint_lifecycle_exclusivity.py`) enforcing Policy P1 by preventing non-supervisor services from invoking `.start()` or `.stop()`, integrated directly into Tier 2 Quality Gates (`scripts/verify.py`).
+- Machine-enforced boundary contract `Invariant P3` in `pyproject.toml` forbidding Path 3 computational domain modules from importing driven adapters or adapter registries.
+- Policy test suite (`tests/unit/test_path_policies.py`) validating tests `TEST-PATH-01` through `TEST-PATH-05` covering AST lifecycle exclusivity, passive egress adapter structural capability, pure domain isolation, and gateway/DTO reflection integrity.
+- Diátaxis developer and contributor How-To runbooks: `docs/how-to/classify_driven_adapter_interaction_path.md` (classifying adapters into Paths 1-4) and `docs/how-to/determine_use_case_facades.md` (applying The Three Disambiguation Rules for companion facades).
 - Refactored `WatcherPort` (`src/domain/ports/watcher.py`) composing `LifecyclePort` and `StreamSourcePort`, and `EgressPort` (`src/domain/ports/egress.py`) specializing `DiscreteSinkPort`.
 - Refactored generic `BaseAdapterRegistry[T]` (`src/services/registry/base.py`) bounding `T = TypeVar("T", bound=Port)` and enforcing domain capability protocol conformance during adapter registration.
 - Comprehensive unit test suite (`tests/unit/test_domain_ports.py`) covering port marker pedigree (`TEST-PORT-01`), active vs. passive discrimination (`TEST-PORT-02`), driven adapter satisfaction (`TEST-PORT-03`), registry generic bound enforcement (`TEST-PORT-04`), and behavioral lifecycle policies L1/L2/L3 (`TEST-PORT-05`).

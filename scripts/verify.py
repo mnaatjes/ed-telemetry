@@ -24,6 +24,10 @@ CHECKS: list[tuple[str, list[str]]] = [
     ("Ruff Format Check", [sys.executable, "-m", "ruff", "format", "--check", "src", "sdk", "tests"]),
     ("Mypy Static Typing", [sys.executable, "-m", "mypy"]),
     (
+        "AST Lifecycle Exclusivity",
+        [sys.executable, "scripts/lint_lifecycle_exclusivity.py"],
+    ),
+    (
         "Import Linter Boundaries",
         [
             sys.executable,

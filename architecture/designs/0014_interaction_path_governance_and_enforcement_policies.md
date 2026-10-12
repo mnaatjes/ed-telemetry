@@ -231,30 +231,31 @@ sequenceDiagram
 
 ## 5. Machine-Enforced Verification Harness Strategy
 
-Every policy declared in ADR 0016 is mapped to an automated test fixture executed within Tier 2 Quality Gates (`scripts/verify.py`):
+Every policy declared in ADR 0016 is mapped to an automated quality gate executed within Tier 2 Quality Gates (`scripts/verify.py`):
 
-| Test ID | Governing Policy | Verification Mechanism | Test File / Target | Failure Condition |
+| Test ID | Governing Policy | Verification Mechanism | Quality Gate Stage | Failure Condition |
 | :---: | :--- | :--- | :--- | :--- |
-| **TEST-PATH-01** | Policy P1 (Lifecycle Exclusivity) | AST Inspection & Pytest | `tests/unit/test_path_policies.py` | Calls to `.start()` / `.stop()` found outside `services/daemon.py`. |
-| **TEST-PATH-02** | Policy P1 (Thread Leak Guard) | Thread Count Tracking | `tests/unit/test_daemon_service.py` | `threading.active_count()` leaks threads after `daemon_service.stop()`. |
-| **TEST-PATH-03** | Policy P2 (Passive Sink Capability) | Structural Type Check | `tests/unit/test_domain_ports.py` | Egress adapters claim `LifecyclePort` or declare `start`/`stop`. |
-| **TEST-PATH-04** | Policy P3 (Pure Domain Isolation) | AST Import Boundaries | `import-linter` (CLI Contract) | Path 3 services import from `infrastructure` or `services.registry`. |
-| **TEST-PATH-05** | Policy P4 (Gateway & DTO Purity) | Memory Graph Reflection | `tests/unit/test_boundary_reflection.py` | `ApplicationContext` or DTO fields expose domain/infrastructure types. |
+| **TEST-PATH-01** | Policy P1 (Lifecycle Exclusivity AST) | AST Linter (`scripts/lint_lifecycle_exclusivity.py`) | Tier 2 (`scripts/verify.py`) | Any call to `.start()` or `.stop()` found in `src/services/` (outside authorized supervisor modules). |
+| **TEST-PATH-02** | Policy P2 (Passive Sink Capability) | Structural Capability Assertions | Pytest (`tests/unit/test_domain_ports.py`) | Concrete egress adapters implement `LifecyclePort` or declare `start()` / `stop()` methods. |
+| **TEST-PATH-03** | Policy P3 (Pure Domain Isolation) | AST Import Boundaries | `import-linter` (`pyproject.toml`) | Path 3 computational modules import from `infrastructure` or `services.registry`. |
+| **TEST-PATH-04** | Policy P4 (Gateway Attribute Integrity) | Memory Graph Reflection Harness | Pytest (`tests/unit/test_boundary_reflection.py`) | Attributes on `ApplicationContext` fail `BaseApplicationService` protocol or leak raw infrastructure. |
+| **TEST-PATH-05** | Policy P4 (DTO Output Purity) | Recursive Reflection Field Audit | Pytest (`tests/unit/test_boundary_reflection.py`) | Service method return DTOs leak domain entities, port protocols, or concrete adapters. |
 
 ---
 
 ## 6. Phased Implementation Roadmap
 
-* **Milestone 1: Verification Harness Baseline (TEST-PATH-01 - TEST-PATH-05):**
-  - Implement AST scan for lifecycle method exclusivity.
-  - Implement `import-linter` contract for Path 3 domain isolation.
-  - Assert egress adapter passivity in unit test suite.
-* **Milestone 2: DaemonService Orchestration (Path 1 Implementation):**
-  - Implement `src/services/daemon.py` with selective lifecycle gating.
-  - Wire `WatcherRegistry` to `EgressRegistry` broadcasting.
-  - Decommission legacy `TelemetryEngine`.
-* **Milestone 3: Subsystem Facade Refactoring (Path 2 Alignment):**
-  - Refactor `WatcherService` into query-only facade (removing `start()`/`stop()`).
-* **Milestone 4: Diátaxis Operator Documentation:**
-  - Author `docs/how-to/determine_use_case_facades.md`.
-  - Author `docs/how-to/classify_driven_adapter_interaction_path.md`.
+The implementation of SDD-014 is strictly confined to establishing the architectural path rules, wiring the machine enforcement quality gates into the automated verification pipeline, and authoring Diátaxis operator/developer documentation. Concrete implementation of `DaemonService` and refactoring of `WatcherService` will be governed by their own dedicated design and implementation cycle:
+
+* **Phase 1: Automated Enforcement Quality Gates:**
+  - **Gate 1 (AST Lifecycle Exclusivity Linter):** Implement `scripts/lint_lifecycle_exclusivity.py` scanning `src/services/` (excluding whitelisted supervisor modules) to assert that no non-supervisor service invokes `.start()` or `.stop()`. Wire directly into `CHECKS` in `scripts/verify.py`.
+  - **Gate 2 (Import-Linter Boundary Contract):** Add contract `Invariant P3: Path 3 pure domain isolation` in `pyproject.toml` forbidding computational domain modules from importing `infrastructure` or `services.registry`.
+  - **Gate 3 (Policy Test Suite `tests/unit/test_path_policies.py`):** Implement test fixtures for `TEST-PATH-01` through `TEST-PATH-05` validating lifecycle exclusivity, passive sink structural capability, and reflection boundaries.
+
+* **Phase 2: Diátaxis Contributor & Operator Documentation (`docs/how-to/`):**
+  - Author `docs/how-to/classify_driven_adapter_interaction_path.md`: Step-by-step practical procedure enabling contributors to classify newly authored driven adapters into Paths 1 through 4 based on port capability protocols and temporal cadence.
+  - Author `docs/how-to/determine_use_case_facades.md`: Decision checklist and procedural guide based on The Three Disambiguation Rules for determining whether an adapter requires a companion Path 2 use-case facade.
+
+* **Phase 3: Pipeline Integration & Verification:**
+  - Execute full Tier 2 quality gates (`.venv/bin/python scripts/verify.py`).
+  - Verify all 5 gates pass synchronously: Ruff linting, Ruff formatting, Mypy typing, AST Lifecycle Exclusivity check, Import-Linter boundaries, Pytest suite, and CLI smoke test.

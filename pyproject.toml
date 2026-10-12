@@ -141,6 +141,17 @@ forbidden_modules = [
     "mcp",
 ]
 
+[[tool.importlinter.contracts]]
+name = "Invariant P3: Path 3 computational modules forbidden from infrastructure and registries"
+type = "forbidden"
+source_modules = [
+    "domain",
+]
+forbidden_modules = [
+    "infrastructure",
+    "services.registry",
+]
+
 [tool.bumpversion]
 current_version = "0.3.0"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
