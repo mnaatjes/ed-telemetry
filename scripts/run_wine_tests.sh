@@ -269,6 +269,7 @@ from ed_telemetry.core.ports.dto import (
     GameStatusSnapshotDTO,
     AuxiliarySnapshotDTO,
     HintSubmissionDTO,
+    TelemetryBatchDTO,
 )
 
 with tempfile.TemporaryDirectory() as tmp_dir:
@@ -328,7 +329,24 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     assert 'Reactor not running' in hint_dto.detail
     print(f'  - SubmitSnapshotRefreshUseCase execution on Windows: PASS')
 
-    # 7. DTO Immutability
+    # 7. GetTelemetryEventsUseCase (start streaming, write event to disk, drain via GetTelemetryEventsUseCase)
+    container.process_telemetry_stream_use_case.start_streaming()
+    import time
+    with (win_dir / 'Journal.2026-10-09T100000.01.log').open('a', encoding='utf-8') as fp:
+        fp.write('{\"event\":\"DockingGranted\",\"StationName\":\"Jameson\"}\n')
+        fp.flush()
+
+    # Wait briefly for watcher loop tick
+    time.sleep(0.15)
+    container.process_telemetry_stream_use_case.stop_streaming()
+
+    batch_dto = container.get_telemetry_events_use_case.get_events(limit=10)
+    assert isinstance(batch_dto, TelemetryBatchDTO)
+    assert len(batch_dto.events) > 0
+    assert any(b'DockingGranted' in e.payload_bytes or b'FileHeader' in e.payload_bytes for e in batch_dto.events)
+    print(f'  - GetTelemetryEventsUseCase buffered consumption on Windows ({len(batch_dto.events)} events): PASS')
+
+    # 8. DTO Immutability
     try:
         hint_dto.accepted = False  # type: ignore[misc]
         raise AssertionError('Expected FrozenInstanceError')

@@ -174,3 +174,56 @@ class TestSubmitSnapshotRefreshUseCase:
         assert res.accepted is True
         assert res.target_name == "Market.json"
         assert res.action == "hint_snapshot"
+
+
+class TestGetTelemetryEventsUseCase:
+    """Verifies GetTelemetryEventsUseCase consuming from EventQueuePort."""
+
+    def test_get_events_drains_events_from_queue(self) -> None:
+        from datetime import UTC, datetime
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO
+        from ed_telemetry.core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
+        from tests.doubles.fake_adapters import FakeEventQueueAdapter
+
+        ev1 = TelemetryPayloadDTO(
+            topic="telemetry.journal",
+            timestamp=datetime.now(UTC),
+            payload_bytes=b'{"event":"FSDJump"}',
+        )
+        ev2 = TelemetryPayloadDTO(
+            topic="telemetry.status",
+            timestamp=datetime.now(UTC),
+            payload_bytes=b'{"Flags":16}',
+        )
+        queue = FakeEventQueueAdapter(initial_events=[ev1, ev2])
+        use_case = GetTelemetryEventsUseCase(queue=queue)
+
+        batch = use_case.get_events(limit=10)
+        assert len(batch.events) == 2
+        assert batch.events[0].topic == "telemetry.journal"
+        assert batch.events[1].topic == "telemetry.status"
+        assert batch.remaining_count == 0
+        assert batch.dropped_count == 0
+
+    def test_get_events_respects_batch_limit(self) -> None:
+        from datetime import UTC, datetime
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO
+        from ed_telemetry.core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
+        from tests.doubles.fake_adapters import FakeEventQueueAdapter
+
+        events = [
+            TelemetryPayloadDTO(topic=f"telemetry.event_{i}", timestamp=datetime.now(UTC), payload_bytes=b"{}")
+            for i in range(5)
+        ]
+        queue = FakeEventQueueAdapter(initial_events=events)
+        use_case = GetTelemetryEventsUseCase(queue=queue)
+
+        batch1 = use_case.get_events(limit=2)
+        assert len(batch1.events) == 2
+        assert batch1.remaining_count == 3
+
+        batch2 = use_case.get_events(limit=10)
+        assert len(batch2.events) == 3
+        assert batch2.remaining_count == 0

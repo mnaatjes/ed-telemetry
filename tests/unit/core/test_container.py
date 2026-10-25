@@ -7,6 +7,7 @@ from ed_telemetry.core.use_cases.find_journal_path import FindJournalPathUseCase
 from ed_telemetry.core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
 from ed_telemetry.core.use_cases.get_journal_files import GetJournalFilesUseCase
 from ed_telemetry.core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
+from ed_telemetry.core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
 from ed_telemetry.core.use_cases.get_watcher_status import GetWatcherStatusUseCase
 from ed_telemetry.core.use_cases.process_telemetry_stream import (
     ProcessTelemetryStreamUseCase,
@@ -52,4 +53,8 @@ class TestContainer:
         assert isinstance(
             container.submit_snapshot_refresh_use_case,
             SubmitSnapshotRefreshUseCase,
+        )
+        assert isinstance(
+            container.get_telemetry_events_use_case,
+            GetTelemetryEventsUseCase,
         )

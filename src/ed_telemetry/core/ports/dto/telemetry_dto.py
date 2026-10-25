@@ -132,3 +132,12 @@ class HintSubmissionDTO(DataTransferObject):
     target_name: str | None
     accepted: bool
     detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryBatchDTO(DataTransferObject):
+    """Batch of telemetry payloads polled from an outbound buffered queue."""
+
+    events: tuple[TelemetryPayloadDTO, ...]
+    remaining_count: int
+    dropped_count: int
