@@ -373,7 +373,19 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     container.http_api_adapter.stop()
     print('  - HttpApiAdapter local server on Windows: PASS')
 
-    # 10. DTO Immutability
+    # 10. CliTelemetryAdapter subcommands under Windows NT
+    code_status, payload_status = container.cli_adapter.run(['status', '--json'])
+    assert code_status == 0
+    assert payload_status['is_active'] is False
+    code_game, payload_game = container.cli_adapter.run(['status', 'game', '--json'])
+    assert code_game == 0
+    assert payload_game['exists'] is True
+    code_events, payload_events = container.cli_adapter.run(['events', '--json'])
+    assert code_events == 0
+    assert payload_events['count'] > 0
+    print('  - CliTelemetryAdapter execution on Windows: PASS')
+
+    # 11. DTO Immutability
     try:
         hint_dto.accepted = False  # type: ignore[misc]
         raise AssertionError('Expected FrozenInstanceError')
