@@ -187,8 +187,9 @@ class EgressPort(DrivenPort, DiscreteSinkPort, Protocol):
 
 ### 2.3 Driving Ports and DTO Contracts (`core/ports/driving/`)
 
-Driving ports define operations triggered by driving surfaces (CLI, MCP, API). In compliance with `HEXA-TRUTH-25` and `HEXA-TRUTH-28`:
-- Port names represent business intention, not persistence CRUD.
+Driving ports define operations triggered by driving surfaces (CLI, MCP, API). In compliance with `HEXA-TRUTH-20`, `HEXA-TRUTH-25`, and `HEXA-TRUTH-28`:
+- Driving ports reside strictly in `core/ports/driving/` and inherit from `DrivingPort`.
+- Port names represent business capabilities rather than CRUD verbs.
 - Method parameters and return values are pure primitives or frozen dataclasses.
 
 ```python
@@ -216,34 +217,115 @@ class StartMonitoringCommand(DataTransferObject):
     poll_interval: float | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class SnapshotSyncResultDTO(DataTransferObject):
+    """Summary of point-in-time snapshot synchronization."""
+
+    files_inspected: int
+    payloads_emitted: int
+    active_journal_file: str | None
+
+
 @runtime_checkable
-class WatchTelemetryPort(DrivingPort, Protocol):
-    """Primary port for telemetry stream supervision and status inspection."""
+class GetWatcherStatusPort(DrivingPort, Protocol):
+    """Primary driving port for querying telemetry watcher operational health and status."""
 
     def get_status(self) -> WatcherStatusDTO: ...
-    def start_monitoring(self, command: StartMonitoringCommand | None = None) -> None: ...
-    def stop_monitoring(self) -> None: ...
+
+
+@runtime_checkable
+class ProcessTelemetryStreamPort(DrivingPort, Protocol):
+    """Primary driving port for managing continuous inbound telemetry event ingestion."""
+
+    def start_streaming(self, command: StartMonitoringCommand | None = None) -> None: ...
+    def stop_streaming(self) -> None: ...
+
+
+@runtime_checkable
+class SyncJournalSnapshotPort(DrivingPort, Protocol):
+    """Primary driving port for executing point-in-time synchronization of journal and status snapshots."""
+
+    def sync_snapshots(self) -> SnapshotSyncResultDTO: ...
 ```
 
 ---
 
 ## 3. Application Use Cases (`core/use_cases/`)
 
-Application services (`src/services/`) are eliminated. Business capabilities are encapsulated in isolated, stateless interactors matching `^[A-Z][a-zA-Z0-9]+UseCase$` (`HEXA-TRUTH-11, 14`):
+Application services (`src/services/`) are eliminated. Business capabilities are encapsulated in isolated, stateless interactors matching `^[A-Z][a-zA-Z0-9]+UseCase$` (`HEXA-TRUTH-11, 14`).
 
-### 3.1 `WatchTelemetryUseCase`
-- **Implements**: `WatchTelemetryPort`
-- **Dependencies (Injected via `__init__`)**: `WatcherPort`, `EgressPort`
-- **Responsibilities**:
-  - Validates and coordinates start/stop operations against the injected driven `WatcherPort`.
-  - Dispatches normalized event streams to the injected driven `EgressPort`.
-  - Returns immutable `WatcherStatusDTO` snapshots without exposing concrete adapter references.
+### 3.1 `GetWatcherStatusUseCase`
+- **Implements**: `GetWatcherStatusPort`
+- **Injected Dependencies**: `watcher: WatcherPort`
+- **Class Implementation**:
+  ```python
+  class GetWatcherStatusUseCase(GetWatcherStatusPort):
+      def __init__(self, watcher: WatcherPort) -> None:
+          self._watcher = watcher
 
-### 3.2 Extensibility for Future Driving Adapters (CLI, MCP, API)
+      def get_status(self) -> WatcherStatusDTO:
+          journal_dir = self._watcher.journal_dir
+          return WatcherStatusDTO(
+              is_active=self._watcher.is_active,
+              active_journal=None,
+              monitored_directory=str(journal_dir) if journal_dir else None,
+          )
+  ```
+
+### 3.2 `ProcessTelemetryStreamUseCase`
+- **Implements**: `ProcessTelemetryStreamPort`
+- **Injected Dependencies**: `watcher: WatcherPort`, `egress: EgressPort`
+- **Class Implementation**:
+  ```python
+  class ProcessTelemetryStreamUseCase(ProcessTelemetryStreamPort):
+      def __init__(self, watcher: WatcherPort, egress: EgressPort) -> None:
+          self._watcher = watcher
+          self._egress = egress
+          # Wire callback during initialization
+          self._watcher.register_event_handler(self._handle_ingestion_event)
+
+      def start_streaming(self, command: StartMonitoringCommand | None = None) -> None:
+          self._watcher.start()
+
+      def stop_streaming(self) -> None:
+          self._watcher.stop()
+
+      def _handle_ingestion_event(self, event: FileIngestionEventDTO) -> None:
+          payload = TelemetryPayloadDTO(
+              topic=f"telemetry.{event.file_kind}",
+              timestamp=event.timestamp,
+              payload_bytes=event.raw_payload,
+              metadata=(("hash", event.raw_hash), ("path", str(event.target_path))),
+          )
+          self._egress.send(payload)
+  ```
+
+### 3.3 `SyncJournalSnapshotUseCase`
+- **Implements**: `SyncJournalSnapshotPort`
+- **Injected Dependencies**: `watcher: WatcherPort`, `egress: EgressPort`
+- **Class Implementation**:
+  ```python
+  class SyncJournalSnapshotUseCase(SyncJournalSnapshotPort):
+      def __init__(self, watcher: WatcherPort, egress: EgressPort) -> None:
+          self._watcher = watcher
+          self._egress = egress
+
+      def sync_snapshots(self) -> SnapshotSyncResultDTO:
+          # Reads current snapshot states, emits sync payloads to egress, returns summary
+          return SnapshotSyncResultDTO(
+              files_inspected=0,
+              payloads_emitted=0,
+              active_journal_file=None,
+          )
+  ```
+
+### 3.4 Multi-Interface Extensibility (CLI, MCP, API)
 Because use cases depend strictly on driven ports and expose pure driving ports returning frozen DTOs:
-- **CLI Adapter (`adapters/driving/cli/`)**: Calls `WatchTelemetryUseCase.get_status()` or `start_monitoring()`.
-- **MCP Server Adapter (`adapters/driving/mcp/`)**: Can expose tools (`get_telemetry_status`, `stream_telemetry`) calling the same use cases.
-- **REST / WebSocket API (`adapters/driving/api/`)**: Can map HTTP/WebSocket routes directly into use case methods.
+- **CLI Adapter (`adapters/driving/cli/`)**: Injects `GetWatcherStatusPort` and `ProcessTelemetryStreamPort` into command options (`ed-telemetry status`, `ed-telemetry daemon`).
+- **MCP Server Adapter (`adapters/driving/mcp/`)**: Maps MCP tools (`tools/list_tools`) directly to use cases:
+  - Tool `get_telemetry_status` -> calls `GetWatcherStatusUseCase.get_status()`.
+  - Tool `sync_telemetry_snapshots` -> calls `SyncJournalSnapshotUseCase.sync_snapshots()`.
+- **REST / WebSocket API (`adapters/driving/api/`)**: Directly invokes use cases from route endpoints.
 
 ---
 
@@ -269,12 +351,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from ed_telemetry.adapters.driven.egress.null_transmitter import NullTransmitter
 from ed_telemetry.adapters.driven.watcher.file_system_watcher import FileSystemWatcher
-from ed_telemetry.core.use_cases.watch_telemetry import WatchTelemetryUseCase
+from ed_telemetry.core.use_cases.get_watcher_status import GetWatcherStatusUseCase
+from ed_telemetry.core.use_cases.process_telemetry_stream import ProcessTelemetryStreamUseCase
+from ed_telemetry.core.use_cases.sync_journal_snapshot import SyncJournalSnapshotUseCase
 
 
 @dataclass(frozen=True, slots=True)
 class Container:
-    watch_telemetry_use_case: WatchTelemetryUseCase
+    get_watcher_status_use_case: GetWatcherStatusUseCase
+    process_telemetry_stream_use_case: ProcessTelemetryStreamUseCase
+    sync_journal_snapshot_use_case: SyncJournalSnapshotUseCase
 
 
 def build_container(
@@ -284,8 +370,16 @@ def build_container(
     """Build and wire production container graph."""
     watcher = FileSystemWatcher(journal_dir=journal_dir, poll_interval=poll_interval)
     egress = NullTransmitter()
-    use_case = WatchTelemetryUseCase(watcher=watcher, egress=egress)
-    return Container(watch_telemetry_use_case=use_case)
+
+    get_status = GetWatcherStatusUseCase(watcher=watcher)
+    process_stream = ProcessTelemetryStreamUseCase(watcher=watcher, egress=egress)
+    sync_snapshot = SyncJournalSnapshotUseCase(watcher=watcher, egress=egress)
+
+    return Container(
+        get_watcher_status_use_case=get_status,
+        process_telemetry_stream_use_case=process_stream,
+        sync_journal_snapshot_use_case=sync_snapshot,
+    )
 ```
 
 ---

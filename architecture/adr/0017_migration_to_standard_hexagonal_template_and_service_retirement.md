@@ -65,8 +65,9 @@ All domain entities and proven infrastructure adapters are retained and mapped i
 | *New Requirement* | In-Memory Double | `tests/doubles/fake_watcher_adapter.py` | Test Double (`FakeWatcherAdapter`) | `HEXA-TRUTH-27` |
 | *New Requirement* | In-Memory Double | `tests/doubles/fake_egress_adapter.py` | Test Double (`FakeEgressAdapter`) | `HEXA-TRUTH-27` |
 | `interfaces.cli` | Driving Adapter | `adapters/driving/cli/*` | CLI Interface Adapter | `HEXA-TRUTH-02, 20` |
-| *New Requirement* | Use Case Interactors | `core/use_cases/watch_telemetry.py` | Application Use Case (`WatchTelemetryUseCase`) | `HEXA-TRUTH-11, 14, 20` |
-| *New Requirement* | Use Case Interactors | `core/use_cases/process_snapshot.py` | Application Use Case (`ProcessSnapshotUseCase`) | `HEXA-TRUTH-11, 14, 20` |
+| *New Requirement* | Use Case Interactor | `core/use_cases/get_watcher_status.py` | Status Query Use Case (`GetWatcherStatusUseCase`) | `HEXA-TRUTH-11, 14, 20` |
+| *New Requirement* | Use Case Interactor | `core/use_cases/process_telemetry_stream.py` | Continuous Stream Interactor (`ProcessTelemetryStreamUseCase`) | `HEXA-TRUTH-11, 14, 20` |
+| *New Requirement* | Use Case Interactor | `core/use_cases/sync_journal_snapshot.py` | Point-in-time Sync Interactor (`SyncJournalSnapshotUseCase`) | `HEXA-TRUTH-11, 14, 20` |
 
 ### 4.2 Boundary Data Transfer Object (DTO) Architecture & Inventory
 
@@ -85,7 +86,24 @@ To satisfy the retained ports and adapters in `ed-telemetry`, the following DTOs
 | **`WatcherAuditEventDTO`** | `core/ports/driven/watcher_port.py` | Driven Port Callback | Immutable control-plane operational event emitted by `StreamSourcePort` (`timestamp: datetime`, `action: str`, `target_path: Path`, `detail: str`). | `HEXA-TRUTH-04, 28` |
 | **`TelemetryPayloadDTO`** | `core/ports/driven/egress_port.py` | Driven Port Parameter | Normalized outbound payload transmitted to `DiscreteSinkPort` (`topic: str`, `timestamp: datetime`, `payload_bytes: bytes`, `metadata: tuple[tuple[str, str], ...]`). | `HEXA-TRUTH-04, 24, 28` |
 
-### 4.3 Discarded Legacy Components
+### 4.3 Use Case Architecture & Inventory
+
+In strict accordance with `HEXA-TRUTH-11` (Lexical & Structural Use Case Invariants), `HEXA-TRUTH-12` (Inversion of Control), `HEXA-TRUTH-13` (Framework Agnosticism), `HEXA-TRUTH-14` (Stateless Interactor Invariants), and `HEXA-TRUTH-20` (Driving Port Exclusivity):
+* Use case classes must match `^[A-Z][a-zA-Z0-9]+UseCase$` starting with an approved imperative verb (`Check`, `Get`, `Find`, `Create`, `Update`, `Delete`, `Execute`, `Process`, `Verify`, `Sync`, `Register`, `Submit`).
+* Use cases must define constructor dependency injection in `__init__`, binding **only** abstract driven ports. Concrete adapter instantiation is strictly forbidden (`HEXA-TRUTH-12`).
+* Use cases are stateless interactors: mutating `self.*` outside `__init__` is forbidden (`HEXA-TRUTH-14`).
+* Use cases must implement exactly one driving port (`HEXA-TRUTH-20`). Adapters must never implement driving ports.
+* Direct network calls, file system I/O, or OS thread management are strictly forbidden within use cases (`HEXA-TRUTH-05, 15`).
+
+To satisfy the retained ports and adapters in `ed-telemetry`, the following use cases are established:
+
+| Target Use Case Class | Implemented Driving Port | Injected Driven Port(s) | Verb Prefix | Business Capability & Responsibilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **`GetWatcherStatusUseCase`** | `GetWatcherStatusPort` | `WatcherPort` | `Get` | Queries the operational state of the telemetry watcher adapter and returns an immutable `WatcherStatusDTO`. |
+| **`ProcessTelemetryStreamUseCase`** | `ProcessTelemetryStreamPort` | `WatcherPort`, `EgressPort` | `Process` | Attaches handlers to `StreamSourcePort`, receives `FileIngestionEventDTO` data envelopes, normalizes them, and routes them to `EgressPort.send()`. |
+| **`SyncJournalSnapshotUseCase`** | `SyncJournalSnapshotPort` | `WatcherPort`, `EgressPort` | `Sync` | Interrogates active snapshot files via the watcher subsystem, extracts latest known-state data, and emits point-in-time synchronization payloads to egress sinks. |
+
+### 4.4 Discarded Legacy Components
 
 The following legacy components are intentionally retired and will not be migrated into `src/ed_telemetry/`:
 * `src/services/registry/` (`base.py`, `watcher.py`, `egress.py`): Replaced by static dependency injection and explicit factory wiring in `bootstrap/container.py`.
