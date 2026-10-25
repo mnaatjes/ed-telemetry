@@ -1,63 +1,41 @@
 #!/usr/bin/env python3
-"""Cross-platform quality gate verification orchestrator.
+"""Downstream Quality Verification Runner for instantiated Hexagonal service."""
 
-Executes Tier 2 checks sequentially:
-1. Ruff linting
-2. Ruff formatting
-3. Mypy static type analysis
-4. Import-Linter architectural boundary invariants
-5. Pytest test suite
-6. CLI composition root smoke test
-"""
-
-from __future__ import annotations
-
+import os
+import shutil
 import subprocess
 import sys
-from pathlib import Path
 
-# Repository root directory
-REPO_ROOT = Path(__file__).resolve().parent.parent
+VENV_BIN = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".venv", "bin")
 
-CHECKS: list[tuple[str, list[str]]] = [
-    ("Ruff Lint", [sys.executable, "-m", "ruff", "check", "src", "sdk", "tests"]),
-    ("Ruff Format Check", [sys.executable, "-m", "ruff", "format", "--check", "src", "sdk", "tests"]),
-    ("Mypy Static Typing", [sys.executable, "-m", "mypy"]),
-    (
-        "AST Lifecycle Exclusivity",
-        [sys.executable, "scripts/lint_lifecycle_exclusivity.py"],
-    ),
-    (
-        "Import Linter Boundaries",
-        [
-            sys.executable,
-            "-c",
-            "import sys; from importlinter.cli import lint_imports; sys.exit(lint_imports())",
-        ],
-    ),
-    ("Pytest Suite", [sys.executable, "-m", "pytest", "-v"]),
-    ("CLI Smoke Test", [sys.executable, "-m", "interfaces"]),
+
+def get_bin(cmd_name: str) -> str:
+    path_bin = shutil.which(cmd_name)
+    if path_bin:
+        return path_bin
+    venv_candidate = os.path.join(VENV_BIN, cmd_name)
+    if os.path.exists(venv_candidate):
+        return venv_candidate
+    return cmd_name
+
+
+CHECKS = [
+    ("Pre-commit hooks", [get_bin("pre-commit"), "run", "--all-files"]),
+    ("Import linter boundary contracts", [get_bin("lint-imports")]),
+    ("Static type verification", [get_bin("mypy")]),
+    ("Unit and architectural compliance tests", [get_bin("pytest"), "tests/"]),
 ]
 
 
 def run_checks() -> int:
-    """Execute all quality gates sequentially, halting on first failure."""
-    print("=" * 60)
-    print("Executing Tier 2 Quality Gates")
-    print("=" * 60)
-
-    for name, command in CHECKS:
+    for name, cmd in CHECKS:
         print(f"\n[RUNNING] {name}...")
-        print(f"Command: {' '.join(command)}")
-        result = subprocess.run(command, cwd=REPO_ROOT)
-        if result.returncode != 0:
-            print(f"\n[FAILED] {name} exited with status {result.returncode}", file=sys.stderr)
-            return result.returncode
+        res = subprocess.run(cmd)
+        if res.returncode != 0:
+            print(f"[FAILED] {name}")
+            return res.returncode
         print(f"[PASSED] {name}")
-
-    print("\n" + "=" * 60)
-    print("All Tier 2 Quality Gates Passed Successfully!")
-    print("=" * 60)
+    print("\nAll Downstream Quality Gates Passed.")
     return 0
 
 

@@ -9,7 +9,7 @@ last_updated_at: "2026-10-07"
 
 ## 1. Context and Problem Statement
 
-`ed-telemetry` contains platform-specific code paths (`packages/ed_watcher.discovery`) that interface directly with the Microsoft Windows NT subsystem (Win32 `shell32.dll` Known Folder APIs, `ole32.dll`, and `winreg`) as well as Linux POSIX filesystems (Steam Proton prefixes, Valve VDF formats). 
+`ed-telemetry` contains platform-specific code paths (`packages/ed_watcher.discovery`) that interface directly with the Microsoft Windows NT subsystem (Win32 `shell32.dll` Known Folder APIs, `ole32.dll`, and `winreg`) as well as Linux POSIX filesystems (Steam Proton prefixes, Valve VDF formats).
 
 As decided in [ADR 0005](../adr/0005_cross_platform_testing_strategy_and_simulation_matrix.md), testing these paths solely via standard in-memory mocks on a Linux development workstation (`prd-mgr-01`) introduces the risk of binary ABI packing mismatches, C-type structure misalignments, and registry access errors that only surface when executed against a real Windows kernel.
 
@@ -67,8 +67,10 @@ import ctypes
 from ctypes import wintypes
 from ed_watcher.discovery.strategies.windows import WindowsPathStrategy
 
+
 def test_guid_structure_binary_abi_layout():
     """Verify GUID struct matches Windows SDK: 16 bytes total, specific field offsets."""
+
     class GUID(ctypes.Structure):
         _fields_ = [
             ("Data1", wintypes.DWORD),
@@ -76,7 +78,7 @@ def test_guid_structure_binary_abi_layout():
             ("Data3", wintypes.WORD),
             ("Data4", ctypes.c_byte * 8),
         ]
-    
+
     assert ctypes.sizeof(GUID) == 16
     assert GUID.Data1.offset == 0
     assert GUID.Data2.offset == 4
