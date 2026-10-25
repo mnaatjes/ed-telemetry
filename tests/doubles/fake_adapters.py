@@ -8,6 +8,7 @@ from ed_telemetry.core.ports.driven.telemetry_driven_port import (
     AuditEventHandler,
     DiscreteSinkPort,
     EgressPort,
+    EventQueuePort,
     IngestionEventHandler,
     LifecyclePort,
     StreamSourcePort,
@@ -21,6 +22,7 @@ from ed_telemetry.core.ports.dto.telemetry_dto import (
     JournalCandidateDTO,
     JournalFileListDTO,
     JournalPathDTO,
+    TelemetryBatchDTO,
     TelemetryPayloadDTO,
     WatcherAuditEventDTO,
 )
@@ -166,3 +168,26 @@ class FakeEgressAdapter(EgressPort):
 
     def send(self, payload: TelemetryPayloadDTO) -> None:
         self.sent_payloads.append(payload)
+
+
+class FakeEventQueueAdapter(EventQueuePort):
+    """In-memory test double for EventQueuePort satisfying HEXA-TRUTH-27."""
+
+    def __init__(self, initial_events: list[TelemetryPayloadDTO] | None = None) -> None:
+        self.queue: list[TelemetryPayloadDTO] = list(initial_events or [])
+        self.dropped_count = 0
+
+    def poll(self, timeout: float | None = None) -> TelemetryPayloadDTO | None:
+        return self.queue.pop(0) if self.queue else None
+
+    def get_batch(self, limit: int = 100, timeout: float | None = None) -> TelemetryBatchDTO:
+        extracted = self.queue[:limit]
+        self.queue = self.queue[limit:]
+        return TelemetryBatchDTO(
+            events=tuple(extracted),
+            remaining_count=len(self.queue),
+            dropped_count=self.dropped_count,
+        )
+
+    def queue_size(self) -> int:
+        return len(self.queue)

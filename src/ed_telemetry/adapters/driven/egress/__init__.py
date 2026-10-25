@@ -1,5 +1,9 @@
-"""Outbound egress adapters package."""
+"""Egress driven adapters."""
 
-from ed_telemetry.adapters.driven.egress.transmitter import NullTransmitter
+from .buffered_queue import BufferedQueueAdapter
+from .transmitter import NullTransmitter
 
-__all__ = ["NullTransmitter"]
+__all__ = (
+    "BufferedQueueAdapter",
+    "NullTransmitter",
+)

@@ -13,6 +13,7 @@ from ..dto.telemetry_dto import (
     JournalPathDTO,
     SnapshotSyncResultDTO,
     StartMonitoringDTO,
+    TelemetryBatchDTO,
     WatcherStatusDTO,
 )
 
@@ -75,11 +76,19 @@ class SubmitSnapshotRefreshPort(DrivingPort, Protocol):
     def refresh_snapshot(self, snapshot_name: str) -> HintSubmissionDTO: ...
 
 
+@runtime_checkable
+class GetTelemetryEventsPort(DrivingPort, Protocol):
+    """Primary driving port for polling buffered telemetry event payloads."""
+
+    def get_events(self, limit: int = 100, timeout: float | None = None) -> TelemetryBatchDTO: ...
+
+
 __all__ = (
     "FindJournalPathPort",
     "GetAuxiliarySnapshotPort",
     "GetJournalFilesPort",
     "GetLatestGameStatusPort",
+    "GetTelemetryEventsPort",
     "GetWatcherStatusPort",
     "ProcessTelemetryStreamPort",
     "SubmitSnapshotRefreshPort",
@@ -91,5 +100,6 @@ __all__ = (
     "JournalPathDTO",
     "SnapshotSyncResultDTO",
     "StartMonitoringDTO",
+    "TelemetryBatchDTO",
     "WatcherStatusDTO",
 )

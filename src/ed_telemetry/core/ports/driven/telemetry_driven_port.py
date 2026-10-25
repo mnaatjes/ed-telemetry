@@ -13,6 +13,7 @@ from ..dto.telemetry_dto import (
     HintSubmissionDTO,
     JournalFileListDTO,
     JournalPathDTO,
+    TelemetryBatchDTO,
     TelemetryPayloadDTO,
     WatcherAuditEventDTO,
 )
@@ -70,3 +71,14 @@ class WatcherPort(LifecyclePort, StreamSourcePort, DrivenPort, Protocol):
 @runtime_checkable
 class EgressPort(DiscreteSinkPort, DrivenPort, Protocol):
     """Driven port contract for transmitting telemetry payloads to external endpoints."""
+
+
+@runtime_checkable
+class EventQueuePort(DrivenPort, Protocol):
+    """Driven port contract for reading and polling telemetry events from an in-memory queue."""
+
+    def poll(self, timeout: float | None = None) -> TelemetryPayloadDTO | None: ...
+
+    def get_batch(self, limit: int = 100, timeout: float | None = None) -> TelemetryBatchDTO: ...
+
+    def queue_size(self) -> int: ...
