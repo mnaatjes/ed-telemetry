@@ -12,6 +12,8 @@ from .telemetry_dto import (
     StartMonitoringDTO,
     TelemetryBatchDTO,
     TelemetryPayloadDTO,
+    TelemetryQueryDTO,
+    TelemetryRecordDTO,
     WatcherAuditEventDTO,
     WatcherStatusDTO,
 )
@@ -28,6 +30,8 @@ __all__ = (
     "StartMonitoringDTO",
     "TelemetryBatchDTO",
     "TelemetryPayloadDTO",
+    "TelemetryQueryDTO",
+    "TelemetryRecordDTO",
     "WatcherAuditEventDTO",
     "WatcherStatusDTO",
 )

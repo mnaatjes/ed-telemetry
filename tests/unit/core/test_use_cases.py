@@ -227,3 +227,59 @@ class TestGetTelemetryEventsUseCase:
         batch2 = use_case.get_events(limit=10)
         assert len(batch2.events) == 3
         assert batch2.remaining_count == 0
+
+
+class TestFindTelemetryEventsUseCase:
+    """Verifies FindTelemetryEventsUseCase querying TelemetryRepositoryPort."""
+
+    def test_find_events_delegates_to_repository(self) -> None:
+        from datetime import UTC, datetime
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO, TelemetryQueryDTO
+        from ed_telemetry.core.use_cases.find_telemetry_events import FindTelemetryEventsUseCase
+        from tests.doubles.fake_adapters import FakeTelemetryRepositoryAdapter
+
+        repo = FakeTelemetryRepositoryAdapter()
+        repo.insert_event(
+            TelemetryPayloadDTO(
+                topic="telemetry.journal",
+                timestamp=datetime.now(UTC),
+                payload_bytes=b"{}",
+            )
+        )
+        repo.insert_event(
+            TelemetryPayloadDTO(
+                topic="telemetry.status",
+                timestamp=datetime.now(UTC),
+                payload_bytes=b"{}",
+            )
+        )
+
+        use_case = FindTelemetryEventsUseCase(repository=repo)
+        results = use_case.find_events(TelemetryQueryDTO(topic="telemetry.journal"))
+        assert len(results) == 1
+        assert results[0].topic == "telemetry.journal"
+
+
+class TestGetTelemetryStreamUseCase:
+    """Verifies GetTelemetryStreamUseCase streaming from EventQueuePort."""
+
+    def test_stream_events_yields_payloads(self) -> None:
+        from datetime import UTC, datetime
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO
+        from ed_telemetry.core.use_cases.get_telemetry_stream import GetTelemetryStreamUseCase
+        from tests.doubles.fake_adapters import FakeEventQueueAdapter
+
+        ev = TelemetryPayloadDTO(
+            topic="telemetry.journal",
+            timestamp=datetime.now(UTC),
+            payload_bytes=b'{"event":"Docked"}',
+        )
+        queue = FakeEventQueueAdapter(initial_events=[ev])
+        use_case = GetTelemetryStreamUseCase(queue=queue)
+
+        gen = use_case.stream_events(timeout=0.01)
+        yielded = next(gen)
+        assert yielded.topic == "telemetry.journal"
+        assert yielded.payload_bytes == b'{"event":"Docked"}'

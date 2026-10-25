@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from ed_telemetry.adapters.driving.api.server import HttpApiAdapter
 from ed_telemetry.bootstrap.container import Container, build_container
 from ed_telemetry.core.use_cases.find_journal_path import FindJournalPathUseCase
+from ed_telemetry.core.use_cases.find_telemetry_events import FindTelemetryEventsUseCase
 from ed_telemetry.core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
 from ed_telemetry.core.use_cases.get_journal_files import GetJournalFilesUseCase
 from ed_telemetry.core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
 from ed_telemetry.core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
+from ed_telemetry.core.use_cases.get_telemetry_stream import GetTelemetryStreamUseCase
 from ed_telemetry.core.use_cases.get_watcher_status import GetWatcherStatusUseCase
 from ed_telemetry.core.use_cases.process_telemetry_stream import (
     ProcessTelemetryStreamUseCase,
@@ -57,4 +60,16 @@ class TestContainer:
         assert isinstance(
             container.get_telemetry_events_use_case,
             GetTelemetryEventsUseCase,
+        )
+        assert isinstance(
+            container.find_telemetry_events_use_case,
+            FindTelemetryEventsUseCase,
+        )
+        assert isinstance(
+            container.get_telemetry_stream_use_case,
+            GetTelemetryStreamUseCase,
+        )
+        assert isinstance(
+            container.http_api_adapter,
+            HttpApiAdapter,
         )

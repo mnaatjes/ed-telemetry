@@ -282,7 +282,7 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     (win_dir / 'Market.json').write_text('{\"event\":\"Market\",\"MarketID\":1234}')
 
     # 1. Container instantiation
-    container = build_container(journal_dir=win_dir)
+    container = build_container(journal_dir=win_dir, http_port=0)
     assert isinstance(container, Container)
     assert container.cli_adapter is not None
     assert container.find_journal_path_use_case is not None
@@ -346,7 +346,21 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     assert any(b'DockingGranted' in e.payload_bytes or b'FileHeader' in e.payload_bytes for e in batch_dto.events)
     print(f'  - GetTelemetryEventsUseCase buffered consumption on Windows ({len(batch_dto.events)} events): PASS')
 
-    # 8. DTO Immutability
+    # 8. FindTelemetryEventsUseCase (verify persistence in SQLite under Windows NT)
+    from ed_telemetry.core.ports.dto import TelemetryQueryDTO
+    records = container.find_telemetry_events_use_case.find_events(TelemetryQueryDTO())
+    assert len(records) > 0
+    print(f'  - FindTelemetryEventsUseCase SQLite persistence on Windows ({len(records)} records): PASS')
+
+    # 9. HttpApiAdapter health check under Windows NT
+    container.http_api_adapter.start()
+    import urllib.request
+    with urllib.request.urlopen(f'http://127.0.0.1:{container.http_api_adapter.port}/api/v1/health') as resp:
+        assert resp.status == 200
+    container.http_api_adapter.stop()
+    print('  - HttpApiAdapter local server on Windows: PASS')
+
+    # 10. DTO Immutability
     try:
         hint_dto.accepted = False  # type: ignore[misc]
         raise AssertionError('Expected FrozenInstanceError')

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Protocol, runtime_checkable
 
 from ..base import DrivingPort
@@ -14,6 +15,9 @@ from ..dto.telemetry_dto import (
     SnapshotSyncResultDTO,
     StartMonitoringDTO,
     TelemetryBatchDTO,
+    TelemetryPayloadDTO,
+    TelemetryQueryDTO,
+    TelemetryRecordDTO,
     WatcherStatusDTO,
 )
 
@@ -83,12 +87,28 @@ class GetTelemetryEventsPort(DrivingPort, Protocol):
     def get_events(self, limit: int = 100, timeout: float | None = None) -> TelemetryBatchDTO: ...
 
 
+@runtime_checkable
+class FindTelemetryEventsPort(DrivingPort, Protocol):
+    """Primary driving port for querying historical telemetry events from persistence."""
+
+    def find_events(self, query: TelemetryQueryDTO) -> tuple[TelemetryRecordDTO, ...]: ...
+
+
+@runtime_checkable
+class GetTelemetryStreamPort(DrivingPort, Protocol):
+    """Primary driving port for streaming live telemetry events."""
+
+    def stream_events(self, timeout: float | None = 1.0) -> Iterator[TelemetryPayloadDTO]: ...
+
+
 __all__ = (
     "FindJournalPathPort",
+    "FindTelemetryEventsPort",
     "GetAuxiliarySnapshotPort",
     "GetJournalFilesPort",
     "GetLatestGameStatusPort",
     "GetTelemetryEventsPort",
+    "GetTelemetryStreamPort",
     "GetWatcherStatusPort",
     "ProcessTelemetryStreamPort",
     "SubmitSnapshotRefreshPort",
@@ -101,5 +121,8 @@ __all__ = (
     "SnapshotSyncResultDTO",
     "StartMonitoringDTO",
     "TelemetryBatchDTO",
+    "TelemetryPayloadDTO",
+    "TelemetryQueryDTO",
+    "TelemetryRecordDTO",
     "WatcherStatusDTO",
 )
