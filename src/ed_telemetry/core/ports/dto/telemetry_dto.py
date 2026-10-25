@@ -141,3 +141,25 @@ class TelemetryBatchDTO(DataTransferObject):
     events: tuple[TelemetryPayloadDTO, ...]
     remaining_count: int
     dropped_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryRecordDTO(DataTransferObject):
+    """Indexed telemetry event stored in persistence."""
+
+    id: int
+    event_id: str
+    topic: str
+    timestamp: datetime
+    raw_hash: str | None
+    payload_json: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryQueryDTO(DataTransferObject):
+    """Query filter parameters for retrieving historical telemetry events."""
+
+    since_id: int | None = None
+    topic: str | None = None
+    limit: int = 100

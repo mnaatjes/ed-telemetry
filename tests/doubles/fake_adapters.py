@@ -12,6 +12,7 @@ from ed_telemetry.core.ports.driven.telemetry_driven_port import (
     IngestionEventHandler,
     LifecyclePort,
     StreamSourcePort,
+    TelemetryRepositoryPort,
     WatcherPort,
 )
 from ed_telemetry.core.ports.dto.telemetry_dto import (
@@ -24,6 +25,8 @@ from ed_telemetry.core.ports.dto.telemetry_dto import (
     JournalPathDTO,
     TelemetryBatchDTO,
     TelemetryPayloadDTO,
+    TelemetryQueryDTO,
+    TelemetryRecordDTO,
     WatcherAuditEventDTO,
 )
 
@@ -191,3 +194,38 @@ class FakeEventQueueAdapter(EventQueuePort):
 
     def queue_size(self) -> int:
         return len(self.queue)
+
+
+class FakeTelemetryRepositoryAdapter(TelemetryRepositoryPort):
+    """In-memory test double for TelemetryRepositoryPort."""
+
+    def __init__(self) -> None:
+        self.records: list[TelemetryRecordDTO] = []
+        self._next_id = 1
+
+    def insert_event(self, payload: TelemetryPayloadDTO) -> int:
+        rid = self._next_id
+        self._next_id += 1
+        rec = TelemetryRecordDTO(
+            id=rid,
+            event_id=f"rec_{rid}",
+            topic=payload.topic,
+            timestamp=payload.timestamp,
+            raw_hash=dict(payload.metadata).get("hash"),
+            payload_json=payload.payload_bytes.decode("utf-8", errors="replace"),
+            created_at=datetime.now(UTC),
+        )
+        self.records.append(rec)
+        return rid
+
+    def find_events(self, query: TelemetryQueryDTO) -> tuple[TelemetryRecordDTO, ...]:
+        matched = self.records
+        if query.since_id is not None:
+            matched = [r for r in matched if r.id > query.since_id]
+        if query.topic is not None:
+            matched = [r for r in matched if r.topic == query.topic]
+        return tuple(matched[: query.limit])
+
+    def get_latest_event(self, topic: str) -> TelemetryRecordDTO | None:
+        matched = [r for r in self.records if r.topic == topic]
+        return matched[-1] if matched else None

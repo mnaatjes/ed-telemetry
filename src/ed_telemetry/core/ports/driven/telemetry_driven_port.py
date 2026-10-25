@@ -15,6 +15,8 @@ from ..dto.telemetry_dto import (
     JournalPathDTO,
     TelemetryBatchDTO,
     TelemetryPayloadDTO,
+    TelemetryQueryDTO,
+    TelemetryRecordDTO,
     WatcherAuditEventDTO,
 )
 
@@ -82,3 +84,14 @@ class EventQueuePort(DrivenPort, Protocol):
     def get_batch(self, limit: int = 100, timeout: float | None = None) -> TelemetryBatchDTO: ...
 
     def queue_size(self) -> int: ...
+
+
+@runtime_checkable
+class TelemetryRepositoryPort(DrivenPort, Protocol):
+    """Driven port contract for persisting and querying indexed telemetry events."""
+
+    def insert_event(self, payload: TelemetryPayloadDTO) -> int: ...
+
+    def find_events(self, query: TelemetryQueryDTO) -> tuple[TelemetryRecordDTO, ...]: ...
+
+    def get_latest_event(self, topic: str) -> TelemetryRecordDTO | None: ...
