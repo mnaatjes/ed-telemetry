@@ -69,3 +69,66 @@ class TelemetryPayloadDTO(DataTransferObject):
     timestamp: datetime
     payload_bytes: bytes
     metadata: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class JournalPathDTO(DataTransferObject):
+    """Result of journal directory discovery."""
+
+    resolved_path: str
+    platform: str
+    discovery_source: str
+
+
+@dataclass(frozen=True, slots=True)
+class JournalCandidateDTO(DataTransferObject):
+    """Metadata for an identified journal candidate file."""
+
+    filename: str
+    path: str
+    timestamp: datetime
+    part: int
+    mtime: float
+    is_standard_format: bool
+
+
+@dataclass(frozen=True, slots=True)
+class JournalFileListDTO(DataTransferObject):
+    """Chronologically sorted journal candidate files in target directory."""
+
+    journal_dir: str
+    candidates: tuple[JournalCandidateDTO, ...]
+    active_journal: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class GameStatusSnapshotDTO(DataTransferObject):
+    """Extracted payload and metadata for Status.json."""
+
+    exists: bool
+    target_path: str | None
+    timestamp: datetime | None
+    raw_payload: bytes
+    raw_hash: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class AuxiliarySnapshotDTO(DataTransferObject):
+    """Extracted payload and metadata for an auxiliary snapshot file."""
+
+    target_name: str
+    exists: bool
+    target_path: str | None
+    timestamp: datetime | None
+    raw_payload: bytes
+    raw_hash: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class HintSubmissionDTO(DataTransferObject):
+    """Result of submitting an operational hint to the watcher reactor queue."""
+
+    action: str
+    target_name: str | None
+    accepted: bool
+    detail: str

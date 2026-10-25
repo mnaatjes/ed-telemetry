@@ -1,7 +1,13 @@
 """DTO exports."""
 
 from .telemetry_dto import (
+    AuxiliarySnapshotDTO,
     FileIngestionEventDTO,
+    GameStatusSnapshotDTO,
+    HintSubmissionDTO,
+    JournalCandidateDTO,
+    JournalFileListDTO,
+    JournalPathDTO,
     SnapshotSyncResultDTO,
     StartMonitoringDTO,
     TelemetryPayloadDTO,
@@ -10,7 +16,13 @@ from .telemetry_dto import (
 )
 
 __all__ = (
+    "AuxiliarySnapshotDTO",
     "FileIngestionEventDTO",
+    "GameStatusSnapshotDTO",
+    "HintSubmissionDTO",
+    "JournalCandidateDTO",
+    "JournalFileListDTO",
+    "JournalPathDTO",
     "SnapshotSyncResultDTO",
     "StartMonitoringDTO",
     "TelemetryPayloadDTO",
