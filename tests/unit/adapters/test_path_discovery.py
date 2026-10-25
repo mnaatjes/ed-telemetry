@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from infrastructure.watcher.discovery import (
+from ed_telemetry.adapters.driven.watcher.discovery import (
     DiscoveryResult,
     InvalidPathOverrideError,
     JournalPathNotFoundError,
@@ -19,11 +19,11 @@ from infrastructure.watcher.discovery import (
     UnsupportedPlatformError,
     WatcherError,
 )
-from infrastructure.watcher.discovery.strategies.linux import (
+from ed_telemetry.adapters.driven.watcher.discovery.strategies.linux import (
     PROTON_REL_PFX,
     LinuxProtonPathStrategy,
 )
-from infrastructure.watcher.discovery.strategies.windows import (
+from ed_telemetry.adapters.driven.watcher.discovery.strategies.windows import (
     SUBDIR_REL_PATH,
     WindowsPathStrategy,
 )

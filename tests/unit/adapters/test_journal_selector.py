@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from infrastructure.watcher.exceptions import JournalDirectoryAccessError
-from infrastructure.watcher.selector import (
+from ed_telemetry.adapters.driven.watcher.exceptions import JournalDirectoryAccessError
+from ed_telemetry.adapters.driven.watcher.selector import (
     JournalCandidate,
     JournalSelector,
     StreamPosition,

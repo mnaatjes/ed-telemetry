@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from ..ports.driven.telemetry_driven_port import (
     EgressPort,
-    FileIngestionEventDTO,
-    TelemetryPayloadDTO,
     WatcherPort,
 )
-from ..ports.driving.telemetry_port import ProcessTelemetryStreamPort, StartMonitoringCommand
+from ..ports.driving.telemetry_port import ProcessTelemetryStreamPort, StartMonitoringDTO
+from ..ports.dto.telemetry_dto import (
+    FileIngestionEventDTO,
+    TelemetryPayloadDTO,
+)
 
 
 class ProcessTelemetryStreamUseCase(ProcessTelemetryStreamPort):
@@ -19,7 +21,7 @@ class ProcessTelemetryStreamUseCase(ProcessTelemetryStreamPort):
         self._egress = egress
         self._watcher.register_event_handler(self._handle_ingestion_event)
 
-    def start_streaming(self, command: StartMonitoringCommand | None = None) -> None:
+    def start_streaming(self, command: StartMonitoringDTO | None = None) -> None:
         """Start the background telemetry watcher worker."""
         self._watcher.start()
 

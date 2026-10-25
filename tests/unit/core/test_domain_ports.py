@@ -7,21 +7,18 @@ Governed by ADR 0015 and SDD-013.
 
 from __future__ import annotations
 
-import pytest
-
-from domain.ports.base import (
-    ConnectionPort,
-    DiscreteSinkPort,
-    LifecyclePort,
+from ed_telemetry.adapters.driven.egress.transmitter import NullTransmitter
+from ed_telemetry.adapters.driven.watcher.watcher import FileSystemWatcher
+from ed_telemetry.core.ports.base import (
     Port,
-    StreamSourcePort,
-    TransactionalPort,
 )
-from domain.ports.egress import EgressPort
-from domain.ports.watcher import WatcherPort
-from infrastructure.egress.transmitter import NullTransmitter
-from infrastructure.watcher.watcher import FileSystemWatcher
-from services.registry.base import BaseAdapterRegistry
+from ed_telemetry.core.ports.driven.telemetry_driven_port import (
+    DiscreteSinkPort,
+    EgressPort,
+    LifecyclePort,
+    StreamSourcePort,
+    WatcherPort,
+)
 
 
 class TestDomainPortGenealogyAndProtocols:
@@ -32,8 +29,6 @@ class TestDomainPortGenealogyAndProtocols:
         assert issubclass(LifecyclePort, Port)
         assert issubclass(DiscreteSinkPort, Port)
         assert issubclass(StreamSourcePort, Port)
-        assert issubclass(ConnectionPort, Port)
-        assert issubclass(TransactionalPort, Port)
         assert issubclass(EgressPort, Port)
         assert issubclass(WatcherPort, Port)
 
@@ -63,27 +58,6 @@ class TestConcreteDrivenAdapterSatisfaction:
         assert isinstance(transmitter, DiscreteSinkPort)
         assert isinstance(transmitter, EgressPort)
         assert not isinstance(transmitter, LifecyclePort)
-
-
-class TestRegistryPortBoundEnforcement:
-    """Verifies TEST-PORT-04: BaseAdapterRegistry requires adapter to satisfy Port."""
-
-    def test_registry_rejects_non_port_adapter(self) -> None:
-        """TEST-PORT-04: BaseAdapterRegistry raises TypeError if adapter does not satisfy Port."""
-        registry: BaseAdapterRegistry[Port] = BaseAdapterRegistry()
-
-        class FakeInfrastructureAdapter:
-            __module__ = "infrastructure.fake"
-
-        with pytest.raises(TypeError, match="Adapter must satisfy domain.ports.base.Port"):
-            registry.register("fake", FakeInfrastructureAdapter())  # type: ignore[arg-type]
-
-    def test_registry_accepts_valid_ports(self) -> None:
-        """TEST-PORT-04: BaseAdapterRegistry accepts adapters satisfying Port."""
-        registry: BaseAdapterRegistry[Port] = BaseAdapterRegistry()
-        transmitter = NullTransmitter()
-        registry.register("tx", transmitter)
-        assert registry.get("tx") is transmitter
 
 
 class TestLifecyclePoliciesConformance:

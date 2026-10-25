@@ -19,7 +19,7 @@ from ed_telemetry.adapters.driven.watcher.engine.freshness import SnapshotFreshn
 from ed_telemetry.adapters.driven.watcher.engine.receiver import (
     ReactorQueueMetrics,
     WatcherHintAction,
-    WatcherIngestCommand,
+    WatcherIngestHint,
 )
 from ed_telemetry.adapters.driven.watcher.engine.snapshot_reader import SnapshotReader
 from ed_telemetry.adapters.driven.watcher.engine.stream_context import JournalStreamContext
@@ -64,7 +64,7 @@ class WatcherReactor:
         self._active_context: JournalStreamContext | None = None
 
         # Inbound Command Queue
-        self._queue: collections.deque[WatcherIngestCommand] = collections.deque(maxlen=queue_capacity)
+        self._queue: collections.deque[WatcherIngestHint] = collections.deque(maxlen=queue_capacity)
         self._queue_lock = threading.Lock()
         self._total_enqueued = 0
         self._total_processed = 0
@@ -99,7 +99,7 @@ class WatcherReactor:
         if self.audit_listener is not None:
             self.audit_listener(event)
 
-    def submit_hint(self, command: WatcherIngestCommand) -> bool:
+    def submit_hint(self, command: WatcherIngestHint) -> bool:
         """Enqueue an operational hint. Returns True if accepted, False if dropped."""
         with self._queue_lock:
             if len(self._queue) >= self.queue_capacity and not command.priority:
@@ -214,7 +214,7 @@ class WatcherReactor:
         emitted_events: list[FileIngestionEvent] = []
 
         # 1. Process inbound command queue
-        command: WatcherIngestCommand | None = None
+        command: WatcherIngestHint | None = None
         with self._queue_lock:
             if self._queue:
                 command = self._queue.popleft()

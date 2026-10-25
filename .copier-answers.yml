@@ -1,0 +1,11 @@
+# Changes here will be overwritten by Copier
+_commit: v0.1.6
+_src_path: /home/michael/src/github.com/mnaatjes/python-hexagonal-template
+author_email: engineering@example.com
+author_name: Engineering Team
+include_architecture_governance: false
+package_name: ed_telemetry
+project_description: Hexagonally architected service
+project_name: ed-telemetry
+project_slug: ed-telemetry
+python_version: '3.12'

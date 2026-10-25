@@ -22,7 +22,7 @@ from ed_telemetry.adapters.driven.watcher.engine import (
     WatcherAuditAction,
     WatcherAuditEvent,
     WatcherHintAction,
-    WatcherIngestCommand,
+    WatcherIngestHint,
     WatcherIngestReceiver,
     WatcherReactor,
 )
@@ -87,7 +87,7 @@ __all__ = [
     "WatcherAuditEvent",
     "WatcherError",
     "WatcherHintAction",
-    "WatcherIngestCommand",
+    "WatcherIngestHint",
     "WatcherIngestReceiver",
     "WatcherReactor",
     "parse_journal_timestamp",

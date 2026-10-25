@@ -1,52 +1,16 @@
-"""Driven (outbound / secondary) port contracts and boundary DTOs."""
+"""Driven (outbound / secondary) port contracts."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
 from typing import Protocol, runtime_checkable
-from uuid import UUID
 
-from ..base import DataTransferObject, DrivenPort
-
-
-@dataclass(frozen=True, slots=True)
-class FileIngestionEventDTO(DataTransferObject):
-    """Immutable data plane envelope emitted upon extracting a raw byte slice from disk."""
-
-    event_id: UUID
-    timestamp: datetime
-    file_kind: str  # "journal", "status", "snapshot"
-    target_path: Path
-    raw_payload: bytes
-    start_offset: int
-    end_offset: int
-    line_number: int | None
-    part: int | None
-    raw_hash: str
-
-
-@dataclass(frozen=True, slots=True)
-class WatcherAuditEventDTO(DataTransferObject):
-    """Immutable control plane operational event emitted on internal watcher transitions."""
-
-    timestamp: datetime
-    action: str
-    target_path: Path
-    detail: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class TelemetryPayloadDTO(DataTransferObject):
-    """Normalized outbound payload transmitted to discrete egress sinks."""
-
-    topic: str
-    timestamp: datetime
-    payload_bytes: bytes
-    metadata: tuple[tuple[str, str], ...] = ()
-
+from ..base import DrivenPort
+from ..dto.telemetry_dto import (
+    FileIngestionEventDTO,
+    TelemetryPayloadDTO,
+    WatcherAuditEventDTO,
+)
 
 IngestionEventHandler = Callable[[FileIngestionEventDTO], None]
 AuditEventHandler = Callable[[WatcherAuditEventDTO], None]
@@ -81,13 +45,13 @@ class DiscreteSinkPort(DrivenPort, Protocol):
 
 
 @runtime_checkable
-class WatcherPort(DrivenPort, LifecyclePort, StreamSourcePort, Protocol):
+class WatcherPort(LifecyclePort, StreamSourcePort, DrivenPort, Protocol):
     """Composite driven port contract for inbound telemetry file watchers."""
 
     @property
-    def journal_dir(self) -> Path | None: ...
+    def journal_dir(self) -> str | None: ...
 
 
 @runtime_checkable
-class EgressPort(DrivenPort, DiscreteSinkPort, Protocol):
+class EgressPort(DiscreteSinkPort, DrivenPort, Protocol):
     """Driven port contract for transmitting telemetry payloads to external endpoints."""

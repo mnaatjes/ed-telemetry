@@ -17,10 +17,12 @@ from ed_telemetry.adapters.driven.watcher.selector import StreamPosition
 from ed_telemetry.adapters.driven.watcher.snapshots.registry import SnapshotRegistry
 from ed_telemetry.core.ports.driven import (
     AuditEventHandler,
-    FileIngestionEventDTO,
     IngestionEventHandler,
-    WatcherAuditEventDTO,
     WatcherPort,
+)
+from ed_telemetry.core.ports.dto.telemetry_dto import (
+    FileIngestionEventDTO,
+    WatcherAuditEventDTO,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,10 +141,10 @@ class FileSystemWatcher(WatcherPort):
             return self._is_active
 
     @property
-    def journal_dir(self) -> Path | None:
-        """Return the active journal directory path, or None if uninitialized."""
+    def journal_dir(self) -> str | None:
+        """Return the active journal directory path as string, or None if uninitialized."""
         with self._lock:
-            return self._journal_dir
+            return str(self._journal_dir) if self._journal_dir is not None else None
 
     def _worker_loop(self) -> None:
         """Background thread target driving the reactor loop."""
@@ -184,7 +186,7 @@ class FileSystemWatcher(WatcherPort):
             event_id=event.event_id,
             timestamp=event.timestamp,
             file_kind=event.file_kind.value,
-            target_path=event.target_path,
+            target_path=str(event.target_path),
             raw_payload=event.raw_payload,
             start_offset=event.start_offset,
             end_offset=event.end_offset,
@@ -215,7 +217,7 @@ class FileSystemWatcher(WatcherPort):
         dto = WatcherAuditEventDTO(
             timestamp=event.timestamp,
             action=event.action.value,
-            target_path=event.target_path,
+            target_path=str(event.target_path),
             detail=event.detail,
         )
 

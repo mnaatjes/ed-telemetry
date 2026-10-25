@@ -3,7 +3,7 @@
 import time
 from pathlib import Path
 
-from infrastructure.watcher.engine import (
+from ed_telemetry.adapters.driven.watcher.engine import (
     FileIngestionEvent,
     FileKind,
     JournalStreamContext,
@@ -13,10 +13,10 @@ from infrastructure.watcher.engine import (
     WatcherAuditAction,
     WatcherAuditEvent,
     WatcherHintAction,
-    WatcherIngestCommand,
+    WatcherIngestHint,
     WatcherReactor,
 )
-from infrastructure.watcher.selector import StreamPosition
+from ed_telemetry.adapters.driven.watcher.selector import StreamPosition
 
 
 class TestSnapshotFreshnessTracker:
@@ -200,7 +200,7 @@ class TestWatcherReactor:
 
         # Submit hint across boundary
         success = reactor.submit_hint(
-            WatcherIngestCommand(action=WatcherHintAction.HINT_SNAPSHOT, target_name="Market.json")
+            WatcherIngestHint(action=WatcherHintAction.HINT_SNAPSHOT, target_name="Market.json")
         )
         assert success is True
 

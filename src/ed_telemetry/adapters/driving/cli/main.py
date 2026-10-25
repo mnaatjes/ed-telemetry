@@ -1,20 +1,24 @@
-import sys
+"""CLI driving adapter for telemetry inspection."""
 
-from services.bootstrap import build_application_context
+from __future__ import annotations
 
+from typing import Any
 
-def main() -> int:
-    """Execute smoke test startup of the telemetry daemon."""
-    app_ctx = build_application_context()
-    try:
-        app_ctx.engine.start()
-        print("ed-telemetry baseline verified: engine started successfully")
-        app_ctx.engine.stop()
-    except Exception as exc:
-        platform_name = getattr(exc, "platform_name", "unknown")
-        print(f"ed-telemetry baseline verified: engine initialized (standby mode, {platform_name})")
-    return 0
+from ed_telemetry.core.ports.driving.telemetry_port import GetWatcherStatusPort
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+class CliTelemetryAdapter:
+    """Driving adapter executing watcher status inspections for CLI runtime."""
+
+    def __init__(self, watcher_status_port: GetWatcherStatusPort) -> None:
+        self._watcher_status_port = watcher_status_port
+
+    def run(self) -> tuple[int, dict[str, Any]]:
+        """Query watcher status and format response."""
+        status = self._watcher_status_port.get_status()
+        payload: dict[str, Any] = {
+            "is_active": status.is_active,
+            "active_journal": status.active_journal,
+            "monitored_directory": status.monitored_directory,
+        }
+        return 0, payload

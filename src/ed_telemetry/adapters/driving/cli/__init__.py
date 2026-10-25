@@ -1,5 +1,5 @@
-"""CLI package for services."""
+"""CLI driving adapter package."""
 
-from interfaces.cli.main import main
+from .main import CliTelemetryAdapter
 
-__all__ = ["main"]
+__all__ = ["CliTelemetryAdapter"]

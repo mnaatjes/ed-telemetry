@@ -11,7 +11,7 @@ from ed_telemetry.adapters.driven.watcher.engine.reactor import WatcherReactor
 from ed_telemetry.adapters.driven.watcher.engine.receiver import (
     ReactorQueueMetrics,
     WatcherHintAction,
-    WatcherIngestCommand,
+    WatcherIngestHint,
     WatcherIngestReceiver,
 )
 from ed_telemetry.adapters.driven.watcher.engine.snapshot_reader import SnapshotReader
@@ -29,7 +29,7 @@ __all__ = [
     "WatcherAuditAction",
     "WatcherAuditEvent",
     "WatcherHintAction",
-    "WatcherIngestCommand",
+    "WatcherIngestHint",
     "WatcherIngestReceiver",
     "WatcherReactor",
 ]

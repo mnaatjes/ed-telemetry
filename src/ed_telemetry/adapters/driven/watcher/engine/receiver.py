@@ -16,7 +16,7 @@ class WatcherHintAction(StrEnum):
 
 
 @dataclass(frozen=True)
-class WatcherIngestCommand:
+class WatcherIngestHint:
     """
     Agnostic filesystem hint received across the boundary.
     Contains zero game schema logic.
@@ -42,7 +42,7 @@ class ReactorQueueMetrics:
 class WatcherIngestReceiver(Protocol):
     """Inbound boundary protocol implemented by the reactive reactor."""
 
-    def submit_hint(self, command: WatcherIngestCommand) -> bool:
+    def submit_hint(self, command: WatcherIngestHint) -> bool:
         """
         Enqueues an operational hint and signals the reactor loop to wake immediately.
         Returns True if enqueued, False if dropped due to queue saturation.

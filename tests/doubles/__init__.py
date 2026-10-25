@@ -1,6 +1,17 @@
 """Test doubles package exports."""
 
-from .fake_egress_adapter import FakeEgressAdapter
-from .fake_watcher_adapter import FakeWatcherAdapter
+from .fake_adapters import (
+    FakeDiscreteSinkAdapter,
+    FakeEgressAdapter,
+    FakeLifecycleAdapter,
+    FakeStreamSourceAdapter,
+    FakeWatcherAdapter,
+)
 
-__all__ = ["FakeWatcherAdapter", "FakeEgressAdapter"]
+__all__ = (
+    "FakeDiscreteSinkAdapter",
+    "FakeEgressAdapter",
+    "FakeLifecycleAdapter",
+    "FakeStreamSourceAdapter",
+    "FakeWatcherAdapter",
+)

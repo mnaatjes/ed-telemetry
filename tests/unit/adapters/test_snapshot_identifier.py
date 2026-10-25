@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from infrastructure.watcher.exceptions import (
+from ed_telemetry.adapters.driven.watcher.exceptions import (
     InvalidSnapshotFileTypeError,
     SnapshotCollisionError,
     SnapshotDirectoryAccessError,
     SnapshotRegistrationError,
     UnregisteredSnapshotError,
 )
-from infrastructure.watcher.snapshots import (
+from ed_telemetry.adapters.driven.watcher.snapshots import (
     CANONICAL_AUXILIARY_SNAPSHOTS,
     SnapshotIdentifier,
     SnapshotRegistry,

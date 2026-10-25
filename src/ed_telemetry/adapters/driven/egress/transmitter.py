@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from ed_telemetry.core.ports.driven.telemetry_driven_port import EgressPort, TelemetryPayloadDTO
+from ed_telemetry.core.ports.driven.telemetry_driven_port import EgressPort
+from ed_telemetry.core.ports.dto.telemetry_dto import TelemetryPayloadDTO
 
 
 class NullTransmitter(EgressPort):

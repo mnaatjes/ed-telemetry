@@ -21,136 +21,31 @@ dev = [
 ]
 
 [project.scripts]
-ed-telemetry = "interfaces.cli.main:main"
+ed-telemetry = "ed_telemetry.bootstrap.container:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4"]
 ignore = []
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
-packages = ["domain", "services", "infrastructure", "interfaces", "sdk"]
+packages = ["ed_telemetry"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = [".", "src"]
-
-[tool.importlinter]
-include_external_packages = true
-root_packages = [
-    "domain",
-    "services",
-    "infrastructure",
-    "interfaces",
-    "sdk",
-]
-
-[[tool.importlinter.contracts]]
-name = "Invariant A: Domain package must remain purely decoupled"
-type = "forbidden"
-source_modules = ["domain"]
-forbidden_modules = [
-    "services",
-    "infrastructure",
-    "interfaces",
-    "sdk",
-    "watchdog",
-    "tkinter",
-    "socket",
-    "http",
-    "urllib",
-    "requests",
-    "httpx",
-]
-
-[[tool.importlinter.contracts]]
-name = "Invariant B: SDK forbidden in production packages"
-type = "forbidden"
-source_modules = [
-    "domain",
-    "services",
-    "infrastructure",
-    "interfaces",
-]
-forbidden_modules = ["sdk"]
-
-[[tool.importlinter.contracts]]
-name = "Layered Architecture Boundaries"
-type = "layers"
-layers = [
-    "interfaces",
-    "services",
-    "infrastructure",
-    "domain",
-]
-
-[[tool.importlinter.contracts]]
-name = "Invariant G: Infrastructure adapter isolation"
-type = "forbidden"
-source_modules = [
-    "interfaces.cli",
-    "services.watcher",
-    "services.base",
-    "services.dto",
-    "services.context",
-    "services.exceptions",
-]
-forbidden_modules = [
-    "infrastructure.watcher",
-    "infrastructure.egress",
-]
-allow_indirect_imports = true
-
-[[tool.importlinter.contracts]]
-name = "Invariant D: Downward dependency within services"
-type = "layers"
-layers = [
-    "services.bootstrap",
-    "services.context",
-    "services.watcher",
-    "services.base",
-    "services.dto",
-    "services.exceptions",
-]
-
-[[tool.importlinter.contracts]]
-name = "Invariant C: Services and DTOs forbidden from protocol frameworks"
-type = "forbidden"
-source_modules = [
-    "services.watcher",
-    "services.base",
-    "services.dto",
-]
-forbidden_modules = [
-    "argparse",
-    "click",
-    "fastapi",
-    "starlette",
-    "mcp",
-]
-
-[[tool.importlinter.contracts]]
-name = "Invariant P3: Path 3 computational modules forbidden from infrastructure and registries"
-type = "forbidden"
-source_modules = [
-    "domain",
-]
-forbidden_modules = [
-    "infrastructure",
-    "services.registry",
-]
 
 [tool.bumpversion]
 current_version = "0.3.0"
@@ -177,7 +72,7 @@ search = 'version = "{current_version}"'
 replace = 'version = "{new_version}"'
 
 [[tool.bumpversion.files]]
-filename = "src/domain/__init__.py"
+filename = "src/ed_telemetry/__init__.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
 
