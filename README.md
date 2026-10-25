@@ -67,7 +67,33 @@ src/ed_telemetry/
 
 Requires **Python 3.11+** with **zero runtime third-party dependencies**.
 
-### Installation
+### Option A: Install via Pip Directly from GitHub (Recommended for Operators)
+Install the latest release directly into your active Python environment or toolchain:
+```bash
+pip install git+https://github.com/mnaatjes/ed-telemetry.git@v0.4.0
+```
+
+### Option B: Isolated CLI Execution via `pipx` (Recommended for Headless Systems & Steam Deck)
+Execute `ed-telemetry` in an isolated virtual environment without polluting system Python:
+```bash
+# Install globally in isolated container
+pipx install git+https://github.com/mnaatjes/ed-telemetry.git
+
+# Or run directly without prior installation
+pipx run --spec git+https://github.com/mnaatjes/ed-telemetry.git ed-telemetry --help
+```
+
+### Option C: Build and Install from Source Wheel
+```bash
+# Build standard Python wheel
+python3 -m pip install --upgrade build
+python3 -m build
+
+# Install the built artifact
+pip install dist/ed_telemetry-0.4.0-py3-none-any.whl
+```
+
+### Option D: Local Development Setup (Editable Mode)
 ```bash
 # Clone the repository
 git clone https://github.com/mnaatjes/ed-telemetry.git
@@ -80,7 +106,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install in editable mode
 pip install -e .
 
-# (Optional) Install development and testing tooling
+# (Optional) Install development and quality gate tooling
 pip install -e ".[dev]"
 ```
 
