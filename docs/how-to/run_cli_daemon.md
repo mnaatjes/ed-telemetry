@@ -131,7 +131,30 @@ ed-telemetry events --json
 
 ---
 
-## 5. Streaming Live Events (`tail`)
+## 5. Inspecting Diagnostic Application Logs (`logs`)
+
+Inspect operational logs with automatic daemon probing and offline disk file fallback:
+
+```bash
+# Query recent logs (default 50)
+ed-telemetry logs
+
+# Filter by minimum log severity
+ed-telemetry logs --level WARNING
+
+# Limit record count
+ed-telemetry logs --limit 10
+
+# Output as formatted JSON
+ed-telemetry logs --json
+```
+
+* **When Daemon is Online:** `ed-telemetry logs` queries the running daemon's in-memory ring buffer via `GET /api/v1/diagnostics/logs`.
+* **When Daemon is Offline:** `ed-telemetry logs` falls back to reading and parsing recent entries from the rotating log file on disk (`resolve_default_log_path()`).
+
+---
+
+## 6. Streaming Live Events (`tail`)
 
 Follow real-time telemetry and audit events from the terminal:
 
@@ -146,4 +169,5 @@ ed-telemetry tail --topic telemetry.audit
 ed-telemetry tail --json
 ```
 
-Press `Ctrl+C` to terminate the stream.
+* **When Daemon is Online:** Connects to the HTTP/SSE streaming endpoint (`/api/v1/stream`) and yields inbound events in real time.
+* **When Daemon is Offline:** Activates a local, standalone `FileSystemWatcher` streaming lifecycle, streaming events directly from the journal files until terminated with `Ctrl+C`.
