@@ -45,7 +45,7 @@ ed-telemetry serve [--host HOST] [--port PORT] [--log-level LEVEL] [--log-file P
 ---
 
 ### 2.2 `status`
-Inspects operational state of the telemetry watcher or player cockpit.
+Inspects operational state of the telemetry watcher or player cockpit. Automatically probes for an active daemon on `http://127.0.0.1:8080/api/v1/status` (or configured host/port) to report live `is_active: true` status, falling back to local inspection when offline.
 
 ```bash
 ed-telemetry status [target] [--json]
@@ -77,7 +77,7 @@ ed-telemetry events [--topic TOPIC] [--since-id ID] [--limit N] [--json]
 ---
 
 ### 2.4 `logs`
-Inspects the in-memory diagnostic log ring buffer.
+Inspects diagnostic application logs. When a background daemon is running, queries its in-memory ring buffer via `GET /api/v1/diagnostics/logs`. When offline, falls back to parsing recent lines from the rotating log file on disk (`resolve_default_log_path()`).
 
 ```bash
 ed-telemetry logs [--level LEVEL] [--limit N] [--json]
@@ -93,7 +93,7 @@ ed-telemetry logs [--level LEVEL] [--limit N] [--json]
 ---
 
 ### 2.5 `tail`
-Follows live telemetry events and error bubbling from the egress stream.
+Follows live telemetry events and error bubbling from the egress stream. When a background daemon is running, streams from `GET /api/v1/stream` via SSE. When offline, activates a local standalone `FileSystemWatcher` streaming lifecycle.
 
 ```bash
 ed-telemetry tail [--topic TOPIC] [--json]
@@ -104,6 +104,7 @@ ed-telemetry tail [--topic TOPIC] [--json]
 | :--- | :--- | :--- | :--- |
 | `--topic` | `str \| None` | `None` | Filter stream by topic (e.g. `telemetry.audit`). |
 | `--json` | `flag` | `False` | Output events as one JSON line per event. |
+
 
 ---
 

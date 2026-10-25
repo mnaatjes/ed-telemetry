@@ -13,7 +13,7 @@ This technical reference specifies the filesystem paths, rotation policies, thre
 
 ## 1. Cross-Platform Log Paths & Rotation Policy
 
-Log file paths are resolved dynamically by `ed_telemetry.bootstrap.container.resolve_default_log_path()`:
+Log file paths are resolved dynamically by `ed_telemetry.adapters.paths.resolve_default_log_path()`:
 
 | Platform | Default Path | Environment Variable Overrides |
 | :--- | :--- | :--- |
@@ -62,7 +62,10 @@ class DiagnosticLogSnapshotDTO(DataTransferObject):
 ## 3. SQLite Telemetry Persistence (WAL Mode)
 
 Managed by `ed_telemetry.adapters.driven.persistence.sqlite_adapter.SqlitePersistenceManager`:
-* **Default Database Path:** `.cache/telemetry.db`.
+* **Default Database Path:** Dynamically resolved by `ed_telemetry.adapters.paths.resolve_default_db_path()`:
+  * **Windows:** `%LOCALAPPDATA%\ed-telemetry\telemetry.db` (fallback: `%USERPROFILE%\.cache\ed-telemetry\telemetry.db`).
+  * **Linux / Steam Deck:** `${XDG_DATA_HOME:-~/.local/share}/ed-telemetry/telemetry.db`.
+  * **Explicit Overrides:** `--db-path <PATH>` CLI option or `ED_DB_PATH` environment variable.
 * **Journal Mode:** `PRAGMA journal_mode=WAL;` (Write-Ahead Logging for concurrent reader/writer access).
 * **Synchronous Setting:** `PRAGMA synchronous=NORMAL;`.
 * **Schema:**
