@@ -78,7 +78,6 @@ def build_container(
     find_events = FindTelemetryEventsUseCase(repository=sqlite_repo)
     stream_events = GetTelemetryStreamUseCase(queue=egress_buffer)
 
-    cli_adapter = CliTelemetryAdapter(watcher_status_port=get_status)
     http_api_adapter = HttpApiAdapter(
         host=http_host,
         port=http_port,
@@ -91,6 +90,13 @@ def build_container(
         journal_path_port=find_path,
         journal_files_port=get_journals,
         aux_snapshot_port=get_aux,
+    )
+    cli_adapter = CliTelemetryAdapter(
+        watcher_status_port=get_status,
+        game_status_port=get_game_status,
+        find_events_port=find_events,
+        process_stream_port=process_stream,
+        http_api_adapter=http_api_adapter,
     )
 
     return Container(
@@ -113,6 +119,5 @@ def build_container(
 def main() -> int:
     """CLI execution entrypoint wired from composition root."""
     container = build_container()
-    code, payload = container.cli_adapter.run()
-    print(f"ed-telemetry baseline verified: status retrieved (active={payload['is_active']})")
+    code, _ = container.cli_adapter.run()
     return code

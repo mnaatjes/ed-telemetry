@@ -897,3 +897,26 @@ def test_core_ports_dto_remain_game_semantic_agnostic() -> None:
                         f"DTO {node.name} in {py_file.name} introduces game-semantic entity logic. "
                         "ed-telemetry boundary DTOs must remain transport/envelope agnostic (ADR 0020)."
                     )
+
+
+def test_no_third_party_cli_framework_imports() -> None:
+    """Asserts that ed_telemetry does not import third-party CLI frameworks (ADR 0024)."""
+    pkg_root = _get_package_root()
+    forbidden_cli = {"click", "typer", "rich", "docopt", "fire"}
+
+    for py_file in pkg_root.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root_pkg = alias.name.split(".")[0]
+                    assert root_pkg not in forbidden_cli, (
+                        f"File {py_file} illegally imports CLI framework '{alias.name}'. "
+                        "ed-telemetry CLI is strictly standard library argparse (ADR 0024)."
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                root_pkg = node.module.split(".")[0]
+                assert root_pkg not in forbidden_cli, (
+                    f"File {py_file} illegally imports from CLI framework '{node.module}'. "
+                    "ed-telemetry CLI is strictly standard library argparse (ADR 0024)."
+                )
