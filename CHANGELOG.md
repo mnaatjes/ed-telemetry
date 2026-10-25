@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-25
+
 ### Added
 - Zero-dependency HTTP REST and SSE API server (`src/ed_telemetry/adapters/driving/api/server.py`) serving live telemetry streams, snapshot sync, and RFC 7807 problem details error bubbling (ADR 0020, ADR 0024, SDD-018, SDD-022).
 - Zero-framework CLI driving adapter (`src/ed_telemetry/adapters/driving/cli/main.py`) providing `serve`, `status`, `events`, `logs`, and `tail` subcommands (ADR 0024, SDD-022).
