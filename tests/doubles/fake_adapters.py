@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from ed_telemetry.core.ports.driven.telemetry_driven_port import (
     AuditEventHandler,
     DiscreteSinkPort,
@@ -12,7 +14,13 @@ from ed_telemetry.core.ports.driven.telemetry_driven_port import (
     WatcherPort,
 )
 from ed_telemetry.core.ports.dto.telemetry_dto import (
+    AuxiliarySnapshotDTO,
     FileIngestionEventDTO,
+    GameStatusSnapshotDTO,
+    HintSubmissionDTO,
+    JournalCandidateDTO,
+    JournalFileListDTO,
+    JournalPathDTO,
     TelemetryPayloadDTO,
     WatcherAuditEventDTO,
 )
@@ -95,6 +103,59 @@ class FakeWatcherAdapter(WatcherPort):
     def emit_test_audit(self, event: WatcherAuditEventDTO) -> None:
         for handler in self._audit_handlers:
             handler(event)
+
+    def discover_path(self, override_path: str | None = None) -> JournalPathDTO:
+        resolved = override_path or self._journal_dir or "/fake/journal/dir"
+        return JournalPathDTO(
+            resolved_path=resolved,
+            platform="linux",
+            discovery_source="fake_test_double",
+        )
+
+    def list_journals(self) -> JournalFileListDTO:
+        target_dir = self._journal_dir or "/fake/journal/dir"
+        candidates = (
+            JournalCandidateDTO(
+                filename="Journal.2026-10-25T000000.01.log",
+                path=f"{target_dir}/Journal.2026-10-25T000000.01.log",
+                timestamp=datetime(2026, 10, 25, 0, 0, 0, tzinfo=UTC),
+                part=1,
+                mtime=1729814400.0,
+                is_standard_format=True,
+            ),
+        )
+        return JournalFileListDTO(
+            journal_dir=target_dir,
+            candidates=candidates,
+            active_journal=candidates[0].filename,
+        )
+
+    def read_status_snapshot(self) -> GameStatusSnapshotDTO:
+        return GameStatusSnapshotDTO(
+            exists=True,
+            target_path=f"{self._journal_dir or '/fake/journal/dir'}/Status.json",
+            timestamp=datetime(2026, 10, 25, 0, 0, 0, tzinfo=UTC),
+            raw_payload=b'{"Flags": 16842765, "Pips": [4, 8, 0], "FireGroup": 0}',
+            raw_hash="fake_status_hash",
+        )
+
+    def read_auxiliary_snapshot(self, name: str) -> AuxiliarySnapshotDTO:
+        return AuxiliarySnapshotDTO(
+            target_name=name,
+            exists=True,
+            target_path=f"{self._journal_dir or '/fake/journal/dir'}/{name}",
+            timestamp=datetime(2026, 10, 25, 0, 0, 0, tzinfo=UTC),
+            raw_payload=b'{"timestamp":"2026-10-25T00:00:00Z","event":"NavRoute","Route":[]}',
+            raw_hash="fake_aux_hash",
+        )
+
+    def submit_ingest_hint(self, action: str, target_name: str | None = None) -> HintSubmissionDTO:
+        return HintSubmissionDTO(
+            action=action,
+            target_name=target_name,
+            accepted=True,
+            detail="Hint accepted by fake double",
+        )
 
 
 class FakeEgressAdapter(EgressPort):

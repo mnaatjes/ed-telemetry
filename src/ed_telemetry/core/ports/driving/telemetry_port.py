@@ -6,6 +6,11 @@ from typing import Protocol, runtime_checkable
 
 from ..base import DrivingPort
 from ..dto.telemetry_dto import (
+    AuxiliarySnapshotDTO,
+    GameStatusSnapshotDTO,
+    HintSubmissionDTO,
+    JournalFileListDTO,
+    JournalPathDTO,
     SnapshotSyncResultDTO,
     StartMonitoringDTO,
     WatcherStatusDTO,
@@ -35,10 +40,55 @@ class SyncJournalSnapshotPort(DrivingPort, Protocol):
     def sync_snapshots(self) -> SnapshotSyncResultDTO: ...
 
 
+@runtime_checkable
+class FindJournalPathPort(DrivingPort, Protocol):
+    """Primary driving port for discovering the Elite Dangerous journal directory."""
+
+    def find_path(self, override_path: str | None = None) -> JournalPathDTO: ...
+
+
+@runtime_checkable
+class GetJournalFilesPort(DrivingPort, Protocol):
+    """Primary driving port for listing candidate journal files in chronological order."""
+
+    def get_journals(self) -> JournalFileListDTO: ...
+
+
+@runtime_checkable
+class GetLatestGameStatusPort(DrivingPort, Protocol):
+    """Primary driving port for inspecting current Status.json state."""
+
+    def get_game_status(self) -> GameStatusSnapshotDTO: ...
+
+
+@runtime_checkable
+class GetAuxiliarySnapshotPort(DrivingPort, Protocol):
+    """Primary driving port for inspecting an auxiliary state snapshot."""
+
+    def get_snapshot(self, snapshot_name: str) -> AuxiliarySnapshotDTO: ...
+
+
+@runtime_checkable
+class SubmitSnapshotRefreshPort(DrivingPort, Protocol):
+    """Primary driving port for submitting an immediate snapshot re-read hint."""
+
+    def refresh_snapshot(self, snapshot_name: str) -> HintSubmissionDTO: ...
+
+
 __all__ = (
+    "FindJournalPathPort",
+    "GetAuxiliarySnapshotPort",
+    "GetJournalFilesPort",
+    "GetLatestGameStatusPort",
     "GetWatcherStatusPort",
     "ProcessTelemetryStreamPort",
+    "SubmitSnapshotRefreshPort",
     "SyncJournalSnapshotPort",
+    "AuxiliarySnapshotDTO",
+    "GameStatusSnapshotDTO",
+    "HintSubmissionDTO",
+    "JournalFileListDTO",
+    "JournalPathDTO",
     "SnapshotSyncResultDTO",
     "StartMonitoringDTO",
     "WatcherStatusDTO",

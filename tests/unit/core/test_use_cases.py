@@ -100,3 +100,77 @@ class TestSyncJournalSnapshotUseCase:
         assert result.files_inspected == 0
         assert result.payloads_emitted == 0
         assert result.active_journal_file is None
+
+
+class TestFindJournalPathUseCase:
+    """Verifies FindJournalPathUseCase."""
+
+    def test_find_path_returns_dto(self) -> None:
+        from ed_telemetry.core.use_cases.find_journal_path import FindJournalPathUseCase
+
+        watcher = FakeWatcherAdapter(journal_dir="/custom/games/ed")
+        use_case = FindJournalPathUseCase(watcher=watcher)
+
+        res = use_case.find_path()
+        assert res.resolved_path == "/custom/games/ed"
+        assert res.platform == "linux"
+        assert res.discovery_source == "fake_test_double"
+
+
+class TestGetJournalFilesUseCase:
+    """Verifies GetJournalFilesUseCase."""
+
+    def test_get_journals_returns_candidates(self) -> None:
+        from ed_telemetry.core.use_cases.get_journal_files import GetJournalFilesUseCase
+
+        watcher = FakeWatcherAdapter(journal_dir="/custom/games/ed")
+        use_case = GetJournalFilesUseCase(watcher=watcher)
+
+        res = use_case.get_journals()
+        assert res.journal_dir == "/custom/games/ed"
+        assert len(res.candidates) == 1
+        assert res.active_journal == "Journal.2026-10-25T000000.01.log"
+
+
+class TestGetLatestGameStatusUseCase:
+    """Verifies GetLatestGameStatusUseCase."""
+
+    def test_get_game_status_returns_snapshot(self) -> None:
+        from ed_telemetry.core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
+
+        watcher = FakeWatcherAdapter(journal_dir="/custom/games/ed")
+        use_case = GetLatestGameStatusUseCase(watcher=watcher)
+
+        status = use_case.get_game_status()
+        assert status.exists is True
+        assert b"Flags" in status.raw_payload
+
+
+class TestGetAuxiliarySnapshotUseCase:
+    """Verifies GetAuxiliarySnapshotUseCase."""
+
+    def test_get_snapshot_returns_target_payload(self) -> None:
+        from ed_telemetry.core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
+
+        watcher = FakeWatcherAdapter(journal_dir="/custom/games/ed")
+        use_case = GetAuxiliarySnapshotUseCase(watcher=watcher)
+
+        snapshot = use_case.get_snapshot("NavRoute.json")
+        assert snapshot.exists is True
+        assert snapshot.target_name == "NavRoute.json"
+        assert b"NavRoute" in snapshot.raw_payload
+
+
+class TestSubmitSnapshotRefreshUseCase:
+    """Verifies SubmitSnapshotRefreshUseCase."""
+
+    def test_refresh_snapshot_submits_hint(self) -> None:
+        from ed_telemetry.core.use_cases.submit_snapshot_refresh import SubmitSnapshotRefreshUseCase
+
+        watcher = FakeWatcherAdapter(journal_dir="/custom/games/ed")
+        use_case = SubmitSnapshotRefreshUseCase(watcher=watcher)
+
+        res = use_case.refresh_snapshot("Market.json")
+        assert res.accepted is True
+        assert res.target_name == "Market.json"
+        assert res.action == "hint_snapshot"

@@ -7,7 +7,12 @@ from typing import Protocol, runtime_checkable
 
 from ..base import DrivenPort
 from ..dto.telemetry_dto import (
+    AuxiliarySnapshotDTO,
     FileIngestionEventDTO,
+    GameStatusSnapshotDTO,
+    HintSubmissionDTO,
+    JournalFileListDTO,
+    JournalPathDTO,
     TelemetryPayloadDTO,
     WatcherAuditEventDTO,
 )
@@ -50,6 +55,16 @@ class WatcherPort(LifecyclePort, StreamSourcePort, DrivenPort, Protocol):
 
     @property
     def journal_dir(self) -> str | None: ...
+
+    def discover_path(self, override_path: str | None = None) -> JournalPathDTO: ...
+
+    def list_journals(self) -> JournalFileListDTO: ...
+
+    def read_status_snapshot(self) -> GameStatusSnapshotDTO: ...
+
+    def read_auxiliary_snapshot(self, name: str) -> AuxiliarySnapshotDTO: ...
+
+    def submit_ingest_hint(self, action: str, target_name: str | None = None) -> HintSubmissionDTO: ...
 
 
 @runtime_checkable

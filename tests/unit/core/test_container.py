@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from ed_telemetry.bootstrap.container import Container, build_container
+from ed_telemetry.core.use_cases.find_journal_path import FindJournalPathUseCase
+from ed_telemetry.core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
+from ed_telemetry.core.use_cases.get_journal_files import GetJournalFilesUseCase
+from ed_telemetry.core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
 from ed_telemetry.core.use_cases.get_watcher_status import GetWatcherStatusUseCase
 from ed_telemetry.core.use_cases.process_telemetry_stream import (
     ProcessTelemetryStreamUseCase,
 )
+from ed_telemetry.core.use_cases.submit_snapshot_refresh import SubmitSnapshotRefreshUseCase
 from ed_telemetry.core.use_cases.sync_journal_snapshot import (
     SyncJournalSnapshotUseCase,
 )
@@ -27,4 +32,24 @@ class TestContainer:
         assert isinstance(
             container.sync_journal_snapshot_use_case,
             SyncJournalSnapshotUseCase,
+        )
+        assert isinstance(
+            container.find_journal_path_use_case,
+            FindJournalPathUseCase,
+        )
+        assert isinstance(
+            container.get_journal_files_use_case,
+            GetJournalFilesUseCase,
+        )
+        assert isinstance(
+            container.get_latest_game_status_use_case,
+            GetLatestGameStatusUseCase,
+        )
+        assert isinstance(
+            container.get_auxiliary_snapshot_use_case,
+            GetAuxiliarySnapshotUseCase,
+        )
+        assert isinstance(
+            container.submit_snapshot_refresh_use_case,
+            SubmitSnapshotRefreshUseCase,
         )
