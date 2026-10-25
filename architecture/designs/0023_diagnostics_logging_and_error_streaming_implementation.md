@@ -128,14 +128,30 @@ Update `CliTelemetryAdapter` (`src/ed_telemetry/adapters/driving/cli/main.py`):
 3. **Subcommand `serve` options**:
    - Adds `--log-level` and `--log-file` configuring the root rotating file and console logger.
 
+### 3.7 Cross-Platform Log Path Resolution & Rotation
+Implement `resolve_default_log_path(platform: SupportedPlatform | None = None) -> Path`:
+1. **Windows Path Strategy:**
+   - Evaluates `%LOCALAPPDATA%\ed-telemetry\logs\ed-telemetry.log`.
+   - Fallback: `%USERPROFILE%\.cache\ed-telemetry\logs\ed-telemetry.log`.
+2. **Linux / SteamDeck Strategy:**
+   - Evaluates `${XDG_STATE_HOME:-~/.local/state}/ed-telemetry/ed-telemetry.log`.
+   - Fallback: `~/.cache/ed-telemetry/logs/ed-telemetry.log`.
+3. **Rotating File Configuration:**
+   - `RotatingFileHandler(log_path, maxBytes=5_242_880, backupCount=3, encoding='utf-8')`.
+   - Ensured directory creation via `log_path.parent.mkdir(parents=True, exist_ok=True)`.
+   - Deterministic file handler closure on shutdown to prevent Windows sharing locks.
+
 ## 4. Verification & Testing Strategy
 
 1. **Unit Tests (`tests/unit/adapters/test_diagnostic_logging.py` & `test_cli_adapter.py`)**:
    - Test `DiagnosticLogBuffer` thread-safety, level filtering, and capacity bounds.
    - Test audit event bubbling from `ProcessTelemetryStreamUseCase` into `CompositeEgressAdapter`.
    - Test CLI `logs` and `tail` subcommands and argument validation.
+   - Test `resolve_default_log_path` on Linux and mocked Windows environments.
 2. **API Tests (`tests/unit/adapters/test_http_api.py`)**:
    - Test `GET /api/v1/diagnostics/logs` for 200 responses and level filtering.
    - Test `GET /api/v1/stream` receiving `telemetry.audit` events.
 3. **Cross-Platform Wine Validation (`scripts/run_wine_tests.sh`)**:
-   - Test diagnostic log snapshot retrieval and audit stream events under Windows NT / Wine simulant.
+   - Verify `resolve_default_log_path` resolves to Windows `%LOCALAPPDATA%` under Wine.
+   - Verify `RotatingFileHandler` writes, rotates, and closes without `[WinError 32]` file sharing locks.
+   - Verify CLI `logs` and `tail` subcommands under Windows NT simulant.

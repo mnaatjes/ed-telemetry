@@ -58,8 +58,23 @@ To give operators direct terminal access to diagnostic logs and real-time error 
 3. **`ed-telemetry serve` Logging Flags:**
    - Adds `--log-level` and `--log-file` to configure daemon logging destinations at startup.
 
+### 5. Cross-Platform Local Log Storage & Retention (Windows & Linux)
+To ensure robust, zero-configuration local log persistence on target gaming rigs and headless Linux hosts:
+1. **OS Standard Storage Paths:**
+   - **Microsoft Windows:** Resolves default log destination to `%LOCALAPPDATA%\ed-telemetry\logs\ed-telemetry.log` (falling back to `%USERPROFILE%\.cache\ed-telemetry\logs\`).
+   - **Linux / SteamDeck:** Resolves default log destination to `${XDG_STATE_HOME:-$HOME/.local/state}/ed-telemetry/ed-telemetry.log` (falling back to `~/.cache/ed-telemetry/`).
+   - Automatic parent directory creation (`mkdir(parents=True, exist_ok=True)`).
+2. **Rotating File Retention:**
+   - Managed via Python standard library `logging.handlers.RotatingFileHandler`.
+   - Bounds disk utilization: 5 MB maximum file size (`maxBytes=5_242_880`) retaining 3 archival generations (`backupCount=3`).
+3. **Windows File-Locking Invariants:**
+   - In accordance with our Windows NT / Wine simulant experience, file descriptors are guarded against mandatory lock contention during log rotation and daemon teardown.
+4. **Offline Post-Mortem Accessibility:**
+   - Because logs write to stable host OS locations in standard plain text, users can inspect crash logs offline or attach them directly to GitHub issues without starting the telemetry engine.
+
 ## Consequences
 - Complete, real-time observability over SSE and queryable history via SQLite without new external dependencies.
 - Snapshot diagnostic inspections available via a dedicated endpoint and `ed-telemetry logs` CLI subcommand.
+- Robust cross-platform local disk logging adhering to Windows `%LOCALAPPDATA%` and Linux XDG conventions.
 - Terminal operators can follow live game telemetry or audit streams using `ed-telemetry tail`.
 - 100% compliance with hexagonal boundaries and ADR 0020 guardrails.
