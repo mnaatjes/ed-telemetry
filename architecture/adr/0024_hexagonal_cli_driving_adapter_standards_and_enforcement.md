@@ -65,7 +65,14 @@ The `ed-telemetry` CLI shall expose four primary subcommands:
 | **Wine Simulant Tests** | `scripts/run_wine_tests.sh` | Verifies `ed-telemetry` CLI subcommands (`serve`, `status`, `events`) under Windows NT / Wine environment. |
 | **CI Matrix** | GitHub Actions (`verify.py`) | Executes linters, boundaries, and unit tests across Linux and Windows runners. |
 
+### 4. Planned CLI Logging Features (Future Scope)
+The following observability capabilities are planned for future iterations and accommodated in the CLI argument design:
+1. **Live Event Tailing (`ed-telemetry tail` / `events --follow`):** Connects to `GetTelemetryStreamUseCase` to stream raw journal events live to stdout as they occur.
+2. **Audit Diagnostics (`ed-telemetry logs audit`):** Inspects internal watcher lifecycle transitions (`WatcherAuditEventDTO`) including part rollovers, freshness checks, and line quarantining.
+3. **Application Log Routing (`--log-level`, `--log-file`):** Standardized console and file logger configurations for debugging daemon runtime execution.
+
 ## Consequences
 - The CLI provides an ergonomic, Unix-friendly interface for operators and shell scripts.
 - The entire application remains 100% zero-dependency, adhering strictly to ADR 0020.
 - All commands execute through tested use-case interactors, ensuring identical behavior between CLI and HTTP endpoints.
+- Future logging and tailing capabilities are architecturally accommodated without premature implementation.
