@@ -158,6 +158,13 @@ class FileSystemWatcher(WatcherPort):
     def journal_dir(self) -> str | None:
         """Return the active journal directory path as string, or None if uninitialized."""
         with self._lock:
+            if self._journal_dir is None:
+                try:
+                    discoverer = PathDiscoverer()
+                    res = discoverer.discover_journal_directory()
+                    self._journal_dir = res.resolved_path
+                except Exception:
+                    pass
             return str(self._journal_dir) if self._journal_dir is not None else None
 
     def discover_path(self, override_path: str | None = None) -> JournalPathDTO:

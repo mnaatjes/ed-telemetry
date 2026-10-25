@@ -106,3 +106,64 @@ class TestCliTelemetryAdapter:
                 code, payload = adapter.run(["logs", "--json"])
             assert code == 0
             assert '"records"' in buf_json.getvalue()
+
+    def test_cli_logs_fallback_to_disk_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            log_file = Path(tmp_dir) / "test.log"
+            log_file.write_text(
+                "2026-10-25T14:26:10 [INFO] ed_telemetry.server: Daemon started\n"
+                "2026-10-25T14:26:11 [ERROR] ed_telemetry.core: Test failure\n",
+                encoding="utf-8",
+            )
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            from unittest.mock import patch
+
+            with patch("ed_telemetry.adapters.paths.resolve_default_log_path", return_value=log_file):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    code, payload = adapter.run(["logs", "--limit", "5"])
+                assert code == 0
+                assert payload["total_retained"] >= 2
+                assert "Test failure" in buf.getvalue()
+
+    def test_cli_serve_fast_fail_on_path_discovery_error(self) -> None:
+        from unittest.mock import patch
+
+        from ed_telemetry.adapters.driven.watcher.discovery.exceptions import JournalPathNotFoundError
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            with patch.object(
+                container.find_journal_path_use_case,
+                "find_path",
+                side_effect=JournalPathNotFoundError(inspected_paths=[], platform_name="linux"),
+            ):
+                err_buf = io.StringIO()
+                with redirect_stdout(io.StringIO()), patch("sys.stderr", err_buf):
+                    code, payload = adapter.run(["serve"])
+                assert code == 1
+                assert "Failed to discover Elite Dangerous journal directory" in err_buf.getvalue()
+
+    def test_cli_tail_standalone_offline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            win_dir = Path(tmp_dir) / "journals"
+            win_dir.mkdir()
+            (win_dir / "Journal.2026-10-09T100000.01.log").write_bytes(b'{"event":"FileHeader","part":1}\n')
+            db_file = Path(tmp_dir) / "test.db"
+
+            container = build_container(journal_dir=win_dir, poll_interval=0.05, db_path=db_file)
+            adapter = container.cli_adapter
+
+            from unittest.mock import patch
+
+            with patch.object(adapter._stream_events_port, "stream_events", side_effect=KeyboardInterrupt):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    code, payload = adapter.run(["tail"])
+                assert code == 0
+                assert "Streaming live telemetry" in buf.getvalue()
+                assert "Stopped streaming." in buf.getvalue()

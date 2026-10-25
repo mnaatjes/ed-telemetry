@@ -27,16 +27,20 @@ When invoked with no arguments or `--help`, the CLI displays command assistance 
 Runs the background telemetry ingestion daemon, SQLite WAL event persistence, and HTTP/SSE API server.
 
 ```bash
-ed-telemetry serve [--host HOST] [--port PORT] [--log-level LEVEL] [--log-file PATH]
+ed-telemetry serve [--host HOST] [--port PORT] [--log-level LEVEL] [--log-file PATH] [--journal-dir PATH] [--db-path PATH] [--poll-interval SEC]
 ```
 
 #### Arguments
 | Argument | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--host` | `str` | `127.0.0.1` | Network interface to bind for the HTTP/SSE server. |
-| `--port` | `int` | `8080` | Port number for the HTTP/SSE server. |
-| `--log-level` | `str` | `INFO` | Root logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
-| `--log-file` | `Path \| None` | `None` | Path to rotating log file. Defaults to standard OS path. |
+| `--host` | `str` | `127.0.0.1` | Network interface to bind for HTTP/SSE server (fallback: `$ED_HTTP_HOST`). |
+| `--port` | `int` | `8080` | Port number for HTTP/SSE server (fallback: `$ED_HTTP_PORT`). |
+| `--log-level` | `str` | `INFO` | Root logging level (fallback: `$ED_LOG_LEVEL`). |
+| `--log-file` | `Path \| None` | `None` | Path to rotating log file (fallback: `$ED_LOG_FILE` or OS default). |
+| `--journal-dir` | `Path \| None` | `None` | Explicit path to journal folder (fallback: `$ED_JOURNAL_DIR` or auto-discovery). |
+| `--db-path` | `Path \| None` | `None` | SQLite database file path (fallback: `$ED_DB_PATH` or OS canonical data path). |
+| `--poll-interval` | `float \| None` | `None` | Watcher poll interval in seconds (fallback: `$ED_POLL_INTERVAL` or OS default). |
+
 
 ---
 

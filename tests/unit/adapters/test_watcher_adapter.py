@@ -45,6 +45,27 @@ class TestFileSystemWatcherContractAndProperties:
         assert len(watcher._event_handlers) == 1
         assert len(watcher._audit_handlers) == 1
 
+    def test_journal_dir_property_triggers_lazy_discovery(self, tmp_path: Path) -> None:
+        """Verify journal_dir property resolves directory dynamically if initialized as None."""
+        from unittest.mock import patch
+
+        from ed_telemetry.adapters.driven.watcher.discovery.models import DiscoveryResult
+
+        dummy_res = DiscoveryResult(
+            resolved_path=tmp_path,
+            discovery_source="MockDiscovery",
+        )
+        watcher = FileSystemWatcher()
+        assert watcher._journal_dir is None
+
+        with patch(
+            "ed_telemetry.adapters.driven.watcher.watcher.PathDiscoverer.discover_journal_directory",
+            return_value=dummy_res,
+        ):
+            resolved = watcher.journal_dir
+            assert resolved == str(tmp_path)
+            assert watcher._journal_dir == tmp_path
+
 
 class TestFileSystemWatcherLifecycleAndDispatch:
     """Validate thread execution, background loop, event delivery, and shutdown."""
