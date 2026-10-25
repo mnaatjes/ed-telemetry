@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
+
+import pytest
 
 from ed_telemetry.bootstrap.container import build_container
 
@@ -86,6 +89,47 @@ class TestHttpApiAdapter:
                     events = json.loads(resp.read().decode("utf-8"))
                     assert len(events) > 0
                     assert any("Eravate" in e["payload_json"] or "FileHeader" in e["payload_json"] for e in events)
+
+                # 7. /api/v1/events/buffer (Read and drain in-memory buffer)
+                with urllib.request.urlopen(f"{base_url}/api/v1/events/buffer") as resp:
+                    assert resp.status == 200
+                    batch = json.loads(resp.read().decode("utf-8"))
+                    assert "events" in batch
+                    assert "remaining_count" in batch
+                    assert "dropped_count" in batch
+                    assert len(batch["events"]) >= 1
+
+                # 8. /api/v1/snapshots/{name} (Valid snapshot)
+                (win_dir / "Market.json").write_text('{"event":"Market","StationName":"Sol"}')
+                with urllib.request.urlopen(f"{base_url}/api/v1/snapshots/market") as resp:
+                    assert resp.status == 200
+                    snap_data = json.loads(resp.read().decode("utf-8"))
+                    assert snap_data["exists"] is True
+                    assert "Market" in snap_data["raw_payload"]
+
+                # 9. /api/v1/snapshots/{name} (Missing snapshot -> RFC 7807 Problem Details 404)
+                with pytest.raises(urllib.error.HTTPError) as exc_info:
+                    urllib.request.urlopen(f"{base_url}/api/v1/snapshots/nonexistent")
+                assert exc_info.value.code == 404
+                assert exc_info.value.headers.get("Content-Type") == "application/problem+json"
+                problem = json.loads(exc_info.value.read().decode("utf-8"))
+                assert problem["title"] == "Snapshot Not Found"
+                assert problem["status"] == 404
+
+                # 10. POST /api/v1/control/watch (Invalid action -> RFC 7807 Problem Details 400)
+                bad_req = urllib.request.Request(
+                    f"{base_url}/api/v1/control/watch",
+                    data=b'{"action":"invalid"}',
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with pytest.raises(urllib.error.HTTPError) as exc_info_bad:
+                    urllib.request.urlopen(bad_req)
+                assert exc_info_bad.value.code == 400
+                assert exc_info_bad.value.headers.get("Content-Type") == "application/problem+json"
+                problem = json.loads(exc_info_bad.value.read().decode("utf-8"))
+                assert problem["title"] == "Bad Request"
+                assert problem["status"] == 400
 
             finally:
                 server.stop()

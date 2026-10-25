@@ -74,11 +74,42 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             self._send_json(200, asdict(snap))
             return
 
+        if path.startswith("/api/v1/snapshots/"):
+            snapshot_name = path[len("/api/v1/snapshots/") :]
+            if not snapshot_name.endswith(".json"):
+                snapshot_name = f"{snapshot_name}.json"
+            try:
+                aux_snap = self.aux_snapshot_port.get_snapshot(snapshot_name)
+            except Exception:
+                self._send_problem(
+                    status_code=404,
+                    title="Snapshot Not Found",
+                    detail=f"Auxiliary game snapshot '{snapshot_name}' is not recognized or does not exist.",
+                    instance=path,
+                )
+                return
+
+            if not aux_snap.exists:
+                self._send_problem(
+                    status_code=404,
+                    title="Snapshot Not Found",
+                    detail=f"Auxiliary game snapshot '{snapshot_name}' does not exist.",
+                    instance=path,
+                )
+                return
+            self._send_json(200, asdict(aux_snap))
+            return
+
         if path == "/api/v1/stream":
             self._handle_sse_stream()
             return
 
-        self._send_json(404, {"error": "Not Found", "path": path})
+        self._send_problem(
+            status_code=404,
+            title="Not Found",
+            detail=f"Resource '{path}' does not exist on this server.",
+            instance=path,
+        )
 
     def do_POST(self) -> None:
         """Handle incoming POST requests."""
@@ -91,7 +122,12 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             try:
                 data = json.loads(body.decode("utf-8")) if body else {}
             except json.JSONDecodeError:
-                self._send_json(400, {"error": "Invalid JSON body"})
+                self._send_problem(
+                    status_code=400,
+                    title="Bad Request",
+                    detail="Invalid JSON body provided.",
+                    instance=path,
+                )
                 return
 
             action = data.get("action", "start")
@@ -102,10 +138,20 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                 self.process_stream_port.stop_streaming()
                 self._send_json(200, {"action": "stop", "result": "stopped"})
             else:
-                self._send_json(400, {"error": f"Unknown action: {action}"})
+                self._send_problem(
+                    status_code=400,
+                    title="Bad Request",
+                    detail=f"Unknown control action: '{action}'. Expected 'start' or 'stop'.",
+                    instance=path,
+                )
             return
 
-        self._send_json(404, {"error": "Not Found", "path": path})
+        self._send_problem(
+            status_code=404,
+            title="Not Found",
+            detail=f"Endpoint '{path}' does not accept POST requests.",
+            instance=path,
+        )
 
     def _handle_sse_stream(self) -> None:
         """Serve Server-Sent Events (SSE) live feed."""
@@ -132,6 +178,23 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             pass
+
+    def _send_problem(self, status_code: int, title: str, detail: str, instance: str) -> None:
+        """Send RFC 7807 problem details error response."""
+        problem = {
+            "type": "about:blank",
+            "title": title,
+            "status": status_code,
+            "detail": detail,
+            "instance": instance,
+        }
+        body = json.dumps(problem).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/problem+json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _send_json(self, status_code: int, data: Any) -> None:
         def _default_encoder(obj: Any) -> Any:

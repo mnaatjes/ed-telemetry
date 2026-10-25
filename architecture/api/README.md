@@ -21,4 +21,4 @@ Governed by OpenAPI 3.1 and AsyncAPI specifications.
 
 ## 2. Boundary Contracts Inventory
 
-*(No boundary contracts registered yet).*
+- [OpenAPI 3.1 Specification](file:///home/michael/src/github.com/mnaatjes/ed-telemetry/architecture/api/openapi.yaml): Full interface contract for HTTP endpoints, SSE streaming, and error handling.
