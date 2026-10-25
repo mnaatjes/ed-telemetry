@@ -1,0 +1,112 @@
+---
+title: "CLI Command Reference"
+tags: ["reference", "cli", "commands", "arguments"]
+created_at: "2026-10-25"
+last_updated_at: "2026-10-25"
+---
+
+# CLI Command Reference
+
+This reference details the subcommands, command-line arguments, environment configurations, and POSIX exit codes of the `ed-telemetry` CLI adapter (`ed_telemetry.adapters.driving.cli.main`).
+
+---
+
+## 1. Top-Level Command Syntax
+
+```bash
+ed-telemetry [subcommand] [options]
+```
+
+When invoked with no arguments or `--help`, the CLI displays command assistance and exits with code `0`.
+
+---
+
+## 2. Subcommands
+
+### 2.1 `serve`
+Runs the background telemetry ingestion daemon, SQLite WAL event persistence, and HTTP/SSE API server.
+
+```bash
+ed-telemetry serve [--host HOST] [--port PORT] [--log-level LEVEL] [--log-file PATH]
+```
+
+#### Arguments
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--host` | `str` | `127.0.0.1` | Network interface to bind for the HTTP/SSE server. |
+| `--port` | `int` | `8080` | Port number for the HTTP/SSE server. |
+| `--log-level` | `str` | `INFO` | Root logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `--log-file` | `Path \| None` | `None` | Path to rotating log file. Defaults to standard OS path. |
+
+---
+
+### 2.2 `status`
+Inspects operational state of the telemetry watcher or player cockpit.
+
+```bash
+ed-telemetry status [target] [--json]
+```
+
+#### Arguments
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `target` | `str \| None` | `None` | Optional target to inspect. Allowed value: `game` (queries `Status.json`). |
+| `--json` | `flag` | `False` | Output payload as structured JSON to stdout. |
+
+---
+
+### 2.3 `events`
+Queries historical telemetry events persisted to SQLite.
+
+```bash
+ed-telemetry events [--topic TOPIC] [--since-id ID] [--limit N] [--json]
+```
+
+#### Arguments
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--topic` | `str \| None` | `None` | Filter by topic (e.g. `telemetry.journal`, `telemetry.status`, `telemetry.audit`). |
+| `--since-id` | `int \| None` | `None` | Retrieve events strictly newer than given sequential database ID. |
+| `--limit` | `int` | `20` | Maximum number of records to return. |
+| `--json` | `flag` | `False` | Output payload as structured JSON to stdout. |
+
+---
+
+### 2.4 `logs`
+Inspects the in-memory diagnostic log ring buffer.
+
+```bash
+ed-telemetry logs [--level LEVEL] [--limit N] [--json]
+```
+
+#### Arguments
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--level` | `str \| None` | `None` | Minimum log severity to return (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `--limit` | `int` | `50` | Maximum number of log records to return. |
+| `--json` | `flag` | `False` | Output payload as structured JSON to stdout. |
+
+---
+
+### 2.5 `tail`
+Follows live telemetry events and error bubbling from the egress stream.
+
+```bash
+ed-telemetry tail [--topic TOPIC] [--json]
+```
+
+#### Arguments
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--topic` | `str \| None` | `None` | Filter stream by topic (e.g. `telemetry.audit`). |
+| `--json` | `flag` | `False` | Output events as one JSON line per event. |
+
+---
+
+## 3. Exit Codes
+
+| Code | Meaning |
+| :--- | :--- |
+| `0` | Success / Clean execution or shutdown via `Ctrl+C`. |
+| `1` | Configuration or runtime error (e.g., port not wired, missing database). |
+| `2` | Command-line parsing error (invalid arguments or flags). |
