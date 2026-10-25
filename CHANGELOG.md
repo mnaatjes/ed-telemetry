@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Zero-dependency CLI daemon probing (`_probe_daemon`) detecting online background daemon via `/api/v1/health`.
+- Informative 12-factor daemon startup banner on `ed-telemetry serve` displaying bound network interfaces, discovered journal folder, resolution source strategy, active journal file, and API base URL (ADR 0027, SDD-025).
+- Fast-fail startup validation exiting with code 1 and actionable diagnostic remediation when path discovery fails (ADR 0027, SDD-025).
+- New CLI flag options `--journal-dir`, `--db-path`, and `--poll-interval` on `serve` with complete environment variable precedence (`ED_JOURNAL_DIR`, `ED_DB_PATH`, `ED_POLL_INTERVAL`, `ED_HTTP_HOST`, `ED_HTTP_PORT`, `ED_LOG_LEVEL`, `ED_LOG_FILE`).
+- Diátaxis operator documentation updates in `docs/how-to/run_cli_daemon.md` and `docs/reference/cli_interface.md`.
+
+### Fixed
+- Anchored default SQLite persistent storage to canonical OS data paths (`resolve_default_db_path()`), utilizing `%LOCALAPPDATA%\ed-telemetry\telemetry.db` on Windows and `${XDG_DATA_HOME:-~/.local/share}/ed-telemetry/telemetry.db` on Linux, eliminating cwd littering and database fragmentation (#69).
+- Resolved `FileSystemWatcher.journal_dir` lazy path discovery when uninitialized, and enabled `GetWatcherStatusUseCase` to dynamically extract the chronologically active journal filename (#68).
+- Implemented hybrid offline disk fallback in `ed-telemetry logs` to read rotating log entries from `resolve_default_log_path()` on disk when daemon is offline (#70).
+- Implemented hybrid offline streaming fallback in `ed-telemetry tail` to initiate a standalone `FileSystemWatcher` streaming lifecycle when background daemon is offline (#67).
+- Preserved strict hexagonal import linter boundary contracts by isolating cross-platform path resolution in `ed_telemetry.adapters.paths`.
+
+
 ## [0.4.0] - 2026-10-25
 
 ### Added
