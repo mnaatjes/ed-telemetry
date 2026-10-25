@@ -2,6 +2,8 @@
 
 from .telemetry_dto import (
     AuxiliarySnapshotDTO,
+    DiagnosticLogRecordDTO,
+    DiagnosticLogSnapshotDTO,
     FileIngestionEventDTO,
     GameStatusSnapshotDTO,
     HintSubmissionDTO,
@@ -20,6 +22,8 @@ from .telemetry_dto import (
 
 __all__ = (
     "AuxiliarySnapshotDTO",
+    "DiagnosticLogRecordDTO",
+    "DiagnosticLogSnapshotDTO",
     "FileIngestionEventDTO",
     "GameStatusSnapshotDTO",
     "HintSubmissionDTO",

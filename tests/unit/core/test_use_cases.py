@@ -86,6 +86,31 @@ class TestProcessTelemetryStreamUseCase:
         assert payload.payload_bytes == b'{"event":"Docked"}'
         assert payload.timestamp == now
 
+    def test_audit_handler_transforms_and_forwards_to_egress(self) -> None:
+        from ed_telemetry.core.ports.dto.telemetry_dto import WatcherAuditEventDTO
+
+        watcher = FakeWatcherAdapter()
+        egress = FakeEgressAdapter()
+        _use_case = ProcessTelemetryStreamUseCase(watcher=watcher, egress=egress)
+
+        now = datetime.now(UTC)
+        audit_event = WatcherAuditEventDTO(
+            timestamp=now,
+            action="file_rotation",
+            target_path="/tmp/journal.log",
+            detail="Rotated to new segment",
+        )
+
+        watcher.emit_test_audit(audit_event)
+
+        assert len(egress.sent_payloads) == 1
+        payload = egress.sent_payloads[0]
+        assert payload.topic == "telemetry.audit"
+        assert payload.timestamp == now
+        assert b"file_rotation" in payload.payload_bytes
+        assert b"Rotated to new segment" in payload.payload_bytes
+        assert ("action", "file_rotation") in payload.metadata
+
 
 class TestSyncJournalSnapshotUseCase:
     """Verifies SyncJournalSnapshotUseCase executes snapshot sync."""

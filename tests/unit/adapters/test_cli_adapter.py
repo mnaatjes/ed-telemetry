@@ -88,3 +88,21 @@ class TestCliTelemetryAdapter:
                 code, payload = adapter.run(["events", "--json"])
             assert code == 0
             assert '"records"' in buf_json.getvalue()
+
+    def test_cli_logs_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code, payload = adapter.run(["logs", "--limit", "10"])
+            assert code == 0
+            assert "total_retained" in payload
+            assert "Diagnostic Logs" in buf.getvalue()
+
+            buf_json = io.StringIO()
+            with redirect_stdout(buf_json):
+                code, payload = adapter.run(["logs", "--json"])
+            assert code == 0
+            assert '"records"' in buf_json.getvalue()

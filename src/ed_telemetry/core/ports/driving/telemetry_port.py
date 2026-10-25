@@ -8,6 +8,8 @@ from typing import Protocol, runtime_checkable
 from ..base import DrivingPort
 from ..dto.telemetry_dto import (
     AuxiliarySnapshotDTO,
+    DiagnosticLogRecordDTO,
+    DiagnosticLogSnapshotDTO,
     GameStatusSnapshotDTO,
     HintSubmissionDTO,
     JournalFileListDTO,
@@ -101,10 +103,22 @@ class GetTelemetryStreamPort(DrivingPort, Protocol):
     def stream_events(self, timeout: float | None = 1.0) -> Iterator[TelemetryPayloadDTO]: ...
 
 
+@runtime_checkable
+class GetDiagnosticLogsPort(DrivingPort, Protocol):
+    """Primary driving port for retrieving diagnostic log snapshots."""
+
+    def get_logs(
+        self,
+        min_level: str | None = None,
+        limit: int = 100,
+    ) -> DiagnosticLogSnapshotDTO: ...
+
+
 __all__ = (
     "FindJournalPathPort",
     "FindTelemetryEventsPort",
     "GetAuxiliarySnapshotPort",
+    "GetDiagnosticLogsPort",
     "GetJournalFilesPort",
     "GetLatestGameStatusPort",
     "GetTelemetryEventsPort",
@@ -114,6 +128,8 @@ __all__ = (
     "SubmitSnapshotRefreshPort",
     "SyncJournalSnapshotPort",
     "AuxiliarySnapshotDTO",
+    "DiagnosticLogRecordDTO",
+    "DiagnosticLogSnapshotDTO",
     "GameStatusSnapshotDTO",
     "HintSubmissionDTO",
     "JournalFileListDTO",

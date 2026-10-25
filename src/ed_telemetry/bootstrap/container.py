@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+import os
+import sys
 from dataclasses import dataclass
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from ..adapters.driven.egress.buffered_queue import BufferedQueueAdapter
 from ..adapters.driven.egress.composite import CompositeEgressAdapter
+from ..adapters.driven.logging.buffer import DiagnosticLogBuffer
 from ..adapters.driven.persistence.sqlite_adapter import (
     SqliteEgressAdapter,
     SqlitePersistenceManager,
@@ -18,6 +23,7 @@ from ..adapters.driving.cli.main import CliTelemetryAdapter
 from ..core.use_cases.find_journal_path import FindJournalPathUseCase
 from ..core.use_cases.find_telemetry_events import FindTelemetryEventsUseCase
 from ..core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
+from ..core.use_cases.get_diagnostic_logs import GetDiagnosticLogsUseCase
 from ..core.use_cases.get_journal_files import GetJournalFilesUseCase
 from ..core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
 from ..core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
@@ -26,6 +32,28 @@ from ..core.use_cases.get_watcher_status import GetWatcherStatusUseCase
 from ..core.use_cases.process_telemetry_stream import ProcessTelemetryStreamUseCase
 from ..core.use_cases.submit_snapshot_refresh import SubmitSnapshotRefreshUseCase
 from ..core.use_cases.sync_journal_snapshot import SyncJournalSnapshotUseCase
+
+
+def resolve_default_log_path(platform: str | None = None) -> Path:
+    """Resolve cross-platform rotating log path according to OS standards."""
+    current_platform = platform or sys.platform
+
+    if current_platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / "ed-telemetry" / "logs" / "ed-telemetry.log"
+        user_profile = os.environ.get("USERPROFILE")
+        if user_profile:
+            return Path(user_profile) / ".cache" / "ed-telemetry" / "logs" / "ed-telemetry.log"
+        return Path.home() / ".cache" / "ed-telemetry" / "logs" / "ed-telemetry.log"
+
+    # Linux / SteamDeck / Unix
+    xdg_state_home = os.environ.get("XDG_STATE_HOME")
+    if xdg_state_home:
+        return Path(xdg_state_home) / "ed-telemetry" / "ed-telemetry.log"
+
+    state_home = Path.home() / ".local" / "state" / "ed-telemetry" / "ed-telemetry.log"
+    return state_home
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +71,8 @@ class Container:
     get_telemetry_events_use_case: GetTelemetryEventsUseCase
     find_telemetry_events_use_case: FindTelemetryEventsUseCase
     get_telemetry_stream_use_case: GetTelemetryStreamUseCase
+    get_diagnostic_logs_use_case: GetDiagnosticLogsUseCase
+    diagnostic_log_buffer: DiagnosticLogBuffer
     cli_adapter: CliTelemetryAdapter
     http_api_adapter: HttpApiAdapter
 
@@ -54,8 +84,41 @@ def build_container(
     db_path: Path | str | None = None,
     http_host: str = "127.0.0.1",
     http_port: int = 8080,
+    log_level: str = "INFO",
+    log_file: Path | str | None = None,
+    diagnostic_buffer_capacity: int = 1000,
 ) -> Container:
     """Instantiate concrete driven adapters, wire use cases, and instantiate driving adapters."""
+    # Configure logging and ring buffer
+    diagnostic_buffer = DiagnosticLogBuffer(capacity=diagnostic_buffer_capacity)
+    root_logger = logging.getLogger()
+    numeric_level = getattr(logging, log_level.upper(), logging.INFO)
+    root_logger.setLevel(numeric_level)
+
+    # Attach ring buffer if not already attached
+    if not any(isinstance(h, DiagnosticLogBuffer) for h in root_logger.handlers):
+        root_logger.addHandler(diagnostic_buffer)
+
+    # Attach rotating file handler
+    effective_log_path = Path(log_file) if log_file else resolve_default_log_path()
+    try:
+        effective_log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            str(effective_log_path),
+            maxBytes=5_242_880,  # 5 MB
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_formatter = logging.Formatter(
+            fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+        file_handler.setFormatter(file_formatter)
+        if not any(isinstance(h, RotatingFileHandler) for h in root_logger.handlers):
+            root_logger.addHandler(file_handler)
+    except OSError as err:
+        logging.warning("Unable to initialize rotating file logger at %s: %s", effective_log_path, err)
+
     watcher = FileSystemWatcher(journal_dir=journal_dir, poll_interval=poll_interval)
     egress_buffer = BufferedQueueAdapter(maxsize=buffer_capacity)
 
@@ -77,6 +140,7 @@ def build_container(
     get_events = GetTelemetryEventsUseCase(queue=egress_buffer)
     find_events = FindTelemetryEventsUseCase(repository=sqlite_repo)
     stream_events = GetTelemetryStreamUseCase(queue=egress_buffer)
+    get_diagnostic_logs = GetDiagnosticLogsUseCase(log_port=diagnostic_buffer)
 
     http_api_adapter = HttpApiAdapter(
         host=http_host,
@@ -90,6 +154,7 @@ def build_container(
         journal_path_port=find_path,
         journal_files_port=get_journals,
         aux_snapshot_port=get_aux,
+        diagnostic_logs_port=get_diagnostic_logs,
     )
     cli_adapter = CliTelemetryAdapter(
         watcher_status_port=get_status,
@@ -97,6 +162,8 @@ def build_container(
         find_events_port=find_events,
         process_stream_port=process_stream,
         http_api_adapter=http_api_adapter,
+        diagnostic_logs_port=get_diagnostic_logs,
+        stream_events_port=stream_events,
     )
 
     return Container(
@@ -111,6 +178,8 @@ def build_container(
         get_telemetry_events_use_case=get_events,
         find_telemetry_events_use_case=find_events,
         get_telemetry_stream_use_case=stream_events,
+        get_diagnostic_logs_use_case=get_diagnostic_logs,
+        diagnostic_log_buffer=diagnostic_buffer,
         cli_adapter=cli_adapter,
         http_api_adapter=http_api_adapter,
     )
