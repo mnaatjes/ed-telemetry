@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,7 +18,7 @@ from ed_telemetry.core.ports.dto.telemetry_dto import (
 
 
 class SqlitePersistenceManager:
-    """Manages SQLite schema initialization and connection pooling in WAL mode."""
+    """Manages SQLite schema initialization and connection management in WAL mode."""
 
     def __init__(self, db_path: Path | str) -> None:
         self.db_path = Path(db_path)
@@ -24,15 +26,20 @@ class SqlitePersistenceManager:
         self._lock = threading.Lock()
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def connection(self) -> Generator[sqlite3.Connection, None, None]:
+        """Provide a managed sqlite3 connection that always closes cleanly upon exit."""
         conn = sqlite3.connect(str(self.db_path), check_same_thread=False, timeout=10.0)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
-        return conn
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
-        with self._lock, self._connect() as conn:
+        with self._lock, self.connection() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS telemetry_events (
@@ -65,7 +72,7 @@ class SqliteEgressAdapter(EgressPort):
         timestamp_str = payload.timestamp.isoformat()
         raw_hash = dict(payload.metadata).get("hash")
 
-        with self._manager._lock, self._manager._connect() as conn:
+        with self._manager._lock, self._manager.connection() as conn:
             conn.execute(
                 """
                 INSERT INTO telemetry_events (event_id, topic, timestamp, raw_hash, payload_json, created_at)
@@ -96,7 +103,7 @@ class SqliteRepositoryAdapter(TelemetryRepositoryPort):
         timestamp_str = payload.timestamp.isoformat()
         raw_hash = dict(payload.metadata).get("hash")
 
-        with self._manager._lock, self._manager._connect() as conn:
+        with self._manager._lock, self._manager.connection() as conn:
             cur = conn.execute(
                 """
                 INSERT INTO telemetry_events (event_id, topic, timestamp, raw_hash, payload_json, created_at)
@@ -134,7 +141,7 @@ class SqliteRepositoryAdapter(TelemetryRepositoryPort):
         )
         params.append(query.limit if query.limit > 0 else 100)
 
-        with self._manager._lock, self._manager._connect() as conn:
+        with self._manager._lock, self._manager.connection() as conn:
             rows = conn.execute(sql, params).fetchall()
 
         records: list[TelemetryRecordDTO] = []
@@ -160,7 +167,7 @@ class SqliteRepositoryAdapter(TelemetryRepositoryPort):
             "SELECT id, event_id, topic, timestamp, raw_hash, payload_json, created_at "
             "FROM telemetry_events WHERE topic = ? ORDER BY id DESC LIMIT 1"
         )
-        with self._manager._lock, self._manager._connect() as conn:
+        with self._manager._lock, self._manager.connection() as conn:
             row = conn.execute(sql, (topic,)).fetchone()
 
         if row is None:
