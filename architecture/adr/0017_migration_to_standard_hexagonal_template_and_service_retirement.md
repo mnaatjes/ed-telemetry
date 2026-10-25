@@ -68,7 +68,24 @@ All domain entities and proven infrastructure adapters are retained and mapped i
 | *New Requirement* | Use Case Interactors | `core/use_cases/watch_telemetry.py` | Application Use Case (`WatchTelemetryUseCase`) | `HEXA-TRUTH-11, 14, 20` |
 | *New Requirement* | Use Case Interactors | `core/use_cases/process_snapshot.py` | Application Use Case (`ProcessSnapshotUseCase`) | `HEXA-TRUTH-11, 14, 20` |
 
-### 4.2 Discarded Legacy Components
+### 4.2 Boundary Data Transfer Object (DTO) Architecture & Inventory
+
+In strict accordance with `HEXA-TRUTH-04` (DTO & Anti-Tunneling Boundary Purity) and `HEXA-TRUTH-28` (DTO Immutability & Structural Purity):
+* DTOs are co-located strictly inside `core/ports/driving/` or `core/ports/driven/`. They are strictly forbidden from `core/domain/` or `adapters/`.
+* All DTOs must be decorated with `@dataclass(frozen=True, slots=True)` and inherit from marker protocol `DataTransferObject`.
+* DTO field types must be restricted strictly to primitives (`str`, `int`, `float`, `bool`, `bytes`), `datetime`, `UUID`, `Path`, frozen DTOs, tuples, and frozensets. Mutable collections (`list`, `dict`, `set`) and framework/ORM models are strictly forbidden.
+
+To satisfy the retained ports and adapters in `ed-telemetry`, the following DTOs are established:
+
+| Target DTO Class | Port Co-Location | Boundary Direction | Description & Field Structure | Governing Invariants |
+| :--- | :--- | :--- | :--- | :--- |
+| **`WatcherStatusDTO`** | `core/ports/driving/telemetry_port.py` | Driving Port Return | Status query DTO returning telemetry operational snapshot (`is_active: bool`, `monitored_directory: str \| None`, `active_journal: str \| None`). | `HEXA-TRUTH-04, 28` |
+| **`StartMonitoringCommand`** | `core/ports/driving/telemetry_port.py` | Driving Port Parameter | Input parameter command initiating telemetry watcher (`journal_dir: Path \| None`, `poll_interval: float \| None`). | `HEXA-TRUTH-04, 26, 28` |
+| **`FileIngestionEventDTO`** | `core/ports/driven/watcher_port.py` | Driven Port Callback | Immutable data-plane envelope emitted by `StreamSourcePort` on raw byte read (`event_id: UUID`, `timestamp: datetime`, `file_kind: str`, `target_path: Path`, `raw_payload: bytes`, `start_offset: int`, `end_offset: int`, `line_number: int \| None`, `part: int \| None`, `raw_hash: str`). | `HEXA-TRUTH-04, 28` |
+| **`WatcherAuditEventDTO`** | `core/ports/driven/watcher_port.py` | Driven Port Callback | Immutable control-plane operational event emitted by `StreamSourcePort` (`timestamp: datetime`, `action: str`, `target_path: Path`, `detail: str`). | `HEXA-TRUTH-04, 28` |
+| **`TelemetryPayloadDTO`** | `core/ports/driven/egress_port.py` | Driven Port Parameter | Normalized outbound payload transmitted to `DiscreteSinkPort` (`topic: str`, `timestamp: datetime`, `payload_bytes: bytes`, `metadata: tuple[tuple[str, str], ...]`). | `HEXA-TRUTH-04, 24, 28` |
+
+### 4.3 Discarded Legacy Components
 
 The following legacy components are intentionally retired and will not be migrated into `src/ed_telemetry/`:
 * `src/services/registry/` (`base.py`, `watcher.py`, `egress.py`): Replaced by static dependency injection and explicit factory wiring in `bootstrap/container.py`.
