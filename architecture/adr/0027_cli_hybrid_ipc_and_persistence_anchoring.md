@@ -52,6 +52,26 @@ Chosen Option: **Option 3 (Hybrid IPC with Standalone Fallback)**.
   * `ed-telemetry status` evaluates local filesystem path discovery.
   * `ed-telemetry logs` parses recent entries from `resolve_default_log_path()` on disk.
   * `ed-telemetry tail` activates a local standalone `ProcessTelemetryStreamUseCase` lifecycle (`start_streaming() ... stop_streaming()`).
+* **Invariant 6 (Daemon Startup Banner & POSIX Conventions):** In compliance with 12-Factor App and POSIX daemon conventions, `ed-telemetry serve` must print an informative startup banner detailing bound network interfaces, resolved journal directory, discovery strategy source, active journal file, and endpoint URLs:
+  ```text
+  Starting ed-telemetry daemon on 127.0.0.1:8080...
+  Discovered Journal Directory: /path/to/Saved Games/.../Elite Dangerous (Source: LinuxProtonStrategy)
+  Active Journal: Journal.2026-10-25T142610.01.log
+  HTTP/SSE API listening on http://127.0.0.1:8080/api/v1
+  Press Ctrl+C to stop.
+  ```
+* **Invariant 7 (Fast-Fail Discovery Failure & Actionable Remediation):** If automated discovery cannot resolve a valid journal directory during `serve`, the daemon must not silently idle. It must immediately fast-fail with POSIX exit code `1` and actionable operator remediation commands pointing to `--journal-dir` and `$ED_JOURNAL_DIR`:
+  ```text
+  [ERROR] Failed to discover Elite Dangerous journal directory.
+  Evaluated strategies: Windows Registry, Steam Proton (AppID 359320), Default User Paths.
+  Remediation:
+    1. Pass the path explicitly: ed-telemetry serve --journal-dir "/path/to/journal/folder"
+    2. Or set environment variable: export ED_JOURNAL_DIR="/path/to/journal/folder"
+  ```
+* **Invariant 8 (Discovery Error in Status Reporting):** When path discovery fails:
+  * Human CLI: `Monitored Directory: Not Found (Use --journal-dir or $ED_JOURNAL_DIR)`
+  * Machine JSON: `{"is_active": false, "monitored_directory": null, "discovery_error": "No valid journal directory detected"}`
+* **Invariant 9 (Path Discovery Audit Event):** If path discovery fails or encounters inaccessible paths, a structured `WatcherAuditEventDTO` must be emitted under topic `telemetry.audit` with `action: "path_discovery_failed"`.
 
 ## 5. Consequences
 
@@ -59,5 +79,7 @@ Chosen Option: **Option 3 (Hybrid IPC with Standalone Fallback)**.
   * Clean operating system hygiene: No `.cache` directory littering operator working trees.
   * Consistent event queries: Historical queries access the same SQLite database regardless of where the command was run.
   * Reliable CLI commands: `status`, `logs`, and `tail` work accurately both when the daemon is running and in standalone mode.
+  * Explicit operator observability: Clear startup banner eliminates ambiguity regarding which Proton prefix or Windows directory is being watched.
+  * Actionable failure diagnostics: Operators immediately receive remediation instructions when discovery fails rather than wondering why events are missing.
 * **Negative / Trade-offs:**
   * Adds standard-library HTTP polling and streaming logic to `CliTelemetryAdapter`.

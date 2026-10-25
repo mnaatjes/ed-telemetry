@@ -132,6 +132,40 @@ Implement zero-dependency daemon HTTP client utilities:
 
 ---
 
+### 3.4 Daemon Startup Banner & Discovery Failure Remediation
+
+#### Startup Banner (`_handle_serve`)
+When `ed-telemetry serve` executes:
+1. Probe journal directory using `FindJournalPathPort.find_path()`.
+2. If discovery succeeds:
+   ```text
+   Starting ed-telemetry daemon on 127.0.0.1:8080...
+   Discovered Journal Directory: /path/to/Saved Games/.../Elite Dangerous (Source: LinuxProtonStrategy)
+   Active Journal: Journal.2026-10-25T142610.01.log
+   HTTP/SSE API listening on http://127.0.0.1:8080/api/v1
+   Press Ctrl+C to stop.
+   ```
+3. If discovery fails (e.g. `PathDiscoveryError`):
+   * Print actionable diagnostic to stderr:
+     ```text
+     [ERROR] Failed to discover Elite Dangerous journal directory.
+     Evaluated strategies: Windows Registry, Steam Proton (AppID 359320), Default User Paths.
+     Remediation:
+       1. Pass the path explicitly: ed-telemetry serve --journal-dir "/path/to/journal/folder"
+       2. Or set environment variable: export ED_JOURNAL_DIR="/path/to/journal/folder"
+     ```
+   * Fast-fail and exit with code `1`.
+
+#### CLI Status Discovery Error Reporting (`_handle_status`)
+* If `monitored_directory` cannot be found:
+  * Human CLI format: `Monitored Directory: Not Found (Use --journal-dir or $ED_JOURNAL_DIR)`
+  * JSON format: `{"is_active": false, "monitored_directory": null, "discovery_error": "No valid journal directory detected"}`
+
+#### Structured Audit Event
+* Emit `WatcherAuditEventDTO(action="path_discovery_failed", target_path="", detail="...")` forwarded to `telemetry.audit` so connected SSE clients and SQLite logs capture the failure.
+
+---
+
 ## 4. Verification & Testing Strategy
 
 1. **Unit Tests (`tests/unit/adapters/`):**
@@ -141,8 +175,11 @@ Implement zero-dependency daemon HTTP client utilities:
    * Test CLI `logs` reads from rotating file on disk when daemon is offline.
    * Test CLI `tail` starts and cleanly stops standalone watcher when daemon is offline.
    * Test CLI hybrid IPC against active `HttpApiAdapter` instance.
+   * Test CLI `serve` displays informative startup banner on success.
+   * Test CLI `serve` fast-fails with actionable remediation when path discovery fails.
 2. **Windows NT / Wine Integration (`scripts/run_wine_tests.sh`):**
    * Verify default DB path anchors to `%LOCALAPPDATA%\ed-telemetry\telemetry.db`.
    * Verify CLI `status`, `logs`, and `tail` execution under Wine Python.
+   * Verify startup banner under Wine environment.
 3. **Quality Gates:**
    * Run `scripts/verify.py` and `scripts/run_wine_tests.sh`.
