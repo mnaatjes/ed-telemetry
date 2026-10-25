@@ -8,20 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Hexagonal Interaction Path Governance and Enforcement Policies (`architecture/adr/0016_interaction_path_governance_and_enforcement_policies.md` and `architecture/designs/0014_interaction_path_governance_and_enforcement_policies.md`) codifying the Four Canonical Paths and binding Policies P1 through P4.
-- Static AST Lifecycle Exclusivity checker (`scripts/lint_lifecycle_exclusivity.py`) enforcing Policy P1 by preventing non-supervisor services from invoking `.start()` or `.stop()`, integrated directly into Tier 2 Quality Gates (`scripts/verify.py`).
-- Machine-enforced boundary contract `Invariant P3` in `pyproject.toml` forbidding Path 3 computational domain modules from importing driven adapters or adapter registries.
-- Policy test suite (`tests/unit/test_path_policies.py`) validating tests `TEST-PATH-01` through `TEST-PATH-05` covering AST lifecycle exclusivity, passive egress adapter structural capability, pure domain isolation, and gateway/DTO reflection integrity.
-- Diátaxis developer and contributor How-To runbooks: `docs/how-to/classify_driven_adapter_interaction_path.md` (classifying adapters into Paths 1-4) and `docs/how-to/determine_use_case_facades.md` (applying The Three Disambiguation Rules for companion facades).
-- Refactored `WatcherPort` (`src/domain/ports/watcher.py`) composing `LifecyclePort` and `StreamSourcePort`, and `EgressPort` (`src/domain/ports/egress.py`) specializing `DiscreteSinkPort`.
-- Refactored generic `BaseAdapterRegistry[T]` (`src/services/registry/base.py`) bounding `T = TypeVar("T", bound=Port)` and enforcing domain capability protocol conformance during adapter registration.
-- Comprehensive unit test suite (`tests/unit/test_domain_ports.py`) covering port marker pedigree (`TEST-PORT-01`), active vs. passive discrimination (`TEST-PORT-02`), driven adapter satisfaction (`TEST-PORT-03`), registry generic bound enforcement (`TEST-PORT-04`), and behavioral lifecycle policies L1/L2/L3 (`TEST-PORT-05`).
-- Runtime reflection boundary verification harness (`tests/helpers/boundary_reflection.py` and `tests/unit/test_boundary_reflection.py`) auditing memory graphs across four architectural junctions to detect and prevent transitive runtime object tunneling, governed by ADR 0013 and SDD-011.
-- Driven Adapter Registry subsystem (`src/services/registry/`) implementing generic protocol `BaseAdapterRegistry[T]` with automated runtime driven adapter reflection enforcement (`_assert_driven_adapter`), governed by ADR 0014 and SDD-012.
-- Specialized port-family registries: `WatcherRegistry` (managing $1 \rightarrow 1$ active input stream watcher sources) and `EgressRegistry` (managing $1 \rightarrow N$ outbound broadcast sinks).
-- Composition root wiring (`src/services/bootstrap.py`) staging adapter instantiation, registry enrollment, and service injection while strictly shielding registries and concrete infrastructure adapters from `ApplicationContext`.
-- Comprehensive unit test suite (`tests/unit/test_adapter_registry.py`) covering tests `TEST-REG-01` through `TEST-REG-05`.
-- Diátaxis How-To runbooks: `docs/how-to/register_driven_adapter.md` (authoring and registering driven adapters) and `docs/how-to/create_driven_adapter_registry.md` (creating new port-family registries).
+- Zero-dependency HTTP REST and SSE API server (`src/ed_telemetry/adapters/driving/api/server.py`) serving live telemetry streams, snapshot sync, and RFC 7807 problem details error bubbling (ADR 0020, ADR 0024, SDD-018, SDD-022).
+- Zero-framework CLI driving adapter (`src/ed_telemetry/adapters/driving/cli/main.py`) providing `serve`, `status`, `events`, `logs`, and `tail` subcommands (ADR 0024, SDD-022).
+- Thread-safe SQLite persistence adapter in WAL mode (`src/ed_telemetry/adapters/driven/persistence/sqlite_adapter.py`) implementing fan-out disk storage and historical queries (ADR 0020, SDD-018).
+- Real-time diagnostic log ring buffer (`src/ed_telemetry/adapters/driven/logging/buffer.py`) and endpoint `GET /api/v1/diagnostics/logs` for remote telemetry health monitoring (ADR 0025, SDD-023).
+- Operational and error event bubbling (`WatcherAuditEventDTO`) into live SSE stream under topic `telemetry.audit` (ADR 0025, SDD-023).
+- Cross-platform rotating log path resolution with 5 MB $\times$ 3 rotation across Windows and Linux (ADR 0025, SDD-023).
+- Comprehensive test doubles (`tests/doubles/fake_adapters.py`) and Wine Windows NT integration test suite (`scripts/run_wine_tests.sh`).
 
 ## [0.3.0] - 2026-10-09
 
