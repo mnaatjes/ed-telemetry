@@ -4,6 +4,7 @@ from .check_health import CheckHealthUseCase
 from .find_journal_path import FindJournalPathUseCase
 from .find_telemetry_events import FindTelemetryEventsUseCase
 from .get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
+from .get_diagnostic_logs import GetDiagnosticLogsUseCase
 from .get_journal_files import GetJournalFilesUseCase
 from .get_latest_game_status import GetLatestGameStatusUseCase
 from .get_telemetry_events import GetTelemetryEventsUseCase
@@ -18,6 +19,7 @@ __all__ = [
     "FindJournalPathUseCase",
     "FindTelemetryEventsUseCase",
     "GetAuxiliarySnapshotUseCase",
+    "GetDiagnosticLogsUseCase",
     "GetJournalFilesUseCase",
     "GetLatestGameStatusUseCase",
     "GetTelemetryEventsUseCase",

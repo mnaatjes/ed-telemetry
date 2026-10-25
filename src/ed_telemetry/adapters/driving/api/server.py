@@ -14,6 +14,7 @@ from ed_telemetry.core.ports.driving.telemetry_port import (
     FindJournalPathPort,
     FindTelemetryEventsPort,
     GetAuxiliarySnapshotPort,
+    GetDiagnosticLogsPort,
     GetJournalFilesPort,
     GetLatestGameStatusPort,
     GetTelemetryEventsPort,
@@ -38,6 +39,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
     journal_path_port: FindJournalPathPort
     journal_files_port: GetJournalFilesPort
     aux_snapshot_port: GetAuxiliarySnapshotPort
+    diagnostic_logs_port: GetDiagnosticLogsPort | None
 
     def do_GET(self) -> None:
         """Handle incoming GET requests."""
@@ -47,6 +49,21 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
 
         if path in ("", "/api/v1/health"):
             self._send_json(200, {"status": "ok", "service": "ed-telemetry"})
+            return
+
+        if path == "/api/v1/diagnostics/logs":
+            if not self.diagnostic_logs_port:
+                self._send_problem(
+                    status_code=503,
+                    title="Service Unavailable",
+                    detail="Diagnostic log port is not configured.",
+                    instance=path,
+                )
+                return
+            min_level = query["min_level"][0] if "min_level" in query else None
+            limit = int(query["limit"][0]) if "limit" in query else 100
+            snapshot = self.diagnostic_logs_port.get_logs(min_level=min_level, limit=limit)
+            self._send_json(200, asdict(snapshot))
             return
 
         if path == "/api/v1/status":
@@ -233,6 +250,7 @@ class HttpApiAdapter:
         journal_path_port: FindJournalPathPort | None = None,
         journal_files_port: GetJournalFilesPort | None = None,
         aux_snapshot_port: GetAuxiliarySnapshotPort | None = None,
+        diagnostic_logs_port: GetDiagnosticLogsPort | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -245,6 +263,7 @@ class HttpApiAdapter:
         self.journal_path_port = journal_path_port
         self.journal_files_port = journal_files_port
         self.aux_snapshot_port = aux_snapshot_port
+        self.diagnostic_logs_port = diagnostic_logs_port
 
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
@@ -264,6 +283,7 @@ class HttpApiAdapter:
                 "journal_path_port": self.journal_path_port,
                 "journal_files_port": self.journal_files_port,
                 "aux_snapshot_port": self.aux_snapshot_port,
+                "diagnostic_logs_port": self.diagnostic_logs_port,
             },
         )
 

@@ -163,3 +163,21 @@ class TelemetryQueryDTO(DataTransferObject):
     since_id: int | None = None
     topic: str | None = None
     limit: int = 100
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticLogRecordDTO(DataTransferObject):
+    """Normalized application or system log record."""
+
+    timestamp: datetime
+    level: str
+    logger_name: str
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class DiagnosticLogSnapshotDTO(DataTransferObject):
+    """Point-in-time snapshot of recent application diagnostics logs."""
+
+    records: tuple[DiagnosticLogRecordDTO, ...]
+    total_retained: int

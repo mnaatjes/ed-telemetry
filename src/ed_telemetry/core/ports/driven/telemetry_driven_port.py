@@ -8,6 +8,7 @@ from typing import Protocol, runtime_checkable
 from ..base import DrivenPort
 from ..dto.telemetry_dto import (
     AuxiliarySnapshotDTO,
+    DiagnosticLogSnapshotDTO,
     FileIngestionEventDTO,
     GameStatusSnapshotDTO,
     HintSubmissionDTO,
@@ -19,6 +20,14 @@ from ..dto.telemetry_dto import (
     TelemetryRecordDTO,
     WatcherAuditEventDTO,
 )
+
+
+@runtime_checkable
+class DiagnosticLogPort(DrivenPort, Protocol):
+    """Driven port contract for capturing and querying recent application diagnostic logs."""
+
+    def get_recent_logs(self, min_level: str | None = None, limit: int = 100) -> DiagnosticLogSnapshotDTO: ...
+
 
 IngestionEventHandler = Callable[[FileIngestionEventDTO], None]
 AuditEventHandler = Callable[[WatcherAuditEventDTO], None]

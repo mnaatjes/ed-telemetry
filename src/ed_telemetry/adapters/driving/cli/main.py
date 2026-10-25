@@ -13,7 +13,9 @@ from typing import Any
 
 from ed_telemetry.core.ports.driving.telemetry_port import (
     FindTelemetryEventsPort,
+    GetDiagnosticLogsPort,
     GetLatestGameStatusPort,
+    GetTelemetryStreamPort,
     GetWatcherStatusPort,
     ProcessTelemetryStreamPort,
     TelemetryQueryDTO,
@@ -38,12 +40,16 @@ class CliTelemetryAdapter:
         find_events_port: FindTelemetryEventsPort,
         process_stream_port: ProcessTelemetryStreamPort,
         http_api_adapter: Any,
+        diagnostic_logs_port: GetDiagnosticLogsPort | None = None,
+        stream_events_port: GetTelemetryStreamPort | None = None,
     ) -> None:
         self._watcher_status_port = watcher_status_port
         self._game_status_port = game_status_port
         self._find_events_port = find_events_port
         self._process_stream_port = process_stream_port
         self._http_api_adapter = http_api_adapter
+        self._diagnostic_logs_port = diagnostic_logs_port
+        self._stream_events_port = stream_events_port
 
     def _build_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
@@ -66,6 +72,13 @@ class CliTelemetryAdapter:
         serve_parser = subparsers.add_parser("serve", help="Run background telemetry daemon and HTTP API")
         serve_parser.add_argument("--host", default="127.0.0.1", help="HTTP server host (default: 127.0.0.1)")
         serve_parser.add_argument("--port", type=int, default=8080, help="HTTP server port (default: 8080)")
+        serve_parser.add_argument(
+            "--log-level",
+            choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+            default="INFO",
+            help="Application logging verbosity level",
+        )
+        serve_parser.add_argument("--log-file", help="Path to write rotating application log file")
 
         # Subcommand: events
         events_parser = subparsers.add_parser("events", help="Query stored historical events from SQLite")
@@ -73,6 +86,24 @@ class CliTelemetryAdapter:
         events_parser.add_argument("--since-id", type=int, help="Filter records newer than given ID")
         events_parser.add_argument("--limit", type=int, default=20, help="Maximum events to return (default: 20)")
         events_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
+        # Subcommand: logs
+        logs_parser = subparsers.add_parser("logs", help="Inspect in-memory diagnostic application logs")
+        logs_parser.add_argument(
+            "--level",
+            choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+            help="Minimum log severity level to display",
+        )
+        logs_parser.add_argument("--limit", type=int, default=50, help="Maximum log records to return (default: 50)")
+        logs_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
+        # Subcommand: tail
+        tail_parser = subparsers.add_parser("tail", help="Follow live telemetry and audit SSE stream")
+        tail_parser.add_argument(
+            "--topic",
+            help="Optional topic filter (e.g. telemetry.audit or telemetry.journal)",
+        )
+        tail_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
         return parser
 
@@ -89,6 +120,12 @@ class CliTelemetryAdapter:
 
         if args.subcommand == "events":
             return self._handle_events(args)
+
+        if args.subcommand == "logs":
+            return self._handle_logs(args)
+
+        if args.subcommand == "tail":
+            return self._handle_tail(args)
 
         parser.print_help()
         return 0, {}
@@ -160,3 +197,55 @@ class CliTelemetryAdapter:
             print("Stopped cleanly.")
 
         return 0, {"status": "stopped"}
+
+    def _handle_logs(self, args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+        if not self._diagnostic_logs_port:
+            print("Diagnostic logging port is not configured.")
+            return 1, {"error": "Diagnostic logging port not configured"}
+
+        level = getattr(args, "level", None)
+        limit = getattr(args, "limit", 50)
+        as_json = getattr(args, "json", False)
+
+        snapshot = self._diagnostic_logs_port.get_logs(min_level=level, limit=limit)
+        payload = asdict(snapshot)
+
+        if as_json:
+            print(json.dumps(payload, default=_json_serial, indent=2))
+        else:
+            print(f"Diagnostic Logs ({len(snapshot.records)} records):")
+            for r in snapshot.records:
+                ts = r.timestamp.isoformat()
+                print(f"[{ts}] [{r.level:<5}] {r.logger_name}: {r.message}")
+        return 0, payload
+
+    def _handle_tail(self, args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+        if not self._stream_events_port:
+            print("Telemetry stream port is not configured.")
+            return 1, {"error": "Telemetry stream port not configured"}
+
+        topic_filter = getattr(args, "topic", None)
+        as_json = getattr(args, "json", False)
+
+        filter_desc = f" (filter: {topic_filter})" if topic_filter else ""
+        print(f"Streaming live telemetry{filter_desc}... Press Ctrl+C to stop.")
+
+        count = 0
+        try:
+            for payload in self._stream_events_port.stream_events(timeout=0.5):
+                if topic_filter and payload.topic != topic_filter:
+                    continue
+                count += 1
+                msg = {
+                    "topic": payload.topic,
+                    "timestamp": payload.timestamp.isoformat(),
+                    "payload": payload.payload_bytes.decode("utf-8", errors="replace"),
+                }
+                if as_json:
+                    print(json.dumps(msg))
+                else:
+                    print(f"[{msg['timestamp']}] ({msg['topic']}): {msg['payload']}")
+        except KeyboardInterrupt:
+            print("\nStopped streaming.")
+
+        return 0, {"streamed": count}

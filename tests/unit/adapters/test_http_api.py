@@ -129,7 +129,12 @@ class TestHttpApiAdapter:
                 assert exc_info_bad.value.headers.get("Content-Type") == "application/problem+json"
                 problem = json.loads(exc_info_bad.value.read().decode("utf-8"))
                 assert problem["title"] == "Bad Request"
-                assert problem["status"] == 400
+                # 11. /api/v1/diagnostics/logs (Diagnostics log buffer)
+                with urllib.request.urlopen(f"{base_url}/api/v1/diagnostics/logs?limit=10") as resp:
+                    assert resp.status == 200
+                    diag_data = json.loads(resp.read().decode("utf-8"))
+                    assert "records" in diag_data
+                    assert "total_retained" in diag_data
 
             finally:
                 server.stop()

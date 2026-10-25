@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from ed_telemetry.core.ports.driven.telemetry_driven_port import (
     AuditEventHandler,
+    DiagnosticLogPort,
     DiscreteSinkPort,
     EgressPort,
     EventQueuePort,
@@ -17,6 +18,8 @@ from ed_telemetry.core.ports.driven.telemetry_driven_port import (
 )
 from ed_telemetry.core.ports.dto.telemetry_dto import (
     AuxiliarySnapshotDTO,
+    DiagnosticLogRecordDTO,
+    DiagnosticLogSnapshotDTO,
     FileIngestionEventDTO,
     GameStatusSnapshotDTO,
     HintSubmissionDTO,
@@ -229,3 +232,26 @@ class FakeTelemetryRepositoryAdapter(TelemetryRepositoryPort):
     def get_latest_event(self, topic: str) -> TelemetryRecordDTO | None:
         matched = [r for r in self.records if r.topic == topic]
         return matched[-1] if matched else None
+
+
+class FakeDiagnosticLogAdapter(DiagnosticLogPort):
+    """In-memory test double for DiagnosticLogPort."""
+
+    def __init__(self, records: list[DiagnosticLogRecordDTO] | None = None) -> None:
+        self.records: list[DiagnosticLogRecordDTO] = list(records or [])
+
+    def get_recent_logs(
+        self,
+        min_level: str | None = None,
+        limit: int = 100,
+    ) -> DiagnosticLogSnapshotDTO:
+        weights = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
+        threshold = weights.get(min_level.upper(), 0) if min_level else 0
+        matched = self.records
+        if threshold > 0:
+            matched = [r for r in matched if weights.get(r.level.upper(), 0) >= threshold]
+        selected = tuple(matched[-limit:])
+        return DiagnosticLogSnapshotDTO(
+            records=selected,
+            total_retained=len(selected),
+        )
