@@ -53,3 +53,19 @@ source_modules =
     ed_telemetry.adapters
 forbidden_modules =
     ed_telemetry.bootstrap
+
+[importlinter:contract:anti_creep_framework_isolation]
+name = anti_creep_framework_isolation
+type = forbidden
+source_modules =
+    ed_telemetry
+forbidden_modules =
+    requests
+    httpx
+    aiohttp
+    urllib3
+    tkinter
+    PyQt5
+    PyQt6
+    PySide6
+    textual
