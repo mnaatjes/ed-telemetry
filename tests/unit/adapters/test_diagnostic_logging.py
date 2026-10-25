@@ -69,3 +69,20 @@ def test_resolve_default_log_path_linux():
     with patch.dict("os.environ", {"XDG_STATE_HOME": "/home/deck/.local/state"}):
         path = resolve_default_log_path(platform="linux")
         assert path == Path("/home/deck/.local/state/ed-telemetry/ed-telemetry.log")
+
+
+def test_resolve_default_db_path_windows():
+    from ed_telemetry.bootstrap.container import resolve_default_db_path
+
+    with patch.dict("os.environ", {"LOCALAPPDATA": "C:\\Users\\Pilot\\AppData\\Local"}):
+        path = resolve_default_db_path(platform="win32")
+        assert path.name == "telemetry.db"
+        assert path.parts[-2:] == ("ed-telemetry", "telemetry.db")
+
+
+def test_resolve_default_db_path_linux():
+    from ed_telemetry.bootstrap.container import resolve_default_db_path
+
+    with patch.dict("os.environ", {"XDG_DATA_HOME": "/home/deck/.local/share"}):
+        path = resolve_default_db_path(platform="linux")
+        assert path == Path("/home/deck/.local/share/ed-telemetry/telemetry.db")

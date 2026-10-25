@@ -30,7 +30,7 @@ class TestGetWatcherStatusUseCase:
 
         assert not status.is_active
         assert status.monitored_directory == "/tmp/journals"
-        assert status.active_journal is None
+        assert status.active_journal == "Journal.2026-10-25T000000.01.log"
 
     def test_returns_active_status_when_running(self) -> None:
         watcher = FakeWatcherAdapter(journal_dir="/tmp/journals")

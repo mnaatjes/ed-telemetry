@@ -40,20 +40,36 @@ ed-telemetry serve
 Expected startup output:
 ```text
 Starting ed-telemetry daemon on 127.0.0.1:8080...
+Discovered Journal Directory: /home/pilot/.local/share/Steam/steamapps/compatdata/359320/pfx/drive_c/users/steamuser/Saved Games/Frontier Developments/Elite Dangerous (Source: LinuxProtonStrategy)
+Active Journal: Journal.2026-10-25T142610.01.log
 HTTP/SSE API listening on http://127.0.0.1:8080/api/v1
 Press Ctrl+C to stop.
 ```
 
-### Custom Host, Port, and Logging Options
-You can customize the network binding and logging verbosity:
-```bash
-ed-telemetry serve --host 0.0.0.0 --port 9000 --log-level DEBUG --log-file /tmp/telemetry.log
+### Discovery Failure & Fast-Fail Remediation
+If automated strategies cannot locate the Elite Dangerous journal directory, the daemon aborts with POSIX exit code `1` and outputs actionable remediation guidance:
+
+```text
+[ERROR] Failed to discover Elite Dangerous journal directory.
+Evaluated strategies: Windows Registry, Steam Proton (AppID 359320), Default User Paths.
+Remediation:
+  1. Pass the path explicitly: ed-telemetry serve --journal-dir "/path/to/journal/folder"
+  2. Or set environment variable: export ED_JOURNAL_DIR="/path/to/journal/folder"
 ```
 
-* `--host`: Interface to bind (default: `127.0.0.1`).
-* `--port`: Port number (default: `8080`).
-* `--log-level`: Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
-* `--log-file`: Explicit destination file for rotating logs. When omitted, writes to the standard OS log location.
+### Configuration Options & Environment Precedence
+The runtime evaluates settings with the following precedence: `CLI Flag > Environment Variable > OS Default / Auto-Discovery`.
+
+| Setting | CLI Flag (`serve`) | Environment Variable | Default Value | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Journal Directory** | `--journal-dir PATH` | `ED_JOURNAL_DIR` | Auto-discovered (Proton/Registry) | Root directory containing `Journal.*.log` and `Status.json`. |
+| **HTTP Host** | `--host IP` | `ED_HTTP_HOST` | `127.0.0.1` | Network interface (`0.0.0.0` for remote LAN access). |
+| **HTTP Port** | `--port INT` | `ED_HTTP_PORT` | `8080` | Port for REST and SSE streaming endpoints. |
+| **Log Level** | `--log-level LEVEL` | `ED_LOG_LEVEL` | `INFO` | Verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| **Rotating Log File** | `--log-file PATH` | `ED_LOG_FILE` | Standard OS log path | Explicit file path for rotating disk logs. |
+| **SQLite DB Path** | `--db-path PATH` | `ED_DB_PATH` | Standard OS data path | SQLite database file storing telemetry events. |
+| **Poll Interval** | `--poll-interval SEC` | `ED_POLL_INTERVAL` | `1.0s` (Win) / `0.5s` (Linux) | Watcher reactor heartbeat/fallback tick rate. |
+
 
 ---
 

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
-import sys
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -20,6 +18,7 @@ from ..adapters.driven.persistence.sqlite_adapter import (
 from ..adapters.driven.watcher.watcher import FileSystemWatcher
 from ..adapters.driving.api.server import HttpApiAdapter
 from ..adapters.driving.cli.main import CliTelemetryAdapter
+from ..adapters.paths import resolve_default_db_path, resolve_default_log_path
 from ..core.use_cases.find_journal_path import FindJournalPathUseCase
 from ..core.use_cases.find_telemetry_events import FindTelemetryEventsUseCase
 from ..core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
@@ -32,28 +31,6 @@ from ..core.use_cases.get_watcher_status import GetWatcherStatusUseCase
 from ..core.use_cases.process_telemetry_stream import ProcessTelemetryStreamUseCase
 from ..core.use_cases.submit_snapshot_refresh import SubmitSnapshotRefreshUseCase
 from ..core.use_cases.sync_journal_snapshot import SyncJournalSnapshotUseCase
-
-
-def resolve_default_log_path(platform: str | None = None) -> Path:
-    """Resolve cross-platform rotating log path according to OS standards."""
-    current_platform = platform or sys.platform
-
-    if current_platform == "win32":
-        local_app_data = os.environ.get("LOCALAPPDATA")
-        if local_app_data:
-            return Path(local_app_data) / "ed-telemetry" / "logs" / "ed-telemetry.log"
-        user_profile = os.environ.get("USERPROFILE")
-        if user_profile:
-            return Path(user_profile) / ".cache" / "ed-telemetry" / "logs" / "ed-telemetry.log"
-        return Path.home() / ".cache" / "ed-telemetry" / "logs" / "ed-telemetry.log"
-
-    # Linux / SteamDeck / Unix
-    xdg_state_home = os.environ.get("XDG_STATE_HOME")
-    if xdg_state_home:
-        return Path(xdg_state_home) / "ed-telemetry" / "ed-telemetry.log"
-
-    state_home = Path.home() / ".local" / "state" / "ed-telemetry" / "ed-telemetry.log"
-    return state_home
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +99,7 @@ def build_container(
     watcher = FileSystemWatcher(journal_dir=journal_dir, poll_interval=poll_interval)
     egress_buffer = BufferedQueueAdapter(maxsize=buffer_capacity)
 
-    effective_db = Path(db_path) if db_path else Path(".cache/telemetry.db")
+    effective_db = Path(db_path) if db_path else resolve_default_db_path()
     db_manager = SqlitePersistenceManager(db_path=effective_db)
     sqlite_egress = SqliteEgressAdapter(manager=db_manager)
     sqlite_repo = SqliteRepositoryAdapter(manager=db_manager)
@@ -164,6 +141,8 @@ def build_container(
         http_api_adapter=http_api_adapter,
         diagnostic_logs_port=get_diagnostic_logs,
         stream_events_port=stream_events,
+        journal_path_port=find_path,
+        journal_files_port=get_journals,
     )
 
     return Container(

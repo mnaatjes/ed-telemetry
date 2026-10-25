@@ -393,12 +393,17 @@ with tempfile.TemporaryDirectory() as tmp_dir:
         pass
     print('  - Boundary DTO immutability on Windows: PASS')
 
-    # 12. Cross-platform log path and diagnostic log buffer verification (ADR 0025 / SDD-023)
-    from ed_telemetry.bootstrap.container import resolve_default_log_path
+    # 12. Cross-platform log & DB path and diagnostic log buffer verification (ADR 0025, ADR 0027)
+    from ed_telemetry.bootstrap.container import resolve_default_log_path, resolve_default_db_path
     win_log_path = resolve_default_log_path(platform='win32')
     assert 'ed-telemetry' in str(win_log_path)
     assert str(win_log_path).endswith('ed-telemetry.log')
     print(f'  - Windows Log Path Resolution ({win_log_path}): PASS')
+
+    win_db_path = resolve_default_db_path(platform='win32')
+    assert 'ed-telemetry' in str(win_db_path)
+    assert str(win_db_path).endswith('telemetry.db')
+    print(f'  - Windows DB Path Resolution ({win_db_path}): PASS')
 
     # Query diagnostic logs via container use case and CLI
     diag_snapshot = container.get_diagnostic_logs_use_case.get_logs(limit=10)
