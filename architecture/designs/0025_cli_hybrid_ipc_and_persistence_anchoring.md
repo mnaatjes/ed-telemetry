@@ -166,6 +166,23 @@ When `ed-telemetry serve` executes:
 
 ---
 
+### 3.5 Operator Configuration Surface & Environment Precedence
+
+The CLI `serve` parser and container bootstrap will evaluate arguments according to:
+`CLI Flag > Environment Variable > OS Default / Auto-Discovery`.
+
+| Setting | CLI Flag (`serve`) | Environment Variable | Default Value | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **Journal Directory** | `--journal-dir PATH` | `ED_JOURNAL_DIR` | Auto-discovered (Proton/Registry) | Root directory containing `Journal.*.log` and `Status.json`. |
+| **HTTP Host** | `--host IP` | `ED_HTTP_HOST` | `127.0.0.1` | Network interface (`0.0.0.0` for remote LAN access). |
+| **HTTP Port** | `--port INT` | `ED_HTTP_PORT` | `8080` | Port for REST and SSE streaming endpoints. |
+| **Log Level** | `--log-level LEVEL` | `ED_LOG_LEVEL` | `INFO` | Verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| **Rotating Log File** | `--log-file PATH` | `ED_LOG_FILE` | Standard OS log path | Explicit file path for rotating disk logs. |
+| **SQLite DB Path** | `--db-path PATH` | `ED_DB_PATH` | Standard OS data path | SQLite database file storing telemetry events. |
+| **Poll Interval** | `--poll-interval SEC` | `ED_POLL_INTERVAL` | `1.0s` (Win) / `0.5s` (Linux) | Watcher reactor heartbeat/fallback tick rate. |
+
+---
+
 ## 4. Verification & Testing Strategy
 
 1. **Unit Tests (`tests/unit/adapters/`):**
@@ -183,3 +200,16 @@ When `ed-telemetry serve` executes:
    * Verify startup banner under Wine environment.
 3. **Quality Gates:**
    * Run `scripts/verify.py` and `scripts/run_wine_tests.sh`.
+
+---
+
+## 5. Post-Implementation Documentation Plan
+
+In accordance with documentation integrity standards, changes to user-facing Diátaxis documents in `docs/` must be performed **strictly after** the code and tests have been implemented, verified, and stabilized.
+
+Upon passing quality gates, the following documentation updates will be applied:
+1. **`docs/how-to/run_cli_daemon.md`**:
+   * Add the Daemon Configuration & Environment Precedence table (`--journal-dir`, `--host`, `--port`, `--log-level`, `--log-file`, `--db-path`, `--poll-interval`).
+   * Document startup banner output and fast-fail remediation instructions.
+2. **`docs/reference/cli_interface.md`**:
+   * Update `serve` argument catalog with `--journal-dir`, `--db-path`, and `--poll-interval` flags and environment variable mapping.

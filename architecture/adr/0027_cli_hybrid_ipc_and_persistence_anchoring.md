@@ -72,6 +72,14 @@ Chosen Option: **Option 3 (Hybrid IPC with Standalone Fallback)**.
   * Human CLI: `Monitored Directory: Not Found (Use --journal-dir or $ED_JOURNAL_DIR)`
   * Machine JSON: `{"is_active": false, "monitored_directory": null, "discovery_error": "No valid journal directory detected"}`
 * **Invariant 9 (Path Discovery Audit Event):** If path discovery fails or encounters inaccessible paths, a structured `WatcherAuditEventDTO` must be emitted under topic `telemetry.audit` with `action: "path_discovery_failed"`.
+* **Invariant 10 (Operator Configuration Surface & Environment Precedence):** `ed-telemetry serve` must expose full operator controls via explicit CLI flags backed by standard environment variables (`$ED_*`) following strict evaluation precedence (`CLI Flag > Environment Variable > OS Default / Auto-Discovery`):
+  * `--journal-dir PATH` / `ED_JOURNAL_DIR`: Overrides automated journal discovery.
+  * `--db-path PATH` / `ED_DB_PATH`: Overrides default SQLite storage location.
+  * `--poll-interval SEC` / `ED_POLL_INTERVAL`: Configures watcher heartbeat/fallback poll interval.
+  * `--host IP` / `ED_HTTP_HOST`: Configures HTTP server interface binding.
+  * `--port INT` / `ED_HTTP_PORT`: Configures HTTP server port.
+  * `--log-level LEVEL` / `ED_LOG_LEVEL`: Configures logging verbosity.
+  * `--log-file PATH` / `ED_LOG_FILE`: Configures rotating file log path.
 
 ## 5. Consequences
 
