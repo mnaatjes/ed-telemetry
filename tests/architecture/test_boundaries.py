@@ -820,3 +820,80 @@ def test_dto_immutability_and_structural_purity() -> None:
                             assert ann_id not in forbidden_field_types, (
                                 f"DTO {node.name} field uses forbidden mutable/framework type: {ann_id}"
                             )
+
+
+def test_no_outbound_http_client_libraries() -> None:
+    """Asserts that no module in ed_telemetry imports outbound HTTP client libraries (ADR 0020)."""
+    pkg_root = _get_package_root()
+    forbidden_clients = {"requests", "httpx", "aiohttp", "urllib3"}
+
+    for py_file in pkg_root.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root_pkg = alias.name.split(".")[0]
+                    assert root_pkg not in forbidden_clients, (
+                        f"File {py_file} illegally imports outbound HTTP client '{alias.name}'. "
+                        "Cloud uploaders belong strictly in downstream applications (ADR 0020)."
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                root_pkg = node.module.split(".")[0]
+                assert root_pkg not in forbidden_clients, (
+                    f"File {py_file} illegally imports from outbound HTTP client '{node.module}'. "
+                    "Cloud uploaders belong strictly in downstream applications (ADR 0020)."
+                )
+
+
+def test_no_gui_framework_imports() -> None:
+    """Asserts that no module in ed_telemetry imports desktop GUI frameworks (ADR 0020)."""
+    pkg_root = _get_package_root()
+    forbidden_gui = {"tkinter", "PyQt5", "PyQt6", "PySide6", "textual", "wx"}
+
+    for py_file in pkg_root.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root_pkg = alias.name.split(".")[0]
+                    assert root_pkg not in forbidden_gui, (
+                        f"File {py_file} illegally imports GUI framework '{alias.name}'. "
+                        "ed-telemetry is strictly headless (ADR 0020)."
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                root_pkg = node.module.split(".")[0]
+                assert root_pkg not in forbidden_gui, (
+                    f"File {py_file} illegally imports from GUI framework '{node.module}'. "
+                    "ed-telemetry is strictly headless (ADR 0020)."
+                )
+
+
+def test_package_topology_strictly_hexagonal() -> None:
+    """Asserts that src/ed_telemetry contains strictly core, adapters, and bootstrap (ADR 0020)."""
+    pkg_root = _get_package_root()
+    allowed_dirs = {"core", "adapters", "bootstrap", "__pycache__"}
+    forbidden_subtrees = {"sdk", "plugins", "ui", "presentation", "services", "infrastructure"}
+
+    actual_dirs = {p.name for p in pkg_root.iterdir() if p.is_dir()}
+    unexpected_dirs = actual_dirs - allowed_dirs
+    assert not unexpected_dirs, (
+        f"Package root {pkg_root} contains unexpected non-hexagonal subdirectories: {unexpected_dirs}. "
+        f"Forbidden trees: {forbidden_subtrees}"
+    )
+
+
+def test_core_ports_dto_remain_game_semantic_agnostic() -> None:
+    """Asserts that boundary DTOs carry generic ingestion envelopes without game domain models (ADR 0020)."""
+    pkg_root = _get_package_root()
+    dto_dir = pkg_root / "core" / "ports" / "dto"
+    forbidden_entity_tokens = {"Commodity", "MarketOrder", "TradeRoute", "ShipFitting", "OutfitPricing"}
+
+    for py_file in dto_dir.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for token in forbidden_entity_tokens:
+                    assert token not in node.name, (
+                        f"DTO {node.name} in {py_file.name} introduces game-semantic entity logic. "
+                        "ed-telemetry boundary DTOs must remain transport/envelope agnostic (ADR 0020)."
+                    )
