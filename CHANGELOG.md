@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-25
+
 ### Added
 - Zero-dependency CLI daemon probing (`_probe_daemon`) detecting online background daemon via `/api/v1/health`.
 - Informative 12-factor daemon startup banner on `ed-telemetry serve` displaying bound network interfaces, discovered journal folder, resolution source strategy, active journal file, and API base URL (ADR 0027, SDD-025).
