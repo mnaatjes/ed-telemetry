@@ -1,76 +1,162 @@
 # Elite Dangerous Telemetry (`ed-telemetry`)
-\
-**Version:** `v0.4.0` (Inception / Elaboration Phase)
 
-A modern, modular monorepo providing a decoupled, headless telemetry engine, file watcher, and multi-adapter interface (CLI, FastAPI REST, MCP Server) for the *Elite Dangerous* galaxy.
+**Version:** `v0.4.0` (Beta - Host Testing Candidate)
+
+A modern, decoupled Elite Dangerous telemetry daemon, persistent event store, and multi-adapter interface (CLI, HTTP REST, Server-Sent Events) engineered strictly according to Hexagonal Architecture (Ports and Adapters).
 
 ---
 
-## Workspace Architecture
+## 1. Architectural Topology
+
+The codebase is organized in `src/ed_telemetry/` into pure hexagonal layers:
 
 ```text
-ed-telemetry/
+src/ed_telemetry/
 │
-├── src/                                         # PRODUCTION APPLICATION RUNTIME (Pure Hexagonal)
+├── core/                                        # PURE DOMAIN & APPLICATION CORE
+│   ├── domain/                                  # Pure domain entities, value objects, exceptions
+│   │   ├── exceptions.py                        # Core domain error hierarchy
+│   │   ├── health.py                            # Health check entities
+│   │   └── models.py                            # Domain business abstractions
 │   │
-│   ├── domain/                                  # 100% PURE CORE (Hexagon Center / Invariant A)
-│   │   ├── engine.py                            # Core TelemetryEngine state coordinator
-│   │   ├── ports/                               # Pure abstract boundary contracts
-│   │   │   ├── watcher.py                       # WatcherPort (inbound telemetry source)
-│   │   │   └── egress.py                        # EgressPort (outbound data sink)
-│   │   └── py.typed
+│   ├── ports/                                   # ABSTRACT BOUNDARY CONTRACTS
+│   │   ├── driving/                             # Inbound / Primary port protocols
+│   │   │   └── telemetry_port.py                # Use-case ports (Watcher, Ingestion, API, CLI)
+│   │   ├── driven/                              # Outbound / Secondary port protocols
+│   │   │   └── telemetry_driven_port.py         # Infrastructure ports (Watcher, Egress, SQLite, Logging)
+│   │   └── dto/                                 # Boundary Data Transfer Objects
+│   │       └── telemetry_dto.py                 # Frozen, immutable DTO definitions
 │   │
-│   ├── services/                                # APPLICATION SERVICE LAYER (Use Cases / Invariant D)
-│   │   ├── bootstrap.py                         # Composition Root (Dependency Injection factory)
-│   │   ├── context.py                           # ApplicationContext (Immutable service container)
-│   │   ├── base.py                              # BaseApplicationService protocol
-│   │   ├── exceptions.py                        # ApplicationServiceError hierarchy
-│   │   ├── watcher.py                           # WatcherService (queries WatcherPort)
-│   │   └── dto/                                 # Boundary Data Transfer Objects (Invariant C & E)
-│   │       ├── base.py                          # DataTransferObject protocol
-│   │       └── watcher.py                       # WatcherStatusDTO (immutable query projection)
+│   └── use_cases/                               # APPLICATION INTERACTORS
+│       ├── get_watcher_status.py                # Query watcher state
+│       ├── process_telemetry_stream.py          # Continuous ingestion & audit bubbling
+│       ├── sync_journal_snapshot.py             # Point-in-time synchronization
+│       ├── find_journal_path.py                 # OS journal discovery
+│       ├── get_journal_files.py                 # Journal file enumeration
+│       ├── get_latest_game_status.py            # Cockpit Status.json inspection
+│       ├── get_auxiliary_snapshot.py            # Market, Cargo, NavRoute lookup
+│       ├── get_telemetry_events.py              # In-memory event drain
+│       ├── find_telemetry_events.py             # SQLite WAL historical query
+│       ├── get_telemetry_stream.py              # Live payload iterator
+│       └── get_diagnostic_logs.py               # In-memory diagnostic log snapshots
+│
+├── adapters/                                    # CONCRETE INFRASTRUCTURE ADAPTERS
+│   ├── driving/                                 # Inbound drivers (Front Doors)
+│   │   ├── cli/                                 # Zero-dependency terminal interface
+│   │   │   └── main.py                          # ed-telemetry CLI entrypoint
+│   │   └── api/                                 # Zero-dependency HTTP & SSE server
+│   │       └── server.py                        # ThreadingHTTPServer & SSE streamer
 │   │
-│   ├── infrastructure/                          # DRIVEN ADAPTERS (Secondary / External I/O / Invariant G)
-│   │   ├── watcher/                             # Inbound Journal & State File Monitor Adapter
-│   │   │   ├── watcher.py                       # FileSystemWatcher (Background daemon thread)
-│   │   │   ├── selector.py                      # Active Journal candidate selection & sorting
-│   │   │   ├── discovery/                       # Cross-platform OS path discovery (Linux/Win)
-│   │   │   │   ├── coordinator.py               # PathDiscoverer coordinator
-│   │   │   │   └── strategies/                  # OS-specific probing strategies (Proton/Registry)
-│   │   │   ├── engine/                          # Low-level I/O & Ingestion Reactor
-│   │   │   │   ├── reactor.py                   # Reactive hybrid event loop & heartbeat ticker
-│   │   │   │   ├── tailer.py                    # Non-blocking JSONL line streaming
-│   │   │   │   ├── snapshot_reader.py           # Zero-byte atomic truncation guards
-│   │   │   │   ├── freshness.py                 # BLAKE2b 64-bit deduplication gate
-│   │   │   │   ├── envelopes.py                 # Ingestion & Audit event data structures
-│   │   │   │   ├── receiver.py                  # Stream consumer callback sink
-│   │   │   │   └── stream_context.py            # Active journal stream tracking context
-│   │   │   ├── snapshots/                       # Game snapshot catalog & normalization
-│   │   │   │   ├── registry.py                  # Canonical snapshot catalog
-│   │   │   │   └── identifier.py                # Case-folding & POSIX collision resolver
-│   │   │   └── exceptions.py                    # WatcherError domain exceptions
-│   │   │
-│   │   └── egress/                              # Outbound Transmitter Adapters
-│   │       └── transmitter.py                   # NullTransmitter (EDDN/Inara placeholder)
-│   │
-│   └── interfaces/                              # DRIVING SURFACES (Primary Adapters / Front Doors)
-│       ├── __main__.py                          # Python executable module runner (python -m interfaces)
-│       └── cli/                                 # Headless CLI entrypoint & daemon runner
-│           └── main.py                          # ed-telemetry console script entrypoint
+│   └── driven/                                  # Outbound infrastructure sinks
+│       ├── watcher/                             # Journal tailer, reactor, and OS discovery
+│       ├── persistence/                         # Thread-safe SQLite persistence adapter
+│       │   └── sqlite_adapter.py                # WAL mode repository and egress sink
+│       ├── logging/                             # Thread-safe diagnostic ring buffer
+│       │   └── buffer.py                        # DiagnosticLogBuffer handler
+│       └── egress/                              # Broadcast egress sinks
+│           ├── buffered_queue.py                # In-memory FIFO ring buffer
+│           └── composite.py                     # Fan-out dispatcher
 │
-├── sdk/                                         # SATELLITE DEVELOPMENT KIT (Simulation / Invariant B)
-│   ├── mock_writer.py                           # Synthetic journal generator & simulation harness
-│   └── py.typed
-│
-├── tests/                                       # VERIFICATION SUITE
-│   └── unit/                                    # Unit, contract, and cross-platform Wine test suites
-│
-├── scripts/                                     # CI/CD & VERIFICATION TOOLING
-│   ├── verify.py                                # Tier 2 Quality Gate orchestrator
-│   ├── run_wine_tests.sh                        # Windows NT / Wine test execution script
-│   ├── print_dependency_graph.py                # AST dependency & boundary graph inspector
-│   └── guard_release_branch.py                  # Release branch enforcement hook
-│
-├── architecture/                                # ENGINEERING GOVERNANCE (ADRs, SDDs, RFCs)
-└── docs/                                        # DIÁTAXIS OPERATOR PLANE (Runbooks, References)
+└── bootstrap/                                   # COMPOSITION ROOT
+    └── container.py                             # Dependency injection graph & logging setup
 ```
+
+---
+
+## 2. Installation & Quick Start
+
+Requires **Python 3.11+** with **zero runtime third-party dependencies**.
+
+### Installation
+```bash
+# Clone the repository
+git clone https://github.com/mnaatjes/ed-telemetry.git
+cd ed-telemetry
+
+# Set up virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install in editable mode
+pip install -e .
+
+# (Optional) Install development and testing tooling
+pip install -e ".[dev]"
+```
+
+---
+
+## 3. CLI Command Suite
+
+The `ed-telemetry` CLI provides tools for daemon operation, inspection, and log monitoring:
+
+### Start the Daemon
+Run the background telemetry daemon with SQLite persistence and the HTTP REST / SSE API:
+```bash
+ed-telemetry serve --host 127.0.0.1 --port 8080 --log-level INFO
+```
+
+### Inspect Operational Status
+```bash
+# Check watcher operational state and discovered directory
+ed-telemetry status
+
+# Inspect real-time player cockpit status (Status.json)
+ed-telemetry status game
+
+# Format output as machine-readable JSON
+ed-telemetry status --json
+```
+
+### Query Historical Telemetry
+Query events persisted in the SQLite WAL store:
+```bash
+ed-telemetry events --limit 20 --topic telemetry.journal
+```
+
+### View Diagnostic Logs & Audit Streams
+```bash
+# Query recent in-memory application logs
+ed-telemetry logs --level WARNING --limit 50
+
+# Follow live telemetry events and error bubbling in real-time
+ed-telemetry tail --topic telemetry.audit
+```
+
+---
+
+## 4. HTTP REST & Server-Sent Events (SSE) API
+
+When `ed-telemetry serve` is active, the API listens on `http://127.0.0.1:8080/api/v1`:
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/health` | Service health status |
+| `GET` | `/api/v1/status` | Ingestion watcher state and monitored paths |
+| `GET` | `/api/v1/status/game` | Cockpit snapshot (`Status.json`) |
+| `GET` | `/api/v1/snapshots/{name}` | Auxiliary game snapshots (`market`, `cargo`, `navroute`) |
+| `GET` | `/api/v1/events` | Historical SQLite events (`?topic=...&since_id=...&limit=...`) |
+| `GET` | `/api/v1/events/buffer` | Drain recent in-memory event buffer |
+| `GET` | `/api/v1/stream` | Real-time Server-Sent Events (SSE) event stream |
+| `GET` | `/api/v1/diagnostics/logs` | Diagnostic log snapshot (`?min_level=...&limit=...`) |
+| `POST` | `/api/v1/control/watch` | Control watcher lifecycle (`{"action": "start"|"stop"}`) |
+
+---
+
+## 5. Verification & Testing
+
+Execute Tier 2 Quality Gates locally:
+```bash
+# Run pre-commit formatting, import-linter contracts, mypy, and pytest
+python scripts/verify.py
+
+# Run Windows NT verification under Wine
+./scripts/run_wine_tests.sh
+```
+
+---
+
+## 6. Documentation Directory (Diátaxis)
+
+* [**How-To Guides (`docs/how-to/`)**](docs/how-to/README.md) — Operational runbooks for running the daemon, querying logs, and consuming the API.
+* [**Technical Reference (`docs/reference/`)**](docs/reference/README.md) — Detailed specifications for CLI commands, REST/SSE endpoints, and hexagonal rules.
