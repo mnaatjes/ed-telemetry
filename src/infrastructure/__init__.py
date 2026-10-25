@@ -1,1 +1,0 @@
-"""Infrastructure driven adapters."""
