@@ -3,7 +3,7 @@
 # scripts/run_wine_tests.sh
 #
 # Executes Python tests inside the isolated Wine prefix under Windows Python.
-# Governed by SDD-003 and ADR 0005.
+# Governed by SDD-003, ADR 0005, ADR 0017, ADR 0018, ADR 0019, and SDD-017.
 # ==============================================================================
 
 set -euo pipefail
@@ -41,7 +41,7 @@ wine "${PYTHON_EXE}" -c "
 import sys
 sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from infrastructure.watcher.discovery.strategies.windows import WindowsPathStrategy
+from ed_telemetry.adapters.driven.watcher.discovery.strategies.windows import WindowsPathStrategy
 strat = WindowsPathStrategy()
 print(f'Strategy platform: {strat.platform_name}')
 candidates = strat.find_candidates()
@@ -57,7 +57,7 @@ import sys, os, tempfile
 from pathlib import Path
 sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from infrastructure.watcher.selector import JournalSelector, StreamPosition
+from ed_telemetry.adapters.driven.watcher.selector import JournalSelector, StreamPosition
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -103,7 +103,7 @@ import sys, os, tempfile
 from pathlib import Path
 sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from infrastructure.watcher.snapshots import SnapshotIdentifier, SnapshotRegistry
+from ed_telemetry.adapters.driven.watcher.snapshots import SnapshotIdentifier, SnapshotRegistry
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -145,8 +145,8 @@ import sys, os, tempfile
 from pathlib import Path
 sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from infrastructure.watcher.engine import WatcherReactor, FileKind
-from infrastructure.watcher.selector import StreamPosition
+from ed_telemetry.adapters.driven.watcher.engine import WatcherReactor, FileKind
+from ed_telemetry.adapters.driven.watcher.selector import StreamPosition
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -203,9 +203,9 @@ import sys, os, tempfile, time
 from pathlib import Path
 sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-from infrastructure.watcher.watcher import FileSystemWatcher
-from infrastructure.watcher.selector import StreamPosition
-from infrastructure.watcher.engine.envelopes import FileKind
+from ed_telemetry.adapters.driven.watcher.watcher import FileSystemWatcher
+from ed_telemetry.adapters.driven.watcher.selector import StreamPosition
+from ed_telemetry.adapters.driven.watcher.engine.envelopes import FileKind
 
 with tempfile.TemporaryDirectory() as tmp_dir:
     win_dir = Path(tmp_dir)
@@ -253,104 +253,90 @@ with tempfile.TemporaryDirectory() as tmp_dir:
 print('FileSystemWatcher adapter successfully verified under Windows NT / Wine!')
 "
 
-echo "Executing Application Service Layer scaffolding tests (SDD-008 / ADR 0010)..."
+echo "Executing Hexagonal Container & Telemetry Use Cases tests (ADR 0017 / ADR 0018 / SDD-017)..."
 wine "${PYTHON_EXE}" -c "
+import sys, os, tempfile
+from dataclasses import FrozenInstanceError
+from pathlib import Path
 
-import sys, os
-from dataclasses import FrozenInstanceError, dataclass
+sys.path.insert(0, r'${WIN_REPO_ROOT}\src')
 
-sys.path.insert(0, os.path.join(r'${WIN_REPO_ROOT}', 'src'))
-
-from services.bootstrap import build_application_context
-from services.context import ApplicationContext
-from services.dto import DataTransferObject
-from services.exceptions import (
-    ApplicationServiceError,
-    ServiceDependencyError,
-    ServicePayloadError,
-    ServiceStateError,
-)
-from services import BaseApplicationService
-
-# 1. ApplicationContext side-effect-free instantiation
-ctx = build_application_context()
-assert isinstance(ctx, ApplicationContext)
-assert len(ctx.services) == 1
-assert ctx.watcher_service in ctx.services
-assert not ctx.engine.is_running
-print('  - ApplicationContext instantiation and side-effect-freedom on Windows: PASS')
-
-# 2. WatcherService and WatcherStatusDTO verification
-status = ctx.watcher_service.get_status()
-assert status.to_dict() == {'is_active': False, 'journal_dir': None}
-print('  - WatcherService status query on Windows: PASS')
-
-# 3. Immutability
-try:
-    ctx.services = ()  # type: ignore[misc]
-    raise AssertionError('Expected FrozenInstanceError')
-except FrozenInstanceError:
-    pass
-print('  - ApplicationContext immutability on Windows: PASS')
-
-# 4. DTO Protocol
-@dataclass(frozen=True)
-class WineDTO:
-    id: str
-    def to_dict(self):
-        return {'id': self.id}
-
-dto = WineDTO(id='wine-test')
-assert isinstance(dto, DataTransferObject)
-print('  - DataTransferObject protocol compliance on Windows: PASS')
-
-# 5. Exception hierarchy
-err = ServiceDependencyError('wine test')
-assert isinstance(err, ApplicationServiceError)
-print('  - ApplicationServiceError hierarchy on Windows: PASS')
-
-
-print('Application Service Layer scaffolding successfully verified under Windows NT / Wine!')
-"
-
-echo "Executing Runtime Reflection Boundary Verification (ADR 0013 / SDD-011)..."
-wine "${PYTHON_EXE}" -c "
-import sys, os
-from dataclasses import dataclass
-from typing import Any
-sys.path.insert(0, os.path.join(r'${WIN_REPO_ROOT}', 'src'))
-sys.path.insert(0, r'${WIN_REPO_ROOT}')
-
-from services.bootstrap import build_application_context
-from services.dto.watcher import WatcherStatusDTO
-from services.watcher import WatcherService
-from tests.helpers.boundary_reflection import (
-    audit_context_gateway,
-    audit_dto_purity,
-    audit_service_constructor_shielding,
-    format_violation_diagnostic,
+from ed_telemetry.bootstrap.container import Container, build_container
+from ed_telemetry.core.ports.dto import (
+    JournalPathDTO,
+    JournalCandidateDTO,
+    JournalFileListDTO,
+    GameStatusSnapshotDTO,
+    AuxiliarySnapshotDTO,
+    HintSubmissionDTO,
 )
 
-# 1. Junction 1: Context Gateway identifies active engine leak
-app_ctx = build_application_context()
-violations = audit_context_gateway(app_ctx)
-engine_violations = [v for v in violations if v.field_or_param_name == 'engine']
-assert len(engine_violations) == 1, 'Expected engine leak on ApplicationContext'
-v = engine_violations[0]
-assert v.leaked_type_name == 'TelemetryEngine'
-assert v.leaked_module_path == 'domain.engine'
-print('  - Junction 1: Context Gateway reflection audit on Windows: PASS')
+with tempfile.TemporaryDirectory() as tmp_dir:
+    win_dir = Path(tmp_dir)
+    print(f'Temporary Windows Test Directory: {win_dir}')
 
-# 2. Junction 2: Query DTO Purity
-dto = WatcherStatusDTO(is_active=True, journal_dir=r'C:\Fake\Dir')
-assert len(audit_dto_purity(dto)) == 0
-print('  - Junction 2: Query DTO purity reflection audit on Windows: PASS')
+    # Populate directory with files
+    (win_dir / 'Journal.2026-10-09T100000.01.log').write_bytes(b'{\"event\":\"FileHeader\",\"part\":1}\n')
+    (win_dir / 'Status.json').write_text('{\"event\":\"Status\",\"Flags\":16}')
+    (win_dir / 'Market.json').write_text('{\"event\":\"Market\",\"MarketID\":1234}')
 
-# 3. Junction 4: Service Constructor Shielding
-assert len(audit_service_constructor_shielding(WatcherService)) == 0
-print('  - Junction 4: Service constructor dependency shielding on Windows: PASS')
+    # 1. Container instantiation
+    container = build_container(journal_dir=win_dir)
+    assert isinstance(container, Container)
+    assert container.cli_adapter is not None
+    assert container.find_journal_path_use_case is not None
+    assert container.get_journal_files_use_case is not None
+    assert container.get_latest_game_status_use_case is not None
+    assert container.get_auxiliary_snapshot_use_case is not None
+    assert container.submit_snapshot_refresh_use_case is not None
+    print('  - Container instantiation and DI wiring on Windows: PASS')
 
-print('Runtime Reflection Boundary Verification successfully verified under Windows NT / Wine!')
+    # 2. FindJournalPathUseCase
+    path_dto = container.find_journal_path_use_case.find_path(override_path=str(win_dir))
+    assert isinstance(path_dto, JournalPathDTO)
+    assert path_dto.resolved_path == str(win_dir)
+    print(f'  - FindJournalPathUseCase execution on Windows: PASS')
+
+    # 3. GetJournalFilesUseCase
+    files_dto = container.get_journal_files_use_case.get_journals()
+    assert isinstance(files_dto, JournalFileListDTO)
+    assert len(files_dto.candidates) == 1
+    assert files_dto.active_journal is not None
+    assert 'Journal.2026-10-09T100000.01.log' in files_dto.active_journal
+    print(f'  - GetJournalFilesUseCase execution on Windows: PASS')
+
+    # 4. GetLatestGameStatusUseCase
+    status_dto = container.get_latest_game_status_use_case.get_game_status()
+    assert isinstance(status_dto, GameStatusSnapshotDTO)
+    assert status_dto.exists is True
+    assert status_dto.raw_payload == b'{\"event\":\"Status\",\"Flags\":16}'
+    print(f'  - GetLatestGameStatusUseCase execution on Windows: PASS')
+
+    # 5. GetAuxiliarySnapshotUseCase
+    aux_dto = container.get_auxiliary_snapshot_use_case.get_snapshot('Market.json')
+    assert isinstance(aux_dto, AuxiliarySnapshotDTO)
+    assert aux_dto.exists is True
+    assert aux_dto.target_name == 'Market.json'
+    assert aux_dto.raw_payload == b'{\"event\":\"Market\",\"MarketID\":1234}'
+    print(f'  - GetAuxiliarySnapshotUseCase execution on Windows: PASS')
+
+    # 6. SubmitSnapshotRefreshUseCase (Reactor not started -> accepted=False with clear detail)
+    hint_dto = container.submit_snapshot_refresh_use_case.refresh_snapshot('Market.json')
+    assert isinstance(hint_dto, HintSubmissionDTO)
+    assert hint_dto.target_name == 'Market.json'
+    assert hint_dto.accepted is False
+    assert 'Reactor not running' in hint_dto.detail
+    print(f'  - SubmitSnapshotRefreshUseCase execution on Windows: PASS')
+
+    # 7. DTO Immutability
+    try:
+        hint_dto.accepted = False  # type: ignore[misc]
+        raise AssertionError('Expected FrozenInstanceError')
+    except FrozenInstanceError:
+        pass
+    print('  - Boundary DTO immutability on Windows: PASS')
+
+print('Hexagonal Container & Telemetry Use Cases successfully verified under Windows NT / Wine!')
 "
 
 echo "============================================================"
