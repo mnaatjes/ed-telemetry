@@ -1,0 +1,340 @@
+openapi: 3.1.0
+info:
+  title: Elite Dangerous Telemetry HTTP & Streaming API
+  version: 1.0.0
+  description: >-
+    Zero-dependency driving API exposing Elite Dangerous journal ingestion,
+    operational status, historical SQLite queries, auxiliary snapshots, and
+    real-time Server-Sent Events (SSE).
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local daemon server
+
+paths:
+  /api/v1/health:
+    get:
+      summary: Health check probe
+      description: Returns liveness status and service metadata.
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - service
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  service:
+                    type: string
+                    example: "ed-telemetry"
+
+  /api/v1/status:
+    get:
+      summary: Watcher operational status
+      description: Returns filesystem ingestion watcher status and metrics.
+      responses:
+        '200':
+          description: Ingestion thread metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatcherStatus'
+
+  /api/v1/control/watch:
+    post:
+      summary: Watcher lifecycle control
+      description: Start or stop the journal watcher thread.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop]
+      responses:
+        '200':
+          description: Control command executed successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  action:
+                    type: string
+                  result:
+                    type: string
+        '400':
+          $ref: '#/components/responses/ProblemDetailsResponse'
+
+  /api/v1/status/game:
+    get:
+      summary: Active game status snapshot
+      description: Returns the latest live player status (from Status.json).
+      responses:
+        '200':
+          description: Live player and cockpit flags.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameStatusSnapshot'
+
+  /api/v1/snapshots/{name}:
+    get:
+      summary: Auxiliary game snapshot
+      description: Returns auxiliary JSON state file (e.g. Market, Cargo, NavRoute).
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Snapshot name (e.g. Market, Cargo, NavRoute)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Snapshot payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuxiliarySnapshot'
+        '404':
+          $ref: '#/components/responses/ProblemDetailsResponse'
+
+  /api/v1/events:
+    get:
+      summary: Query historical telemetry events
+      description: Queries the persistent SQLite database in WAL mode with indexing.
+      parameters:
+        - name: topic
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by event topic (e.g. telemetry.journal, telemetry.status).
+        - name: since_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Filter records with ID greater than this value.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+          description: Maximum number of records to return.
+      responses:
+        '200':
+          description: Array of telemetry records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TelemetryRecord'
+
+  /api/v1/events/buffer:
+    get:
+      summary: Read and drain buffered queue
+      description: Retrieves and drains events currently held in the in-memory ring buffer.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Batch of buffered events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryBatch'
+
+  /api/v1/stream:
+    get:
+      summary: Real-time Server-Sent Events (SSE) feed
+      description: Yields real-time events as they are emitted by the ingestion pipeline.
+      responses:
+        '200':
+          description: Live SSE event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "data: {\"topic\":\"telemetry.journal\",\"timestamp\":\"2026-10-25T12:00:00Z\",\"payload\":\"...\"}\n\n"
+
+components:
+  responses:
+    ProblemDetailsResponse:
+      description: Standard RFC 7807 problem details response.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          default: "about:blank"
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+    WatcherStatus:
+      type: object
+      required:
+        - is_active
+        - current_journal
+        - events_processed
+        - poll_interval
+        - buffer_capacity
+        - buffer_size
+      properties:
+        is_active:
+          type: boolean
+        current_journal:
+          type: string
+          nullable: true
+        events_processed:
+          type: integer
+        poll_interval:
+          type: number
+        buffer_capacity:
+          type: integer
+        buffer_size:
+          type: integer
+
+    GameStatusSnapshot:
+      type: object
+      required:
+        - exists
+        - raw_payload
+      properties:
+        exists:
+          type: boolean
+        target_path:
+          type: string
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        raw_payload:
+          type: string
+        raw_hash:
+          type: string
+          nullable: true
+
+    AuxiliarySnapshot:
+      type: object
+      required:
+        - target_name
+        - exists
+        - raw_payload
+      properties:
+        target_name:
+          type: string
+        exists:
+          type: boolean
+        target_path:
+          type: string
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+          nullable: true
+        raw_payload:
+          type: string
+        raw_hash:
+          type: string
+          nullable: true
+
+    TelemetryRecord:
+      type: object
+      required:
+        - id
+        - event_id
+        - topic
+        - timestamp
+        - payload_json
+        - created_at
+      properties:
+        id:
+          type: integer
+        event_id:
+          type: string
+        topic:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        raw_hash:
+          type: string
+          nullable: true
+        payload_json:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TelemetryBatch:
+      type: object
+      required:
+        - events
+        - remaining_count
+        - dropped_count
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TelemetryPayload'
+        remaining_count:
+          type: integer
+        dropped_count:
+          type: integer
+
+    TelemetryPayload:
+      type: object
+      required:
+        - topic
+        - timestamp
+        - payload_bytes
+      properties:
+        topic:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        payload_bytes:
+          type: string
+        metadata:
+          type: array
+          items:
+            type: array
+            items:
+              type: string

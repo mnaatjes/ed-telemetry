@@ -352,11 +352,24 @@ with tempfile.TemporaryDirectory() as tmp_dir:
     assert len(records) > 0
     print(f'  - FindTelemetryEventsUseCase SQLite persistence on Windows ({len(records)} records): PASS')
 
-    # 9. HttpApiAdapter health check under Windows NT
+    # 9. HttpApiAdapter health check and endpoint validation under Windows NT
     container.http_api_adapter.start()
     import urllib.request
-    with urllib.request.urlopen(f'http://127.0.0.1:{container.http_api_adapter.port}/api/v1/health') as resp:
+    import urllib.error
+    import json
+    base_url = f'http://127.0.0.1:{container.http_api_adapter.port}'
+    with urllib.request.urlopen(f'{base_url}/api/v1/health') as resp:
         assert resp.status == 200
+    with urllib.request.urlopen(f'{base_url}/api/v1/snapshots/market') as resp:
+        assert resp.status == 200
+        snap_data = json.loads(resp.read().decode('utf-8'))
+        assert snap_data['exists'] is True
+    try:
+        urllib.request.urlopen(f'{base_url}/api/v1/snapshots/missing')
+        assert False, 'Expected 404'
+    except urllib.error.HTTPError as err:
+        assert err.code == 404
+        assert err.headers.get('Content-Type') == 'application/problem+json'
     container.http_api_adapter.stop()
     print('  - HttpApiAdapter local server on Windows: PASS')
 
