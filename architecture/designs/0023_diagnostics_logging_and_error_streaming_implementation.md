@@ -115,11 +115,25 @@ This design document defines the structural interfaces, DTO definitions, error b
   - Accepts query parameters `?min_level=INFO|WARNING|ERROR` and `?limit=50`.
   - Returns `DiagnosticLogSnapshotDTO` as JSON.
 
+### 3.6 Driving Adapter: CLI Enhancements
+Update `CliTelemetryAdapter` (`src/ed_telemetry/adapters/driving/cli/main.py`):
+1. **Subcommand `logs`**:
+   - Parses `--level {DEBUG,INFO,WARNING,ERROR}`, `--limit <int>`, and `--json`.
+   - Invokes injected `GetDiagnosticLogsPort.get_logs()`.
+   - Formats log entries with colored or tagged timestamp, level, and message.
+2. **Subcommand `tail`**:
+   - Parses `--topic <str>` (default: None for all, or `telemetry.audit` for control events) and `--json`.
+   - Invokes injected `GetTelemetryStreamPort.stream_events()`.
+   - Streams live output lines to stdout until interrupted (`Ctrl+C`).
+3. **Subcommand `serve` options**:
+   - Adds `--log-level` and `--log-file` configuring the root rotating file and console logger.
+
 ## 4. Verification & Testing Strategy
 
-1. **Unit Tests (`tests/unit/adapters/test_diagnostic_logging.py`)**:
+1. **Unit Tests (`tests/unit/adapters/test_diagnostic_logging.py` & `test_cli_adapter.py`)**:
    - Test `DiagnosticLogBuffer` thread-safety, level filtering, and capacity bounds.
    - Test audit event bubbling from `ProcessTelemetryStreamUseCase` into `CompositeEgressAdapter`.
+   - Test CLI `logs` and `tail` subcommands and argument validation.
 2. **API Tests (`tests/unit/adapters/test_http_api.py`)**:
    - Test `GET /api/v1/diagnostics/logs` for 200 responses and level filtering.
    - Test `GET /api/v1/stream` receiving `telemetry.audit` events.

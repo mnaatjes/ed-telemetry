@@ -47,7 +47,19 @@ We adopt a dual-channel architecture using the local HTTP driving API for all lo
 - **Headless Local Storage:** `bootstrap/container.py` configures standard library `logging.handlers.RotatingFileHandler` writing to `.cache/ed-telemetry.log` alongside `telemetry.db`.
 - **Zero Outbound Exception:** No exceptions to ADR 0020 are granted. `ed-telemetry` remains strictly passive; downstream tools like `ed-broadcast` pull from or subscribe to the API.
 
+### 4. CLI Driving Adapter Additions
+To give operators direct terminal access to diagnostic logs and real-time error streams, the CLI adapter shall implement:
+1. **`ed-telemetry logs` (Option B Snapshot):**
+   - Invokes `GetDiagnosticLogsUseCase` to inspect recent log lines.
+   - Flags: `--level {DEBUG,INFO,WARNING,ERROR}`, `--limit <int>`, and `--json`.
+2. **`ed-telemetry tail` (Option A Live Stream):**
+   - Invokes `GetTelemetryStreamUseCase` to stream live events to stdout.
+   - Flags: `--topic` (e.g. `telemetry.audit` to observe operational errors and transitions live) and `--json`.
+3. **`ed-telemetry serve` Logging Flags:**
+   - Adds `--log-level` and `--log-file` to configure daemon logging destinations at startup.
+
 ## Consequences
 - Complete, real-time observability over SSE and queryable history via SQLite without new external dependencies.
-- Snapshot diagnostic inspections available via a dedicated endpoint for fast troubleshooting.
+- Snapshot diagnostic inspections available via a dedicated endpoint and `ed-telemetry logs` CLI subcommand.
+- Terminal operators can follow live game telemetry or audit streams using `ed-telemetry tail`.
 - 100% compliance with hexagonal boundaries and ADR 0020 guardrails.
