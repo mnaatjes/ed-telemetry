@@ -142,3 +142,29 @@ graph LR
 3. **Identifier Masking (`--redact-pii` Mode):**
    - When configured, replace `FID` with a truncated SHA-256 hash or mask (`F***1068`).
    - Replace filesystem paths (`/home/michael/...`) with virtual prefixes (`~/...`).
+
+---
+
+## 6. Comparative Architecture Analysis: ICARUS Terminal (`iaincollins/icarus`)
+
+An examination of the [ICARUS Terminal](file:///home/michael/src/github.com/iaincollins/icarus) codebase reveals a contrasting operational philosophy regarding CAPI, player identity, and network exposure:
+
+1. **Zero CAPI / Account Integration:**
+   - ICARUS Terminal **does not integrate with Frontier CAPI** and has no OAuth 2.0 PKCE implementation.
+   - It relies 100% on local journal file watching via a custom filesystem scanner (`src/service/lib/elite-log.js`).
+2. **`FID` and `customer_id` Obliviousness:**
+   - ICARUS Terminal **completely ignores `FID` and `customer_id`**.
+   - It only reads `LoadGame.Commander` to display the active pilot name in UI headers (`src/service/lib/event-handlers.js:78`), omitting backend account linking.
+3. **In-Game Comms & Social Handling (`ReceiveText`):**
+   - ICARUS explicitly listens for `ReceiveText` journal events and pipes direct in-game player messages directly into the UI notification system (`src/client/lib/socket.js:76`):
+     ```javascript
+     if (message.event === 'ReceiveText' && message.From)
+       notification(() => <p><span className='text-primary'>{message.From_Localised || message.From}</span><br />
+       <span className='text-info'>{message.Message_Localised || message.Message}</span></p>)
+     ```
+   - It lacks any comms filtering or masking controls, displaying all local Open Play and Wing chat on the terminal screen.
+4. **Third-Party Ingress Only (Read-Only EDSM):**
+   - Unlike EDMC, ICARUS **never performs outbound egress** to Inara, EDDN, or EDSM.
+   - It uses EDSM strictly as a read-only celestial lookup source (`src/service/lib/edsm.js`) to enrich system bodies and station services, transmitting zero player telemetry outbound.
+5. **Unauthenticated Local WebSocket Broadcast:**
+   - ICARUS runs an unauthenticated HTTP/WebSocket server on port `3300` (`src/service/main.js`). Any browser or LAN device can connect to `ws://host:3300` and stream all parsed events (including chat notifications and loadout values) without authentication or CORS restriction.

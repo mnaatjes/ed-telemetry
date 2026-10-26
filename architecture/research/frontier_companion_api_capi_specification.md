@@ -218,3 +218,11 @@ When authoring a CAPI driving or driven adapter in `ed-telemetry`:
 2. **Hybrid Ingestion Driver:** When local journal files lack complete shipyard module details or carrier bank stats, CAPI should act as an auxiliary ingestion feeder into `SyncJournalSnapshotUseCase`.
 3. **Identity Equivalence Gate:** Always verify that `usr.customer_id` from `/decode` matches `session.FID` before saving state or broadcasting events.
 4. **Zero-Dependency Ephemeral Server:** For headless/CLI use, spin up an ephemeral standard library `http.server` on `127.0.0.1:8088` to catch the browser OAuth redirect cleanly without external GUI frameworks.
+
+---
+
+## 8. Community Precedent: EDMarketConnector vs. ICARUS Terminal
+
+A review of the open source landscape illustrates two architectural paradigms:
+* **EDMarketConnector (Active CAPI Consumer):** Treats CAPI as an indispensable fallback for remote station outfitting, fleet inventories, and market commodity validation when the player does not physically open the corresponding in-game menus.
+* **ICARUS Terminal (Pure Local Ingestion):** Consciously chooses **not to implement CAPI** or OAuth. It accepts the inherent limitation that remote shipyard packs and outfitting cannot be queried until the game client writes them to local disk snapshots.
