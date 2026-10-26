@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 import re
+import secrets
+import subprocess
 import sys
 import time
 import urllib.error
@@ -17,6 +19,10 @@ from pathlib import Path
 from typing import Any
 
 from ed_telemetry.adapters.driven.watcher.discovery.exceptions import PathDiscoveryError
+from ed_telemetry.adapters.paths import (
+    resolve_default_credentials_path,
+    sanitize_host_path,
+)
 from ed_telemetry.core.ports.driving.telemetry_port import (
     FindJournalPathPort,
     FindTelemetryEventsPort,
@@ -126,11 +132,48 @@ class CliTelemetryAdapter:
             help="Path to SQLite database file (default: OS default or $ED_DB_PATH)",
         )
         serve_parser.add_argument(
+            "--api-key",
+            default=None,
+            help="Pre-shared API key for authentication (default: resolved from env or credentials.json)",
+        )
+        serve_parser.add_argument(
+            "--allowed-origin",
+            action="append",
+            dest="allowed_origins",
+            help="Additional allowed CORS origin (can be specified multiple times)",
+        )
+        serve_parser.add_argument(
             "--poll-interval",
             type=float,
             default=float(os.environ["ED_POLL_INTERVAL"]) if "ED_POLL_INTERVAL" in os.environ else None,
             help="Watcher polling interval in seconds (default: OS default or $ED_POLL_INTERVAL)",
         )
+
+        # Subcommand: auth
+        auth_parser = subparsers.add_parser("auth", help="Manage pre-shared API keys and environment credentials")
+        auth_subparsers = auth_parser.add_subparsers(dest="auth_action", help="Auth actions")
+
+        # auth keygen
+        keygen_parser = auth_subparsers.add_parser("keygen", help="Generate and store a new CSPRNG API key")
+        keygen_parser.add_argument(
+            "--force", action="store_true", help="Overwrite existing credentials file if present"
+        )
+        keygen_parser.add_argument(
+            "--register-env",
+            action="store_true",
+            help="Automatically register key in user environment (~/.bashrc / ~/.zshrc or Windows user env)",
+        )
+        keygen_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
+        # auth show
+        show_parser = auth_subparsers.add_parser("show", help="Display currently resolved API key and source")
+        show_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
+        # auth revoke
+        revoke_parser = auth_subparsers.add_parser(
+            "revoke", help="Remove credentials file and registered environment variables"
+        )
+        revoke_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
         # Subcommand: events
         events_parser = subparsers.add_parser("events", help="Query stored historical events from SQLite")
@@ -188,6 +231,9 @@ class CliTelemetryAdapter:
         if args.subcommand == "logs":
             return self._handle_logs(args)
 
+        if args.subcommand == "auth":
+            return self._handle_auth(args)
+
         if args.subcommand in ("stream", "tail"):
             return self._handle_stream(args)
 
@@ -209,6 +255,8 @@ class CliTelemetryAdapter:
                     req = urllib.request.Request(url, method="GET")
                     with urllib.request.urlopen(req, timeout=1.0) as resp:
                         payload = json.loads(resp.read().decode("utf-8"))
+                        if payload.get("target_path"):
+                            payload["target_path"] = sanitize_host_path(payload["target_path"])
                         if as_json:
                             print(json.dumps(payload, default=_json_serial, indent=2))
                         else:
@@ -224,13 +272,15 @@ class CliTelemetryAdapter:
 
             game_status = self._game_status_port.get_game_status()
             payload = asdict(game_status)
+            if payload.get("target_path"):
+                payload["target_path"] = sanitize_host_path(payload["target_path"])
             if as_json:
                 print(json.dumps(payload, default=_json_serial, indent=2))
             else:
                 exists_str = "Found" if game_status.exists else "Not Found"
                 print(f"Game Status Snapshot: {exists_str}")
-                if game_status.target_path:
-                    print(f"Path: {game_status.target_path}")
+                if payload.get("target_path"):
+                    print(f"Path: {payload['target_path']}")
                 if game_status.timestamp:
                     print(f"Timestamp: {game_status.timestamp.isoformat()}")
             return 0, payload
@@ -242,6 +292,8 @@ class CliTelemetryAdapter:
                 req = urllib.request.Request(url, method="GET")
                 with urllib.request.urlopen(req, timeout=1.0) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
+                    if payload.get("monitored_directory"):
+                        payload["monitored_directory"] = sanitize_host_path(payload["monitored_directory"])
                     if as_json:
                         print(json.dumps(payload, default=_json_serial, indent=2))
                     else:
@@ -259,6 +311,8 @@ class CliTelemetryAdapter:
 
         watcher_status = self._watcher_status_port.get_status()
         payload = asdict(watcher_status)
+        if payload.get("monitored_directory"):
+            payload["monitored_directory"] = sanitize_host_path(payload["monitored_directory"])
         if watcher_status.monitored_directory is None:
             payload["discovery_error"] = "No valid journal directory detected"
 
@@ -267,8 +321,8 @@ class CliTelemetryAdapter:
         else:
             state_str = "Active" if watcher_status.is_active else "Idle"
             print(f"Watcher State: {state_str}")
-            if watcher_status.monitored_directory:
-                print(f"Monitored Directory: {watcher_status.monitored_directory}")
+            if payload.get("monitored_directory"):
+                print(f"Monitored Directory: {payload['monitored_directory']}")
             else:
                 print("Monitored Directory: Not Found (Use --journal-dir or $ED_JOURNAL_DIR)")
             print(f"Active Journal: {watcher_status.active_journal or 'None'}")
@@ -324,13 +378,23 @@ class CliTelemetryAdapter:
             except Exception:
                 pass
 
+        resolved_key = self._resolve_api_key(getattr(args, "api_key", None))
+        self._http_api_adapter.api_key = resolved_key
+        if getattr(args, "allowed_origins", None):
+            self._http_api_adapter.allowed_origins = tuple(args.allowed_origins)
+
         print(f"Starting ed-telemetry daemon on {args.host}:{args.port}...")
+        if resolved_key:
+            print("Perimeter Authentication: ENABLED (Pre-shared API key active)")
+        else:
+            print("Perimeter Authentication: DISABLED (Local loopback unauthenticated mode)")
         if discovered_path:
             print(f"Discovered Journal Directory: {discovered_path} (Source: {discovery_source})")
         if active_journal_name:
             print(f"Active Journal: {active_journal_name}")
         self._process_stream_port.start_streaming()
         self._http_api_adapter.start()
+
         print(f"HTTP/SSE API listening on http://{args.host}:{self._http_api_adapter.port}/api/v1")
         print("Press Ctrl+C to stop.")
 
@@ -548,3 +612,241 @@ class CliTelemetryAdapter:
             self._process_stream_port.stop_streaming()
 
         return 0, {"streamed": count}
+
+    def _resolve_api_key(self, cli_override: str | None = None) -> str | None:
+        """Resolve API key using deterministic precedence: CLI flag -> ED_API_KEY -> credentials.json."""
+        if cli_override:
+            return cli_override.strip()
+
+        env_key = os.environ.get("ED_API_KEY")
+        if env_key:
+            return env_key.strip()
+
+        creds_path = resolve_default_credentials_path()
+        if creds_path.exists():
+            try:
+                with open(creds_path, encoding="utf-8") as fp:
+                    data = json.load(fp)
+                    token = data.get("api_key")
+                    if token and isinstance(token, str):
+                        return token.strip()
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        return None
+
+    def _handle_auth(self, args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+        action = getattr(args, "auth_action", None)
+        as_json = getattr(args, "json", False)
+
+        if action == "keygen":
+            return self._handle_auth_keygen(args, as_json=as_json)
+        if action == "show":
+            return self._handle_auth_show(args, as_json=as_json)
+        if action == "revoke":
+            return self._handle_auth_revoke(args, as_json=as_json)
+
+        print("Usage: ed-telemetry auth {keygen,show,revoke} [options]")
+        return 0, {}
+
+    def _handle_auth_keygen(self, args: argparse.Namespace, as_json: bool = False) -> tuple[int, dict[str, Any]]:
+        creds_path = resolve_default_credentials_path()
+        force = getattr(args, "force", False)
+        register_env = getattr(args, "register_env", False)
+
+        if creds_path.exists() and not force:
+            err_msg = f"Credentials file already exists at {creds_path}. Use --force to overwrite."
+            if as_json:
+                print(json.dumps({"error": err_msg, "path": str(creds_path)}))
+            else:
+                sys.stderr.write(f"[ERROR] {err_msg}\n")
+            return 1, {"error": err_msg}
+
+        # Generate CSPRNG token: ed_sec_ + 48 hex chars (24 bytes entropy = 192 bits)
+        token = f"ed_sec_{secrets.token_hex(24)}"
+        creds_data = {
+            "api_key": token,
+            "created_at": datetime.now().isoformat(),
+        }
+
+        # Ensure parent dir exists with 0700 permissions
+        creds_path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "posix":
+            try:
+                os.chmod(creds_path.parent, 0o700)
+            except OSError:
+                pass
+
+        # Write file with 0600 permissions
+        with open(creds_path, "w", encoding="utf-8") as fp:
+            json.dump(creds_data, fp, indent=2)
+
+        if os.name == "posix":
+            try:
+                os.chmod(creds_path, 0o600)
+            except OSError:
+                pass
+
+        env_registered = False
+        if register_env:
+            env_registered = self._register_environment_key(token)
+
+        payload = {
+            "api_key": token,
+            "credentials_file": str(creds_path),
+            "environment_registered": env_registered,
+        }
+
+        if as_json:
+            print(json.dumps(payload, indent=2))
+        else:
+            print(f"Generated new API key: {token}")
+            print(f"Credentials saved to: {creds_path} (mode 0600)")
+            if register_env:
+                if env_registered:
+                    print("Registered ED_API_KEY into user environment.")
+                else:
+                    print("Notice: Could not automatically register key into user shell/environment.")
+
+        return 0, payload
+
+    def _handle_auth_show(self, args: argparse.Namespace, as_json: bool = False) -> tuple[int, dict[str, Any]]:
+        # Check source
+        source = "none"
+        token = None
+
+        env_key = os.environ.get("ED_API_KEY")
+        creds_path = resolve_default_credentials_path()
+
+        if env_key:
+            source = "environment (ED_API_KEY)"
+            token = env_key.strip()
+        elif creds_path.exists():
+            try:
+                with open(creds_path, encoding="utf-8") as fp:
+                    data = json.load(fp)
+                    file_token = data.get("api_key")
+                    if file_token and isinstance(file_token, str):
+                        source = f"file ({creds_path})"
+                        token = file_token.strip()
+            except Exception:
+                pass
+
+        payload = {
+            "api_key": token,
+            "source": source,
+            "credentials_file": str(creds_path),
+            "credentials_file_exists": creds_path.exists(),
+        }
+
+        if as_json:
+            print(json.dumps(payload, indent=2))
+        else:
+            if token:
+                print(f"Active API Key: {token}")
+                print(f"Source: {source}")
+            else:
+                print("No API Key configured (Local loopback unauthenticated mode).")
+                print(f"Credentials File: {creds_path} (Not Found)")
+        return 0, payload
+
+    def _handle_auth_revoke(self, args: argparse.Namespace, as_json: bool = False) -> tuple[int, dict[str, Any]]:
+        creds_path = resolve_default_credentials_path()
+        file_removed = False
+        if creds_path.exists():
+            try:
+                creds_path.unlink()
+                file_removed = True
+            except OSError:
+                pass
+
+        env_stripped = self._strip_environment_key()
+
+        payload = {
+            "credentials_file_removed": file_removed,
+            "environment_stripped": env_stripped,
+        }
+
+        if as_json:
+            print(json.dumps(payload, indent=2))
+        else:
+            if file_removed:
+                print(f"Removed credentials file: {creds_path}")
+            else:
+                print(f"No credentials file found at: {creds_path}")
+            if env_stripped:
+                print("Stripped ED_API_KEY configuration from user shell environment.")
+        return 0, payload
+
+    def _register_environment_key(self, token: str) -> bool:
+        """Register ED_API_KEY into user shell rc (POSIX) or Windows user environment."""
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["setx", "ED_API_KEY", token],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return True
+            except (subprocess.SubprocessError, OSError):
+                return False
+
+        # POSIX (Linux / macOS)
+        shell = os.environ.get("SHELL", "")
+        rc_name = ".zshrc" if "zsh" in shell else ".bashrc"
+        rc_path = Path.home() / rc_name
+        if not rc_path.exists() and rc_name == ".zshrc":
+            rc_path = Path.home() / ".bashrc"
+
+        block = f'\n# >>> ed-telemetry auth >>>\nexport ED_API_KEY="{token}"\n# <<< ed-telemetry auth <<<\n'
+
+        try:
+            content = rc_path.read_text(encoding="utf-8") if rc_path.exists() else ""
+            pattern = re.compile(
+                r"# >>> ed-telemetry auth >>>.*?# <<< ed-telemetry auth <<<\n?",
+                re.DOTALL,
+            )
+            if pattern.search(content):
+                new_content = pattern.sub(block.lstrip("\n"), content)
+            else:
+                new_content = content + block
+
+            rc_path.write_text(new_content, encoding="utf-8")
+            return True
+        except OSError:
+            return False
+
+    def _strip_environment_key(self) -> bool:
+        """Strip ED_API_KEY block from user shell rc files (POSIX) or registry (Windows)."""
+        stripped = False
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["reg", "delete", "HKCU\\Environment", "/F", "/V", "ED_API_KEY"],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                stripped = True
+            except OSError:
+                pass
+            return stripped
+
+        # POSIX
+        for rc_name in (".bashrc", ".zshrc", ".profile"):
+            rc_path = Path.home() / rc_name
+            if rc_path.exists():
+                try:
+                    content = rc_path.read_text(encoding="utf-8")
+                    pattern = re.compile(
+                        r"# >>> ed-telemetry auth >>>.*?# <<< ed-telemetry auth <<<\n?",
+                        re.DOTALL,
+                    )
+                    if pattern.search(content):
+                        new_content = pattern.sub("", content)
+                        rc_path.write_text(new_content, encoding="utf-8")
+                        stripped = True
+                except OSError:
+                    pass
+        return stripped

@@ -920,3 +920,24 @@ def test_no_third_party_cli_framework_imports() -> None:
                     f"File {py_file} illegally imports from CLI framework '{node.module}'. "
                     "ed-telemetry CLI is strictly standard library argparse (ADR 0024)."
                 )
+
+
+def test_source_tree_contains_no_leaked_api_keys() -> None:
+    """Asserts that no hardcoded ed_sec_<48-hex-chars> CSPRNG API tokens are committed in source code."""
+    import re
+
+    leak_pattern = re.compile(r"\bed_sec_[a-fA-F0-9]{48}\b")
+    pkg_root = _get_package_root()
+    repo_root = pkg_root.parent.parent
+
+    # Scan src/ and scripts/
+    for scan_dir in (repo_root / "src", repo_root / "scripts"):
+        if not scan_dir.exists():
+            continue
+        for file_path in scan_dir.rglob("*.py"):
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            matches = leak_pattern.findall(content)
+            assert not matches, (
+                f"Source file {file_path.relative_to(repo_root)} contains leaked API token(s): {matches}. "
+                "Tokens must never be hardcoded into the codebase."
+            )
