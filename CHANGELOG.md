@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-26
+
 ### Added
 - Added `stream` as canonical CLI driving adapter subcommand for continuous SSE domain event feed (`/api/v1/stream`), while retaining `tail` as backwards-compatible alias (ADR 0028, SDD-026).
 - Added `-f` / `--follow` flag to `ed-telemetry events` dispatching into the live event stream.
