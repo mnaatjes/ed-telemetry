@@ -60,10 +60,10 @@ ed-telemetry status [target] [--json]
 ---
 
 ### 2.3 `events`
-Queries historical telemetry events persisted to SQLite.
+Queries historical telemetry events persisted to SQLite, or follows live events in real time.
 
 ```bash
-ed-telemetry events [--topic TOPIC] [--since-id ID] [--limit N] [--json]
+ed-telemetry events [--topic TOPIC] [--since-id ID] [--limit N] [-f | --follow] [--json]
 ```
 
 #### Arguments
@@ -72,15 +72,16 @@ ed-telemetry events [--topic TOPIC] [--since-id ID] [--limit N] [--json]
 | `--topic` | `str \| None` | `None` | Filter by topic (e.g. `telemetry.journal`, `telemetry.status`, `telemetry.audit`). |
 | `--since-id` | `int \| None` | `None` | Retrieve events strictly newer than given sequential database ID. |
 | `--limit` | `int` | `20` | Maximum number of records to return. |
+| `-f`, `--follow`| `flag` | `False` | Continuously stream new events (dispatches to `stream`). |
 | `--json` | `flag` | `False` | Output payload as structured JSON to stdout. |
 
 ---
 
 ### 2.4 `logs`
-Inspects diagnostic application logs. When a background daemon is running, queries its in-memory ring buffer via `GET /api/v1/diagnostics/logs`. When offline, falls back to parsing recent lines from the rotating log file on disk (`resolve_default_log_path()`).
+Inspects diagnostic application logs. When a background daemon is running, queries its in-memory ring buffer via `GET /api/v1/diagnostics/logs`. When offline, falls back to parsing recent lines from the rotating log file on disk (`resolve_default_log_path()`). When invoked with `--follow` / `-f`, continuously streams new log lines from the disk file.
 
 ```bash
-ed-telemetry logs [--level LEVEL] [--limit N] [--json]
+ed-telemetry logs [--level LEVEL] [--limit N] [-f | --follow] [--json]
 ```
 
 #### Arguments
@@ -88,22 +89,32 @@ ed-telemetry logs [--level LEVEL] [--limit N] [--json]
 | :--- | :--- | :--- | :--- |
 | `--level` | `str \| None` | `None` | Minimum log severity to return (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `--limit` | `int` | `50` | Maximum number of log records to return. |
+| `-f`, `--follow`| `flag` | `False` | Continuously follow rotating disk log file (`tail -f` behavior). |
 | `--json` | `flag` | `False` | Output payload as structured JSON to stdout. |
 
 ---
 
-### 2.5 `tail`
-Follows live telemetry events and error bubbling from the egress stream. When a background daemon is running, streams from `GET /api/v1/stream` via SSE. When offline, activates a local standalone `FileSystemWatcher` streaming lifecycle.
+### 2.5 `stream`
+Follows live telemetry events and error bubbling from the egress stream (`/api/v1/stream` via SSE). When offline, activates a local standalone `FileSystemWatcher` streaming lifecycle.
 
 ```bash
-ed-telemetry tail [--topic TOPIC] [--json]
+ed-telemetry stream [--topic TOPIC] [--json]
 ```
 
 #### Arguments
 | Argument | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--topic` | `str \| None` | `None` | Filter stream by topic (e.g. `telemetry.audit`). |
+| `--topic` | `str \| None` | `None` | Filter stream by topic (e.g. `telemetry.audit`, `telemetry.journal`). |
 | `--json` | `flag` | `False` | Output events as one JSON line per event. |
+
+---
+
+### 2.6 `tail`
+Backwards-compatible alias for `stream`. Follows live telemetry events and error bubbling from the egress stream.
+
+```bash
+ed-telemetry tail [--topic TOPIC] [--json]
+```
 
 
 ---

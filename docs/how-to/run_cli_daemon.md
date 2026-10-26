@@ -127,11 +127,14 @@ ed-telemetry events --since-id 150 --limit 50
 
 # Output as formatted JSON
 ed-telemetry events --json
+
+# Follow live incoming events continuously (alias for 'stream')
+ed-telemetry events --follow
 ```
 
 ---
 
-## 5. Inspecting Diagnostic Application Logs (`logs`)
+## 5. Inspecting & Following Diagnostic Application Logs (`logs`)
 
 Inspect operational logs with automatic daemon probing and offline disk file fallback:
 
@@ -147,26 +150,35 @@ ed-telemetry logs --limit 10
 
 # Output as formatted JSON
 ed-telemetry logs --json
+
+# Continuously follow rotating application logs (tail -f behavior)
+ed-telemetry logs --follow
+# or with short flag:
+ed-telemetry logs -f
 ```
 
 * **When Daemon is Online:** `ed-telemetry logs` queries the running daemon's in-memory ring buffer via `GET /api/v1/diagnostics/logs`.
 * **When Daemon is Offline:** `ed-telemetry logs` falls back to reading and parsing recent entries from the rotating log file on disk (`resolve_default_log_path()`).
+* **With `-f` / `--follow`:** Continuously polls and streams new log records from the disk log file as they are appended.
 
 ---
 
-## 6. Streaming Live Events (`tail`)
+## 6. Streaming Live Events (`stream` & `tail`)
 
 Follow real-time telemetry and audit events from the terminal:
 
 ```bash
-# Follow all outbound events
+# Follow all outbound events (canonical command)
+ed-telemetry stream
+
+# Using the backwards-compatible 'tail' alias
 ed-telemetry tail
 
 # Filter specifically for watcher error and control transitions
-ed-telemetry tail --topic telemetry.audit
+ed-telemetry stream --topic telemetry.audit
 
 # Stream as raw JSON envelopes
-ed-telemetry tail --json
+ed-telemetry stream --json
 ```
 
 * **When Daemon is Online:** Connects to the HTTP/SSE streaming endpoint (`/api/v1/stream`) and yields inbound events in real time.
