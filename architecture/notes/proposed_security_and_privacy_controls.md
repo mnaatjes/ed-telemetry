@@ -55,3 +55,64 @@ Enforcing these permissions has **zero negative friction** on the operator userf
 | **Host System Topography** | `target_path`, `monitored_directory`, `ed-telemetry.log` paths | `/api/v1/status`<br>`/api/v1/status/game`<br>`telemetry.audit` | Discloses Linux OS username (`/home/michael/...`), Proton prefix layout, and filesystem structure. | Sanitize path prefixes (`~/...` or `<SAVED_GAMES>/...`) in API status serialization. |
 | **Financial & Assets State** | `Balance`, `Credits`, `Loan` (in `Status.json`, `LoadGame`) | `/api/v1/status/game`<br>`/api/v1/stream` | Current liquid credit balance (e.g. `5,235,083,083`). Target profiling for pirates and stream-snipers. | Preserve in local DB; guard behind `--api-key` when binding `0.0.0.0`. |
 | **Strategic Movement & Tactical Coordinates** | `CarrierJumpRequest`, `FSDTarget`, `Latitude`, `Longitude` | `/api/v1/stream`<br>`/api/v1/events` | Fleet Carrier jump timing, lock timers, orbital surface coordinates, combat rally points. | High stream-sniping risk; require authenticated access over LAN. |
+
+---
+
+## 3. Perimeter Network Guarding: HTTP & SSE API Authentication (`--api-key`)
+
+To secure network-exposed instances (such as when running with `--host 0.0.0.0`) without breaking downstream consumers, `ed-telemetry` implements **Perimeter Network Guarding**. Instead of encrypting local SQLite files (which adds complexity and breaks downstream access), the network transport itself serves as the security perimeter.
+
+### 3.1 Invocation & Configuration
+Operators configure the API key via CLI flag or environment variable:
+
+```bash
+ed-telemetry serve --host 0.0.0.0 --port 8080 --api-key "my-secret-token"
+# Or via environment variable:
+ED_API_KEY="my-secret-token" ed-telemetry serve --host 0.0.0.0 --port 8080
+```
+
+* **Local Mode (Default):** If `--api-key` is omitted and the server binds to `127.0.0.1`, requests are treated as local-trusted.
+* **Network Mode:** If `--api-key` is provided (or if binding to non-loopback `0.0.0.0` with key enforcement enabled), all endpoints require authentication.
+
+### 3.2 Authentication Handshake & Presentation Mechanisms
+Clients can present credentials via three standard HTTP channels:
+
+1. **HTTP Authorization Header (Primary for REST / CLI):**
+   ```http
+   GET /api/v1/status HTTP/1.1
+   Host: 192.168.1.214:8080
+   Authorization: Bearer my-secret-token
+   ```
+2. **Custom Header (`X-API-Key`):**
+   ```http
+   GET /api/v1/events HTTP/1.1
+   Host: 192.168.1.214:8080
+   X-API-Key: my-secret-token
+   ```
+3. **Query Parameter (Browser `EventSource` / SSE Compatibility):**
+   Browser JavaScript standard `new EventSource('/api/v1/stream')` cannot transmit custom HTTP request headers. To enable browser dashboards without third-party polyfills, query parameter authentication is accepted:
+   ```http
+   GET /api/v1/stream?api_key=my-secret-token HTTP/1.1
+   ```
+
+### 3.3 Server-Side Validation Pipeline (`server.py`)
+Inside `TelemetryHttpHandler`:
+1. Check if server-level `api_key` is set. If not, bypass authentication.
+2. Extract token from `Authorization: Bearer <token>`, `X-API-Key`, or `?api_key=<token>`.
+3. Compare using constant-time string comparison (`hmac.compare_digest`) to prevent side-channel timing attacks.
+4. **Rejection:** If token is missing or mismatched, reject immediately with `HTTP 401 Unauthorized` and an RFC 7807 problem details JSON payload:
+   ```json
+   {
+     "type": "about:blank",
+     "title": "Unauthorized",
+     "status": 401,
+     "detail": "Invalid or missing API key."
+   }
+   ```
+5. **Acceptance:** If valid, request execution proceeds normally to domain use cases or the live SSE streaming loop.
+
+### 3.4 Host Path Masking
+When responding over the API, absolute local paths containing the operating system username (`/home/michael/...`) are sanitized:
+* In `GET /api/v1/status`: `monitored_directory` is displayed as `~/.../Frontier Developments/Elite Dangerous`.
+* In `GET /api/v1/status/game`: `target_path` is displayed as `~/.../Status.json`.
+* In `telemetry.audit`: Local paths are truncated or prefix-masked before transmission over the network.
