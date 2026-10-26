@@ -30,7 +30,7 @@ graph TD
 
 ### 2.1 The Frontier Customer Identifier (`FID`)
 * **Underlying Structure:** The `FID` is a literal string representation of the root database account identifier within Frontier Developments' master Customer Relationship Management (CRM) and store infrastructure:
-  $$\text{FID} = \text{"F"} + \text{customer\_id}$$
+  `FID = "F" + customer_id`
 * **Immutability:** The `FID` is globally unique, permanent, and tied to the purchasing human entity. It persists across commander renames, save wipes ("Clear Save"), game client reinstallations, and platform linking (Steam/Epic/Standalone).
 * **Entitlements Bound to `FID`:**
   - Frontier Store order history and purchase receipts.
