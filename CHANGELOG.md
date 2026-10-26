@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Resource starvation guardrails clamping `?limit=` parameters to `[1, 500]` on `/api/v1/events` and `/api/v1/diagnostics/logs` (ADR 0030, SDD-028, #78).
+- Atomic SSE connection throttling (`max_sse_clients = 16`) on `/api/v1/stream` returning `HTTP 429 Too Many Requests` (RFC 7807 problem details) when client connection ceiling is exceeded (ADR 0030, SDD-028, #78).
+
+### Documentation
+- Updated `architecture/research/journal_and_snapshot_filename_spec.md` to include `ShipLocker.json` in Section 3.1 inventory table and Section 5.2 membership set (#76).
+
 ## [0.6.1] - 2026-10-26
+
+### Added
+- Local storage permissions hardening enforcing POSIX `0700` directory and `0600` file permissions on `telemetry.db` and rotating application logs (ADR 0029, SDD-027, #77).
+- Perimeter Network Guarding enforcing pre-shared API keys via constant-time verification (`hmac.compare_digest`) across Bearer header, `X-API-Key`, and query parameters (ADR 0029, SDD-027, #77).
+- Strict CORS governance replacing wildcard `*` with configurable allowed origins and `OPTIONS` preflight handling (ADR 0029, SDD-027, #77).
+- CLI `auth` subcommands (`keygen`, `show`, `revoke`) with CSPRNG token standard (`ed_sec_<48-hex-chars>`) and automatic environment registration for Linux shell rc and Windows user environment (ADR 0029, SDD-027, #77).
+- Operating system host path sanitization masking user home directories (`~`) in serialized API responses (ADR 0029, SDD-027, #77).
+- Automated boundary leak detection test scanning source files against API token patterns (ADR 0029, SDD-027).
+
 
 ## [0.6.0] - 2026-10-26
 
