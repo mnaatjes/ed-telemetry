@@ -15,7 +15,34 @@ To prevent unauthorized read access by other non-privileged user accounts or co-
 * **SQLite Database Files (`telemetry.db`, `telemetry.db-wal`, `telemetry.db-shm`):** Must be initialized and enforced with `0600` (`rw-------`) permissions.
 * **Diagnostic Log Files (`~/.local/state/ed-telemetry/ed-telemetry.log*`):** Must be initialized with `0600` (`rw-------`) permissions.
 
+### 1.1 Technical Implementation Mechanics
+Within `ed-telemetry`, permissions are enforced entirely in Python standard library (`os`, `pathlib`, `stat`) without external tooling:
+
+1. **POSIX File Mode Enforcement at Initialization:**
+   In `SqlitePersistenceManager.__init__()` and path setup routines:
+   ```python
+   # Enforce user-only directory permissions
+   self.db_path.parent.mkdir(parents=True, exist_ok=True)
+   if os.name == "posix":
+       os.chmod(self.db_path.parent, 0o700)
+       if self.db_path.exists():
+           os.chmod(self.db_path, 0o600)
+   ```
+2. **Preemptive Creation Masking:**
+   Ensure files created by SQLite or logging handlers inherit restricted access by temporarily setting `os.umask(0o077)` during directory and initial file descriptor creation, or explicitly invoking `os.chmod(f, 0o600)` immediately following connection/handler setup.
+3. **Cross-Platform Graceful Handling:**
+   Under Windows NTFS, POSIX bitmask operations (`0o600`) are no-ops or map to the user's ACL. Enclosing in `if os.name == "posix":` guarantees full cross-platform compatibility across Windows, Linux, and Wine simulation without raising exceptions.
+
+### 1.2 Impact on Userflow and Operation
+Enforcing these permissions has **zero negative friction** on the operator userflow:
+
+* **Installation (`pip`, `pipx`):** No impact. `pipx install git+https://github.com/...` runs unprivileged in user-space.
+* **Running CLI Subcommands (`serve`, `status`, `events`, `stream`):** No impact. The commands run under the user's own UID (`michael`), retaining full read/write access to both `0700` directories and `0600` files.
+* **Sudo / Root Privileges:** **Not required.** The operator does not need `sudo` or elevated permissions to create, read, or chmod files inside their own `~/.local/share/` and `~/.local/state/` directories.
+* **Multi-User Protection:** If another user account (`guest`, `ansible_runner`, or a co-located container) inspects `/home/michael/.local/share/ed-telemetry/`, the OS filesystem kernel denies directory traversal (`Permission denied`), preventing any unauthorized inspection of the database or logs.
+
 ---
+
 
 ## 2. Sensitive Telemetry Properties & Payloads
 
