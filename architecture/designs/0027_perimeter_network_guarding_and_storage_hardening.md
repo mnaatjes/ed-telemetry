@@ -127,7 +127,8 @@ In `src/ed_telemetry/adapters/driving/api/server.py`:
 
 1. **CLI `auth` Subcommands:**
    * `keygen [--force] [--register-env]`:
-     - Generates 32-character hex token via `secrets.token_hex(16)`.
+     - Generates 24-byte CSPRNG token formatted as `ed_sec_<48-hex-chars>` via `f"ed_sec_{secrets.token_hex(24)}"`.
+     - Validates token against leak detection regex `\bed_sec_[a-fA-F0-9]{48}\b` in boundary tests.
      - Writes to `~/.config/ed-telemetry/credentials.json` (or `%LOCALAPPDATA%\ed-telemetry\credentials.json`) with `0600` permissions.
      - When `--register-env` is passed:
        - **Linux / Unix:** Detects active shell (`$SHELL`). If bash, verifies `~/.bashrc` exists; if zsh, verifies `~/.zshrc`. Appends guarded block idempotently:

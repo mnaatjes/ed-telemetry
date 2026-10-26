@@ -52,7 +52,11 @@ Chosen Option: **Option 3: Perimeter Network Guarding, Storage Hardening, and Pa
   * When `--api-key <token>` or `ED_API_KEY` is configured, all HTTP REST routes and `/api/v1/stream` require authentication via `Authorization: Bearer <token>`, `X-API-Key: <token>`, or query parameter `?api_key=<token>` (for browser `EventSource` compatibility).
   * Unauthorized requests must be rejected immediately with `HTTP 401 Unauthorized` and an RFC 7807 problem details JSON payload.
   * Constant-time comparison (`hmac.compare_digest`) must be used for token validation.
-* **Invariant 3 (Canonical Credential Precedence & Automated Environment Registration Utilities):**
+* **Invariant 3 (Prefixed CSPRNG Token Format, Credential Precedence & Leak Detection):**
+  * **Token Cryptographic Standard:** API keys generated via `ed-telemetry auth keygen` must not rely on predictable hashing of system attributes. They must be derived from kernel-level CSPRNG entropy (`secrets.token_hex(24)`) formatted with the canonical prefix `ed_sec_` (e.g., `ed_sec_9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b`, providing 192+ bits of entropy).
+  * **Automated Leak Detection:**
+    * Include a custom regex pattern (`\bed_sec_[a-fA-F0-9]{48}\b`) in test suites (`tests/architecture/test_boundaries.py` and downstream verification runners) to ensure tokens are never logged or committed.
+    * Provide pattern definition for repository secret scanning (e.g. GitHub Secret Scanning / GitGuardian custom pattern compatibility).
   * Key resolution hierarchy: Explicit CLI flag $\rightarrow$ Environment variable (`ED_API_KEY`) $\rightarrow$ Canonical credentials file (`~/.config/ed-telemetry/credentials.json` or `%LOCALAPPDATA%`) $\rightarrow$ Unauthenticated local mode.
   * The CLI will provide `ed-telemetry auth keygen`, `show`, `revoke`, and automated environment registration utilities:
     * **Linux / Unix (`--register-env`):** Safely appends `export ED_API_KEY="<token>"` to the user's active shell configuration (`~/.bashrc` or `~/.zshrc`) with idempotency guards.
