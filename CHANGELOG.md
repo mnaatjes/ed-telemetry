@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-26
+
 ### Added
 - Resource starvation guardrails clamping `?limit=` parameters to `[1, 500]` on `/api/v1/events` and `/api/v1/diagnostics/logs` (ADR 0030, SDD-028, #78).
 - Atomic SSE connection throttling (`max_sse_clients = 16`) on `/api/v1/stream` returning `HTTP 429 Too Many Requests` (RFC 7807 problem details) when client connection ceiling is exceeded (ADR 0030, SDD-028, #78).
