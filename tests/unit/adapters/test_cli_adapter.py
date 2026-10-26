@@ -167,3 +167,31 @@ class TestCliTelemetryAdapter:
                 assert code == 0
                 assert "Streaming live telemetry" in buf.getvalue()
                 assert "Stopped streaming." in buf.getvalue()
+
+    def test_cli_stream_subcommand_and_events_follow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            from unittest.mock import patch
+
+            with patch.object(adapter, "_handle_stream", return_value=(0, {"streamed": 1})) as mock_stream:
+                code_stream, _ = adapter.run(["stream", "--json"])
+                assert code_stream == 0
+                assert mock_stream.call_count == 1
+
+                code_events, _ = adapter.run(["events", "--follow", "--json"])
+                assert code_events == 0
+                assert mock_stream.call_count == 2
+
+    def test_cli_logs_follow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            from unittest.mock import patch
+
+            with patch.object(adapter, "_tail_disk_logs", return_value=(0, {"followed": 3})) as mock_tail:
+                code, _ = adapter.run(["logs", "--follow"])
+                assert code == 0
+                assert mock_tail.call_count == 1

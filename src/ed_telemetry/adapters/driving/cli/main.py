@@ -13,6 +13,7 @@ import urllib.request
 from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from ed_telemetry.adapters.driven.watcher.discovery.exceptions import PathDiscoveryError
@@ -136,20 +137,30 @@ class CliTelemetryAdapter:
         events_parser.add_argument("--topic", help="Filter by topic (e.g. telemetry.journal)")
         events_parser.add_argument("--since-id", type=int, help="Filter records newer than given ID")
         events_parser.add_argument("--limit", type=int, default=20, help="Maximum events to return (default: 20)")
+        events_parser.add_argument("-f", "--follow", action="store_true", help="Continuously stream new events")
         events_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
         # Subcommand: logs
-        logs_parser = subparsers.add_parser("logs", help="Inspect in-memory diagnostic application logs")
+        logs_parser = subparsers.add_parser("logs", help="Inspect diagnostic application logs")
         logs_parser.add_argument(
             "--level",
             choices=["DEBUG", "INFO", "WARNING", "ERROR"],
             help="Minimum log severity level to display",
         )
         logs_parser.add_argument("--limit", type=int, default=50, help="Maximum log records to return (default: 50)")
+        logs_parser.add_argument("-f", "--follow", action="store_true", help="Continuously follow rotating disk logs")
         logs_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
-        # Subcommand: tail
-        tail_parser = subparsers.add_parser("tail", help="Follow live telemetry and audit SSE stream")
+        # Subcommand: stream (Canonical command for live SSE event bus)
+        stream_parser = subparsers.add_parser("stream", help="Follow live telemetry and audit SSE stream")
+        stream_parser.add_argument(
+            "--topic",
+            help="Optional topic filter (e.g. telemetry.audit or telemetry.journal)",
+        )
+        stream_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
+        # Subcommand: tail (Backwards-compatible alias for stream)
+        tail_parser = subparsers.add_parser("tail", help="Alias for 'stream' (follow live telemetry stream)")
         tail_parser.add_argument(
             "--topic",
             help="Optional topic filter (e.g. telemetry.audit or telemetry.journal)",
@@ -170,13 +181,15 @@ class CliTelemetryAdapter:
             return self._handle_serve(args)
 
         if args.subcommand == "events":
+            if getattr(args, "follow", False):
+                return self._handle_stream(args)
             return self._handle_events(args)
 
         if args.subcommand == "logs":
             return self._handle_logs(args)
 
-        if args.subcommand == "tail":
-            return self._handle_tail(args)
+        if args.subcommand in ("stream", "tail"):
+            return self._handle_stream(args)
 
         parser.print_help()
         return 0, {}
@@ -341,6 +354,14 @@ class CliTelemetryAdapter:
         host = getattr(self._http_api_adapter, "host", "127.0.0.1")
         port = getattr(self._http_api_adapter, "port", 8080)
 
+        follow = getattr(args, "follow", False)
+        from ed_telemetry.adapters.paths import resolve_default_log_path
+
+        log_file_path = resolve_default_log_path()
+
+        if follow:
+            return self._tail_disk_logs(log_file_path, level=level, as_json=as_json)
+
         if _probe_daemon(host, port):
             try:
                 params = [f"limit={limit}"]
@@ -364,9 +385,6 @@ class CliTelemetryAdapter:
                 pass
 
         # Offline fallback: read rotating log file from resolve_default_log_path()
-        from ed_telemetry.adapters.paths import resolve_default_log_path
-
-        log_file_path = resolve_default_log_path()
         records_list: list[dict[str, Any]] = []
         if log_file_path.exists():
             log_line_regex = re.compile(
@@ -423,7 +441,51 @@ class CliTelemetryAdapter:
 
         return 0, {"records": [], "total_retained": 0, "capacity": limit}
 
-    def _handle_tail(self, args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    def _tail_disk_logs(self, log_path: Path, level: str | None, as_json: bool) -> tuple[int, dict[str, Any]]:
+        """Follow rotating disk log file continuously (tail -f behavior)."""
+        print(f"Following diagnostic logs from {log_path}... Press Ctrl+C to stop.")
+        log_line_regex = re.compile(
+            r"^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\s+\[(?P<level>[A-Z]+)\]\s+(?P<name>[^:]+):\s+(?P<msg>.*)$"
+        )
+        level_ranks = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40}
+        min_rank = level_ranks.get(level.upper(), 0) if level else 0
+
+        count = 0
+        try:
+            while not log_path.exists():
+                time.sleep(0.5)
+
+            with open(log_path, encoding="utf-8", errors="replace") as fp:
+                # Seek to end of existing file
+                fp.seek(0, 2)
+                while True:
+                    line = fp.readline()
+                    if not line:
+                        time.sleep(0.2)
+                        continue
+                    m = log_line_regex.match(line.strip())
+                    if m:
+                        rec_level = m.group("level")
+                        if level_ranks.get(rec_level, 0) >= min_rank:
+                            count += 1
+                            item = {
+                                "timestamp": m.group("ts"),
+                                "level": rec_level,
+                                "logger_name": m.group("name"),
+                                "message": m.group("msg"),
+                            }
+                            if as_json:
+                                print(json.dumps(item))
+                            else:
+                                lvl = item["level"]
+                                msg_str = item["message"]
+                                print(f"[{item['timestamp']}] [{lvl:<5}] {item['logger_name']}: {msg_str}")
+        except KeyboardInterrupt:
+            print("\nStopped log following.")
+
+        return 0, {"followed": count}
+
+    def _handle_stream(self, args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         topic_filter = getattr(args, "topic", None)
         as_json = getattr(args, "json", False)
 
