@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added `stream` as canonical CLI driving adapter subcommand for continuous SSE domain event feed (`/api/v1/stream`), while retaining `tail` as backwards-compatible alias (ADR 0028, SDD-026).
+- Added `-f` / `--follow` flag to `ed-telemetry events` dispatching into the live event stream.
+- Added `-f` / `--follow` flag to `ed-telemetry logs` implementing zero-dependency rotating disk log tailing (`_tail_disk_logs`) with level filtering and JSON support (ADR 0028, SDD-026).
+- Documented canonical CLI commands and flag behaviors across Diátaxis operational manual (`docs/how-to/run_cli_daemon.md`) and technical reference (`docs/reference/cli_interface.md`).
+
+
 ## [0.5.0] - 2026-10-25
 
 ### Added
