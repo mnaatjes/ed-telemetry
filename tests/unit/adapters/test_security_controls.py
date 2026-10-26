@@ -319,12 +319,21 @@ def test_sse_concurrent_connection_limiting() -> None:
 
         # Close client 1 and verify slot is freed
         resp1.close()
-        time.sleep(0.1)
+
+        # Wait deterministically for server thread to detect socket close and release slot
+        deadline = time.time() + 2.0
+        while time.time() < deadline:
+            if server._sse_tracker.active_count < 2:
+                break
+            time.sleep(0.05)
+
+        assert server._sse_tracker.active_count < 2, "Expected client 1 slot to be released."
 
         # Client 4 should now succeed
         resp4 = urllib.request.urlopen(url)
         assert resp4.status == 200
         resp2.close()
         resp4.close()
+
     finally:
         server.stop()
