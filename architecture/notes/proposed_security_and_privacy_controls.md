@@ -160,3 +160,28 @@ Whenever `ed-telemetry serve` or client commands boot, the active API key is res
 ```
 
 This ensures downstream packages (`ed-some-package`) running on the same host can automatically discover the credentials file without user intervention, while remote packages across the LAN can ingest `$ED_API_KEY` from their own environment.
+
+---
+
+## 4. Cross-Origin Resource Sharing (CORS) Restriction & Policy
+
+### 4.1 Threat Mechanism: Cross-Site Telemetry Harvesting
+When `Access-Control-Allow-Origin: *` is returned on all HTTP/SSE responses, any malicious or third-party web page loaded in a Commander's web browser can execute asynchronous JavaScript `fetch("http://localhost:8080/api/v1/status")` or open an `EventSource("http://localhost:8080/api/v1/stream")`. Because the browser is running on the same machine, the request succeeds and transmits real-time player location, ship state, balance, and journal data to untrusted third-party web servers.
+
+### 4.2 Remediation Policy & Invariants
+`ed-telemetry` eliminates wildcard CORS and introduces strict, configurable origin filtering:
+
+1. **Default Loopback Policy:**
+   - By default, incoming requests containing an `Origin` header are only permitted if they match standard local development or loopback origins:
+     - `http://localhost:[0-9]+`
+     - `http://127.0.0.1:[0-9]+`
+     - `http://[::1]:[0-9]+`
+2. **Configurable Allowed Origins (`--cors-origin` / `ED_CORS_ORIGIN`):**
+   - For operators hosting web dashboards across a local network or domain (e.g. `http://dashboard.lan` or `http://192.168.1.106:3000`), allowed origins can be explicitly specified:
+     ```bash
+     ed-telemetry serve --cors-origin "http://dashboard.lan,http://192.168.1.106:3000"
+     ```
+3. **Preflight Request Handling (`OPTIONS`):**
+   - The server inspects the incoming `Origin` header against the allowed set.
+   - If allowed: Reflect the specific origin in `Access-Control-Allow-Origin: <origin>` and emit `Access-Control-Allow-Methods: GET, OPTIONS` and `Access-Control-Allow-Headers: Authorization, X-API-Key, Content-Type`.
+   - If forbidden: Omit the CORS headers or respond with `403 Forbidden`, causing the calling browser's security sandbox to block the request.
