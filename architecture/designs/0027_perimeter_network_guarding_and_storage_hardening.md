@@ -123,13 +123,32 @@ In `src/ed_telemetry/adapters/driving/api/server.py`:
   ```
 * Apply `sanitize_host_path()` in `_handle_status` and `TelemetryHttpHandler.do_GET` for `/status` and `/status/game`.
 
-### 3.5 CLI Credential Resolution & Utility (`main.py`)
-1. Add `auth` subparser with commands:
-   - `keygen [--force]`: Generate and write credentials to `~/.config/ed-telemetry/credentials.json` with `0600` permissions.
-   - `show`: Output active key location and status.
-   - `revoke`: Delete credentials file.
-2. Update `_handle_serve` to resolve key in deterministic order:
-   - `args.api_key` $\rightarrow$ `$ED_API_KEY` $\rightarrow$ `credentials.json` $\rightarrow$ `None`.
+### 3.5 CLI Credential Resolution & Environment Registration Utilities (`main.py`)
+
+1. **CLI `auth` Subcommands:**
+   * `keygen [--force] [--register-env]`:
+     - Generates 32-character hex token via `secrets.token_hex(16)`.
+     - Writes to `~/.config/ed-telemetry/credentials.json` (or `%LOCALAPPDATA%\ed-telemetry\credentials.json`) with `0600` permissions.
+     - When `--register-env` is passed:
+       - **Linux / Unix:** Detects active shell (`$SHELL`). If bash, verifies `~/.bashrc` exists; if zsh, verifies `~/.zshrc`. Appends guarded block idempotently:
+         ```bash
+         # ed-telemetry automated key registration
+         export ED_API_KEY="<token>"
+         ```
+         Uses an explicit `# >>> ed-telemetry auth >>>` comment block so subsequent calls cleanly replace rather than duplicate lines.
+       - **Windows:** Invokes PowerShell non-elevated user registry setter:
+         ```powershell
+         [Environment]::SetEnvironmentVariable('ED_API_KEY', '<token>', 'User')
+         ```
+         Or falls back to `setx ED_API_KEY "<token>"` via standard library `subprocess.run()`.
+   * `show`: Outputs currently discovered API key and source (CLI flag, env, or credentials file).
+   * `revoke`: Removes credentials file and unsets or strips the registered environment block.
+
+2. **Deterministic Credential Resolution Precedence:**
+   ```
+   args.api_key  -->  os.environ.get("ED_API_KEY")  -->  credentials.json  -->  None (local unauthenticated)
+   ```
+
 
 ---
 

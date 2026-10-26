@@ -52,10 +52,13 @@ Chosen Option: **Option 3: Perimeter Network Guarding, Storage Hardening, and Pa
   * When `--api-key <token>` or `ED_API_KEY` is configured, all HTTP REST routes and `/api/v1/stream` require authentication via `Authorization: Bearer <token>`, `X-API-Key: <token>`, or query parameter `?api_key=<token>` (for browser `EventSource` compatibility).
   * Unauthorized requests must be rejected immediately with `HTTP 401 Unauthorized` and an RFC 7807 problem details JSON payload.
   * Constant-time comparison (`hmac.compare_digest`) must be used for token validation.
-* **Invariant 3 (Canonical Credential Precedence & Utilities):**
+* **Invariant 3 (Canonical Credential Precedence & Automated Environment Registration Utilities):**
   * Key resolution hierarchy: Explicit CLI flag $\rightarrow$ Environment variable (`ED_API_KEY`) $\rightarrow$ Canonical credentials file (`~/.config/ed-telemetry/credentials.json` or `%LOCALAPPDATA%`) $\rightarrow$ Unauthenticated local mode.
-  * The CLI will provide `ed-telemetry auth keygen`, `show`, and `revoke` utility commands.
+  * The CLI will provide `ed-telemetry auth keygen`, `show`, `revoke`, and automated environment registration utilities:
+    * **Linux / Unix (`--register-env`):** Safely appends `export ED_API_KEY="<token>"` to the user's active shell configuration (`~/.bashrc` or `~/.zshrc`) with idempotency guards.
+    * **Windows (`--register-env`):** Persists `ED_API_KEY` into the Windows User Environment table via PowerShell (`[Environment]::SetEnvironmentVariable`) or native `setx` without requiring administrative elevation.
 * **Invariant 4 (CORS Origin Restriction):**
+
   * Replace `Access-Control-Allow-Origin: *` with strict loopback validation (`localhost`, `127.0.0.1`, `[::1]`).
   * Support explicit operator origin whitelisting via `--cors-origin` / `ED_CORS_ORIGIN`.
 * **Invariant 5 (Host Path Sanitization):**
