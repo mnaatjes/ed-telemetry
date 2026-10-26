@@ -116,3 +116,47 @@ When responding over the API, absolute local paths containing the operating syst
 * In `GET /api/v1/status`: `monitored_directory` is displayed as `~/.../Frontier Developments/Elite Dangerous`.
 * In `GET /api/v1/status/game`: `target_path` is displayed as `~/.../Status.json`.
 * In `telemetry.audit`: Local paths are truncated or prefix-masked before transmission over the network.
+
+### 3.5 Cross-Platform API Key Management & Utility CLI Workflow
+
+To minimize operational friction without corrupting shell configuration files (such as `~/.bashrc` or `~/.zshrc`) or relying on fragile Windows Registry edits, `ed-telemetry` adopts a **Canonical Credentials File & Precedence Discovery** architecture.
+
+#### 1. Canonical Storage Locations
+API keys generated or managed by the CLI reside strictly in standard per-user configuration paths:
+
+| Platform | Canonical Path | Permission Invariant |
+| :--- | :--- | :--- |
+| **Linux / Steam Deck** | `~/.config/ed-telemetry/credentials.json` | `chmod 0600` (file), `0700` (directory) |
+| **Windows** | `%LOCALAPPDATA%\ed-telemetry\credentials.json` | Native NTFS user ACL inheritance |
+
+File schema:
+```json
+{
+  "api_key": "ed_sec_a3f89b21c4e7...",
+  "created_at": "2026-10-26T03:00:00Z"
+}
+```
+
+#### 2. CLI Key Management Utilities (`auth` Subcommand)
+The CLI provides automated utility subcommands for generating and managing keys:
+
+* **Generate / Rotate Key (`ed-telemetry auth keygen [--force]`):**
+  - Uses `secrets.token_hex(16)` to generate a cryptographically strong 32-character token.
+  - Automatically writes to the platform-specific `credentials.json` path with strict permissions.
+  - Outputs the generated key to `stdout` along with copy-pasteable environment export commands.
+* **Inspect Current Key (`ed-telemetry auth show`):**
+  - Displays the active key and its storage path.
+* **Revoke Key (`ed-telemetry auth revoke`):**
+  - Removes the credentials file and reverts to unauthenticated local mode.
+
+#### 3. Complete Credential Resolution Precedence
+Whenever `ed-telemetry serve` or client commands boot, the active API key is resolved according to this deterministic hierarchy:
+
+```
+1. Explicit CLI Flag:             --api-key <token>
+2. Active Environment Variable:   $ED_API_KEY
+3. Canonical Credentials File:    ~/.config/ed-telemetry/credentials.json (or %LOCALAPPDATA%)
+4. Fallback Default:              None (Unauthenticated local-trusted mode on 127.0.0.1)
+```
+
+This ensures downstream packages (`ed-some-package`) running on the same host can automatically discover the credentials file without user intervention, while remote packages across the LAN can ingest `$ED_API_KEY` from their own environment.
