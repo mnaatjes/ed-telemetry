@@ -2,7 +2,7 @@
 title: "Elite Dangerous Journal and Snapshot Filename Specification and Edge Cases"
 tags: ["elite-dangerous", "journal", "snapshot", "filenames", "research", "regex"]
 created_at: "2026-10-07"
-last_updated_at: "2026-10-07"
+last_updated_at: "2026-10-26"
 ---
 
 # Elite Dangerous Journal & Snapshot Filename Specification and Edge Cases
@@ -57,8 +57,10 @@ Unlike the append-only rolling journal files, snapshot files represent point-in-
 | `ModulesInfo.json` | Current ship module loadout, power priorities, health | Cockpit startup, module switching, power tuning | Overwrite (truncate in place) |
 | `Cargo.json` | Ship cargo inventory manifest | Game startup, cargo scooping, jettison, trading | Overwrite (truncate in place) |
 | `Backpack.json` | Odyssey on-foot inventory (consumables, components, assets) | Disembarking, looting, resupply terminal interaction | Overwrite (truncate in place) |
+| `ShipLocker.json` | Odyssey ship locker inventory (components, consumables, data, assets) | Boarding ship, disembarking, locker terminal interaction | Overwrite (truncate in place) |
 | `NavRoute.json` | Active multi-hop galaxy map navigation route | Plotting route in Galaxy Map or clearing route | Overwrite (truncate in place) |
 | `FCMaterials.json` | Fleet Carrier Bartender material inventory and orders | Interacting with Fleet Carrier bar | Overwrite (truncate in place) |
+
 
 ---
 
@@ -119,6 +121,7 @@ SNAPSHOT_FILES = frozenset(
         "ModulesInfo.json",
         "Cargo.json",
         "Backpack.json",
+        "ShipLocker.json",
         "NavRoute.json",
         "FCMaterials.json",
     }
