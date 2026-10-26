@@ -35,6 +35,51 @@ DEFAULT_ALLOWED_ORIGINS = (
 LOOPBACK_ORIGIN_REGEX = re.compile(r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$")
 
 
+def _parse_clamped_limit(
+    query: dict[str, list[str]],
+    default: int = 100,
+    min_val: int = 1,
+    max_val: int = 500,
+) -> int:
+    """Parse and clamp integer limit query parameter within safe operational bounds."""
+    if "limit" not in query:
+        return default
+    try:
+        val = int(query["limit"][0])
+        return max(min_val, min(val, max_val))
+    except (ValueError, IndexError):
+        return default
+
+
+class SSEConnectionTracker:
+    """Thread-safe active SSE client tracker with concurrency ceiling."""
+
+    def __init__(self, max_clients: int = 16) -> None:
+        self.max_clients = max_clients
+        self._lock = threading.Lock()
+        self._active_clients = 0
+
+    def acquire(self) -> bool:
+        """Attempt to acquire a stream slot. Returns True if granted."""
+        with self._lock:
+            if self._active_clients >= self.max_clients:
+                return False
+            self._active_clients += 1
+            return True
+
+    def release(self) -> None:
+        """Release a stream slot upon client disconnect."""
+        with self._lock:
+            if self._active_clients > 0:
+                self._active_clients -= 1
+
+    @property
+    def active_count(self) -> int:
+        """Current number of connected streaming clients."""
+        with self._lock:
+            return self._active_clients
+
+
 class TelemetryHttpHandler(BaseHTTPRequestHandler):
     """Request handler dispatching REST and SSE requests to driving use case ports."""
 
@@ -53,6 +98,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
 
     server_api_key: str | None = None
     allowed_origins: tuple[str, ...] = DEFAULT_ALLOWED_ORIGINS
+    sse_tracker: SSEConnectionTracker | None = None
 
     def _authenticate_request(self) -> bool:
         """Authenticate request using constant-time token comparison if API key is configured."""
@@ -139,7 +185,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                 )
                 return
             min_level = query["min_level"][0] if "min_level" in query else None
-            limit = int(query["limit"][0]) if "limit" in query else 100
+            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
             snapshot = self.diagnostic_logs_port.get_logs(min_level=min_level, limit=limit)
             self._send_json(200, asdict(snapshot))
             return
@@ -152,14 +198,14 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         if path == "/api/v1/events":
             since_id = int(query["since_id"][0]) if "since_id" in query else None
             topic = query["topic"][0] if "topic" in query else None
-            limit = int(query["limit"][0]) if "limit" in query else 100
+            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
             q_dto = TelemetryQueryDTO(since_id=since_id, topic=topic, limit=limit)
             records = self.find_events_port.find_events(q_dto)
             self._send_json(200, [asdict(r) for r in records])
             return
 
         if path == "/api/v1/events/buffer":
-            limit = int(query["limit"][0]) if "limit" in query else 100
+            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
             batch = self.get_events_port.get_events(limit=limit)
             self._send_json(200, asdict(batch))
             return
@@ -252,30 +298,43 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_sse_stream(self) -> None:
-        """Serve Server-Sent Events (SSE) live feed."""
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self._apply_cors_headers()
-        self.end_headers()
-
-        # Send initial connected heartbeat
-        self.wfile.write(b'data: {"event":"connected"}\n\n')
-        self.wfile.flush()
+        """Serve Server-Sent Events (SSE) live feed with connection limit guardrail."""
+        if self.sse_tracker and not self.sse_tracker.acquire():
+            self._send_problem(
+                status_code=429,
+                title="Too Many Requests",
+                detail=f"Maximum concurrent SSE stream limit reached ({self.sse_tracker.max_clients} clients).",
+                instance=self.path,
+            )
+            return
 
         try:
-            for payload in self.stream_events_port.stream_events(timeout=0.5):
-                msg = {
-                    "topic": payload.topic,
-                    "timestamp": payload.timestamp.isoformat(),
-                    "payload": payload.payload_bytes.decode("utf-8", errors="replace"),
-                }
-                data_line = f"data: {json.dumps(msg)}\n\n".encode()
-                self.wfile.write(data_line)
-                self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self._apply_cors_headers()
+            self.end_headers()
+
+            # Send initial connected heartbeat
+            self.wfile.write(b'data: {"event":"connected"}\n\n')
+            self.wfile.flush()
+
+            try:
+                for payload in self.stream_events_port.stream_events(timeout=0.5):
+                    msg = {
+                        "topic": payload.topic,
+                        "timestamp": payload.timestamp.isoformat(),
+                        "payload": payload.payload_bytes.decode("utf-8", errors="replace"),
+                    }
+                    data_line = f"data: {json.dumps(msg)}\n\n".encode()
+                    self.wfile.write(data_line)
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+        finally:
+            if self.sse_tracker:
+                self.sse_tracker.release()
 
     def _send_problem(self, status_code: int, title: str, detail: str, instance: str) -> None:
         """Send RFC 7807 problem details error response."""
@@ -334,11 +393,13 @@ class HttpApiAdapter:
         journal_files_port: GetJournalFilesPort | None = None,
         aux_snapshot_port: GetAuxiliarySnapshotPort | None = None,
         diagnostic_logs_port: GetDiagnosticLogsPort | None = None,
+        max_sse_clients: int = 16,
     ) -> None:
         self.host = host
         self.port = port
         self.api_key = api_key
         self.allowed_origins = allowed_origins
+        self.max_sse_clients = max_sse_clients
         self.watcher_status_port = watcher_status_port
         self.process_stream_port = process_stream_port
         self.find_events_port = find_events_port
@@ -350,6 +411,7 @@ class HttpApiAdapter:
         self.aux_snapshot_port = aux_snapshot_port
         self.diagnostic_logs_port = diagnostic_logs_port
 
+        self._sse_tracker = SSEConnectionTracker(max_clients=max_sse_clients)
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -371,6 +433,7 @@ class HttpApiAdapter:
                 "diagnostic_logs_port": self.diagnostic_logs_port,
                 "server_api_key": self.api_key,
                 "allowed_origins": self.allowed_origins,
+                "sse_tracker": self._sse_tracker,
             },
         )
 

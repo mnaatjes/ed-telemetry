@@ -7,6 +7,7 @@ import os
 import stat
 import urllib.error
 import urllib.request
+from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -228,3 +229,102 @@ def test_cli_auth_keygen_show_revoke(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert code_revoke == 0
     assert not creds_file.exists()
     assert "ED_API_KEY" not in fake_rc.read_text()
+
+
+def test_query_limit_clamping() -> None:
+    """Verify that query parameters ?limit= are clamped to [1, 500]."""
+    find_events_mock = MagicMock()
+    find_events_mock.find_events.return_value = []
+
+    server = HttpApiAdapter(
+        host="127.0.0.1",
+        port=0,
+        api_key=None,
+        find_events_port=find_events_mock,
+    )
+    server.start()
+    try:
+        # 1. Negative limit should be clamped to 1
+        url_neg = f"http://127.0.0.1:{server.port}/api/v1/events?limit=-50"
+        with urllib.request.urlopen(url_neg) as resp:
+            assert resp.status == 200
+        call_arg = find_events_mock.find_events.call_args[0][0]
+        assert call_arg.limit == 1
+
+        # 2. Limit exceeding 500 should be clamped to 500
+        url_huge = f"http://127.0.0.1:{server.port}/api/v1/events?limit=999999"
+        with urllib.request.urlopen(url_huge) as resp:
+            assert resp.status == 200
+        call_arg_huge = find_events_mock.find_events.call_args[0][0]
+        assert call_arg_huge.limit == 500
+
+        # 3. Valid limit within range is preserved
+        url_valid = f"http://127.0.0.1:{server.port}/api/v1/events?limit=42"
+        with urllib.request.urlopen(url_valid) as resp:
+            assert resp.status == 200
+        call_arg_valid = find_events_mock.find_events.call_args[0][0]
+        assert call_arg_valid.limit == 42
+    finally:
+        server.stop()
+
+
+def test_sse_concurrent_connection_limiting() -> None:
+    """Verify that exceeding max_sse_clients returns HTTP 429 Too Many Requests."""
+    import time
+    from datetime import datetime
+
+    from ed_telemetry.core.ports.dto.telemetry_dto import TelemetryPayloadDTO
+
+    stream_mock = MagicMock()
+
+    def _infinite_stream(*args: object, **kwargs: object):
+        while True:
+            time.sleep(0.1)
+            yield TelemetryPayloadDTO(
+                topic="telemetry.test",
+                timestamp=datetime.now(UTC),
+                payload_bytes=b"{}",
+            )
+
+    stream_mock.stream_events.side_effect = _infinite_stream
+
+    server = HttpApiAdapter(
+        host="127.0.0.1",
+        port=0,
+        api_key=None,
+        max_sse_clients=2,
+        stream_events_port=stream_mock,
+    )
+    server.start()
+    try:
+        url = f"http://127.0.0.1:{server.port}/api/v1/stream"
+
+        # Open client 1
+        resp1 = urllib.request.urlopen(url)
+        assert resp1.status == 200
+
+        # Open client 2
+        resp2 = urllib.request.urlopen(url)
+        assert resp2.status == 200
+
+        # Attempt client 3: Should be rejected with 429
+        req3 = urllib.request.Request(url)
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req3)
+        assert exc_info.value.code == 429
+        err_body = json.loads(exc_info.value.read().decode("utf-8"))
+        assert err_body["status"] == 429
+        assert err_body["title"] == "Too Many Requests"
+        assert "2 clients" in err_body["detail"]
+
+        # Close client 1 and verify slot is freed
+        resp1.close()
+        time.sleep(0.1)
+
+        # Client 4 should now succeed
+        resp4 = urllib.request.urlopen(url)
+        assert resp4.status == 200
+        resp2.close()
+        resp4.close()
+    finally:
+        server.stop()
