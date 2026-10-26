@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -80,12 +81,22 @@ def build_container(
     effective_log_path = Path(log_file) if log_file else resolve_default_log_path()
     try:
         effective_log_path.parent.mkdir(parents=True, exist_ok=True)
+        if hasattr(effective_log_path, "chmod") and os.name == "posix":
+            try:
+                os.chmod(effective_log_path.parent, 0o700)
+            except OSError:
+                pass
         file_handler = RotatingFileHandler(
             str(effective_log_path),
             maxBytes=5_242_880,  # 5 MB
             backupCount=3,
             encoding="utf-8",
         )
+        if hasattr(effective_log_path, "chmod") and os.name == "posix" and effective_log_path.exists():
+            try:
+                os.chmod(effective_log_path, 0o600)
+            except OSError:
+                pass
         file_formatter = logging.Formatter(
             fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             datefmt="%Y-%m-%dT%H:%M:%S",

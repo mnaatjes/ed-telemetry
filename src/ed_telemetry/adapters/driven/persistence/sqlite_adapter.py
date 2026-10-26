@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import threading
 from collections.abc import Generator
@@ -17,14 +18,32 @@ from ed_telemetry.core.ports.dto.telemetry_dto import (
 )
 
 
+def _enforce_posix_permissions(path: Path, is_dir: bool = False) -> None:
+    """Enforce POSIX permissions (0700 for directories, 0600 for files) if on POSIX."""
+    if os.name == "posix" and path.exists():
+        target_mode = 0o700 if is_dir else 0o600
+        try:
+            os.chmod(path, target_mode)
+        except OSError:
+            pass
+
+
 class SqlitePersistenceManager:
     """Manages SQLite schema initialization and connection management in WAL mode."""
 
     def __init__(self, db_path: Path | str) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        _enforce_posix_permissions(self.db_path.parent, is_dir=True)
         self._lock = threading.Lock()
         self._init_schema()
+        self._secure_db_files()
+
+    def _secure_db_files(self) -> None:
+        """Enforce strict permissions on the SQLite database and auxiliary WAL/SHM files."""
+        for suffix in ("", "-wal", "-shm"):
+            target = Path(f"{self.db_path}{suffix}")
+            _enforce_posix_permissions(target, is_dir=False)
 
     @contextmanager
     def connection(self) -> Generator[sqlite3.Connection, None, None]:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hmac
 import json
+import re
 import threading
 from dataclasses import asdict
 from datetime import datetime
@@ -24,6 +26,14 @@ from ed_telemetry.core.ports.driving.telemetry_port import (
     TelemetryQueryDTO,
 )
 
+DEFAULT_ALLOWED_ORIGINS = (
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://[::1]",
+)
+
+LOOPBACK_ORIGIN_REGEX = re.compile(r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$")
+
 
 class TelemetryHttpHandler(BaseHTTPRequestHandler):
     """Request handler dispatching REST and SSE requests to driving use case ports."""
@@ -41,6 +51,71 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
     aux_snapshot_port: GetAuxiliarySnapshotPort
     diagnostic_logs_port: GetDiagnosticLogsPort | None
 
+    server_api_key: str | None = None
+    allowed_origins: tuple[str, ...] = DEFAULT_ALLOWED_ORIGINS
+
+    def _authenticate_request(self) -> bool:
+        """Authenticate request using constant-time token comparison if API key is configured."""
+        if not self.server_api_key:
+            return True
+
+        # 1. Check Bearer token
+        auth_hdr = self.headers.get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            token = auth_hdr[7:].strip()
+            if hmac.compare_digest(token, self.server_api_key):
+                return True
+
+        # 2. Check X-API-Key header
+        api_key_hdr = self.headers.get("X-API-Key", "")
+        if api_key_hdr and hmac.compare_digest(api_key_hdr, self.server_api_key):
+            return True
+
+        # 3. Check query param for SSE EventSource / browser clients
+        parsed_query = parse_qs(urlparse(self.path).query)
+        if "api_key" in parsed_query:
+            query_token = parsed_query["api_key"][0]
+            if hmac.compare_digest(query_token, self.server_api_key):
+                return True
+
+        self._send_problem(
+            status_code=401,
+            title="Unauthorized",
+            detail="Invalid or missing API key.",
+            instance=self.path,
+        )
+        return False
+
+    def _is_origin_allowed(self, origin: str) -> bool:
+        """Check if an Origin header is permitted under the CORS policy."""
+        if not origin:
+            return False
+        if LOOPBACK_ORIGIN_REGEX.match(origin):
+            return True
+        for allowed in self.allowed_origins:
+            if origin == allowed or origin.startswith(f"{allowed}:"):
+                return True
+        return False
+
+    def _apply_cors_headers(self) -> None:
+        """Apply CORS headers if origin is permitted."""
+        origin = self.headers.get("Origin")
+        if origin and self._is_origin_allowed(origin):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Authorization, X-API-Key, Content-Type",
+            )
+            self.send_header("Vary", "Origin")
+
+    def do_OPTIONS(self) -> None:
+        """Handle CORS preflight requests."""
+        self.send_response(204)
+        self._apply_cors_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:
         """Handle incoming GET requests."""
         parsed = urlparse(self.path)
@@ -49,6 +124,9 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
 
         if path in ("", "/api/v1/health"):
             self._send_json(200, {"status": "ok", "service": "ed-telemetry"})
+            return
+
+        if not self._authenticate_request():
             return
 
         if path == "/api/v1/diagnostics/logs":
@@ -130,6 +208,9 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         """Handle incoming POST requests."""
+        if not self._authenticate_request():
+            return
+
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
@@ -176,7 +257,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._apply_cors_headers()
         self.end_headers()
 
         # Send initial connected heartbeat
@@ -209,7 +290,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/problem+json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._apply_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -225,7 +306,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._apply_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -241,6 +322,8 @@ class HttpApiAdapter:
         self,
         host: str = "127.0.0.1",
         port: int = 8080,
+        api_key: str | None = None,
+        allowed_origins: tuple[str, ...] = DEFAULT_ALLOWED_ORIGINS,
         watcher_status_port: GetWatcherStatusPort | None = None,
         process_stream_port: ProcessTelemetryStreamPort | None = None,
         find_events_port: FindTelemetryEventsPort | None = None,
@@ -254,6 +337,8 @@ class HttpApiAdapter:
     ) -> None:
         self.host = host
         self.port = port
+        self.api_key = api_key
+        self.allowed_origins = allowed_origins
         self.watcher_status_port = watcher_status_port
         self.process_stream_port = process_stream_port
         self.find_events_port = find_events_port
@@ -284,6 +369,8 @@ class HttpApiAdapter:
                 "journal_files_port": self.journal_files_port,
                 "aux_snapshot_port": self.aux_snapshot_port,
                 "diagnostic_logs_port": self.diagnostic_logs_port,
+                "server_api_key": self.api_key,
+                "allowed_origins": self.allowed_origins,
             },
         )
 

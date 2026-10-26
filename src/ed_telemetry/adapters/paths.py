@@ -48,3 +48,35 @@ def resolve_default_db_path(platform: str | None = None) -> Path:
         return Path(xdg_data_home) / "ed-telemetry" / "telemetry.db"
 
     return Path.home() / ".local" / "share" / "ed-telemetry" / "telemetry.db"
+
+
+def resolve_default_credentials_path(platform: str | None = None) -> Path:
+    """Resolve cross-platform credentials path according to OS standards."""
+    current_platform = platform or sys.platform
+
+    if current_platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return Path(local_app_data) / "ed-telemetry" / "credentials.json"
+        user_profile = os.environ.get("USERPROFILE")
+        if user_profile:
+            return Path(user_profile) / ".config" / "ed-telemetry" / "credentials.json"
+        return Path.home() / ".config" / "ed-telemetry" / "credentials.json"
+
+    # Linux / Unix
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config_home:
+        return Path(xdg_config_home) / "ed-telemetry" / "credentials.json"
+
+    return Path.home() / ".config" / "ed-telemetry" / "credentials.json"
+
+
+def sanitize_host_path(path: str | Path | None) -> str | None:
+    """Sanitize operating system user home paths to prevent environment leakage."""
+    if path is None:
+        return None
+    p_str = str(path)
+    user_home = str(Path.home())
+    if p_str.startswith(user_home):
+        return p_str.replace(user_home, "~", 1)
+    return p_str
