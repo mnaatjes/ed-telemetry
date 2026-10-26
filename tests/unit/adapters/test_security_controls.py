@@ -42,11 +42,12 @@ def test_sanitize_host_path() -> None:
     """Verify that sanitize_host_path replaces home directory prefix with ~."""
     home = Path.home()
     full_path = home / ".local" / "share" / "ed-telemetry" / "telemetry.db"
-    assert sanitize_host_path(full_path) == "~/.local/share/ed-telemetry/telemetry.db"
-    assert sanitize_host_path(str(full_path)) == "~/.local/share/ed-telemetry/telemetry.db"
+    expected = f"~{os.sep}.local{os.sep}share{os.sep}ed-telemetry{os.sep}telemetry.db"
+    assert sanitize_host_path(full_path) == expected
+    assert sanitize_host_path(str(full_path)) == expected
     assert sanitize_host_path(None) is None
 
-    foreign_path = "/var/log/ed-telemetry.log"
+    foreign_path = f"{os.sep}var{os.sep}log{os.sep}ed-telemetry.log"
     assert sanitize_host_path(foreign_path) == foreign_path
 
 
@@ -177,6 +178,7 @@ def test_cli_auth_keygen_show_revoke(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr("ed_telemetry.adapters.paths.resolve_default_credentials_path", lambda: creds_file)
     monkeypatch.setattr("ed_telemetry.adapters.driving.cli.main.resolve_default_credentials_path", lambda: creds_file)
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("sys.platform", "linux")
     monkeypatch.setenv("SHELL", "/bin/bash")
     monkeypatch.delenv("ED_API_KEY", raising=False)
 
