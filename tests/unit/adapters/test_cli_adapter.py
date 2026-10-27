@@ -351,3 +351,20 @@ class TestCliTelemetryAdapter:
                         # Assert request had authorization header
                         sent_req = mock_urlopen.call_args[0][0]
                         assert sent_req.headers["Authorization"] == "Bearer test_stream_key"
+
+                # 2. Verify explicit --api-key flag takes precedence on stream and tail
+                with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+                    out_buf = io.StringIO()
+                    with redirect_stdout(out_buf):
+                        code, payload = adapter.run(["stream", "--api-key", "explicit_stream_key"])
+                    assert code == 0
+                    sent_req = mock_urlopen.call_args[0][0]
+                    assert sent_req.headers["Authorization"] == "Bearer explicit_stream_key"
+
+                with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+                    out_buf = io.StringIO()
+                    with redirect_stdout(out_buf):
+                        code, payload = adapter.run(["tail", "--api-key", "explicit_tail_key"])
+                    assert code == 0
+                    sent_req = mock_urlopen.call_args[0][0]
+                    assert sent_req.headers["Authorization"] == "Bearer explicit_tail_key"
