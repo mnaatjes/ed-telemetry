@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -53,6 +54,18 @@ def _probe_daemon(host: str = "127.0.0.1", port: int = 8080) -> bool:
         with urllib.request.urlopen(req, timeout=0.2) as response:
             return bool(response.status == 200)
     except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def is_loopback_host(host: str) -> bool:
+    """Determine whether a host string represents a loopback interface."""
+    host_clean = host.strip().lower()
+    if host_clean in ("localhost", "127.0.0.1", "::1"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host_clean)
+        return ip.is_loopback
+    except ValueError:
         return False
 
 
@@ -142,6 +155,11 @@ class CliTelemetryAdapter:
             "--api-key",
             default=None,
             help="Pre-shared API key for authentication (default: resolved from env or credentials.json)",
+        )
+        serve_parser.add_argument(
+            "--allow-insecure",
+            action="store_true",
+            help="Explicitly permit unauthenticated access on non-loopback network interfaces",
         )
         serve_parser.add_argument(
             "--allowed-origin",
@@ -356,6 +374,29 @@ class CliTelemetryAdapter:
         self._http_api_adapter.host = args.host
         self._http_api_adapter.port = args.port
 
+        resolved_key = self._resolve_api_key(getattr(args, "api_key", None))
+        self._http_api_adapter.api_key = resolved_key
+        if getattr(args, "allowed_origins", None):
+            self._http_api_adapter.allowed_origins = tuple(args.allowed_origins)
+
+        # Non-loopback security gate (ADR 0032 / SDD-030)
+        is_loopback = is_loopback_host(args.host)
+        allow_insecure = getattr(args, "allow_insecure", False)
+
+        if not is_loopback and not resolved_key and not allow_insecure:
+            sys.stderr.write(
+                f"[SECURITY ERROR] Refusing to bind to non-loopback host '{args.host}' without authentication.\n"
+                "All telemetry streams and endpoints would be accessible unauthenticated to network peers.\n\n"
+                "Remediation:\n"
+                "  1. Generate and register an API key: ed-telemetry auth keygen --register-env\n"
+                f"  2. Or pass an API key directly:      ed-telemetry serve --host {args.host} --api-key <TOKEN>\n"
+                f"  3. Or explicitly permit insecure:    ed-telemetry serve --host {args.host} --allow-insecure\n"
+            )
+            return 1, {
+                "error": "Refusing to bind to non-loopback interface without authentication",
+                "host": args.host,
+            }
+
         discovered_path = None
         discovery_source = "Unknown"
         override = args.journal_dir
@@ -385,16 +426,14 @@ class CliTelemetryAdapter:
             except Exception:
                 pass
 
-        resolved_key = self._resolve_api_key(getattr(args, "api_key", None))
-        self._http_api_adapter.api_key = resolved_key
-        if getattr(args, "allowed_origins", None):
-            self._http_api_adapter.allowed_origins = tuple(args.allowed_origins)
-
         print(f"Starting ed-telemetry daemon on {args.host}:{args.port}...")
         if resolved_key:
             print("Perimeter Authentication: ENABLED (Pre-shared API key active)")
-        else:
+        elif is_loopback:
             print("Perimeter Authentication: DISABLED (Local loopback unauthenticated mode)")
+        else:
+            print("[WARNING] SECURITY RISK: Running on non-loopback host in unauthenticated mode.")
+            print("          All telemetry endpoints are openly accessible to network peers.")
         if discovered_path:
             print(f"Discovered Journal Directory: {discovered_path} (Source: {discovery_source})")
         if active_journal_name:
