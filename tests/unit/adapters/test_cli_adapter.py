@@ -250,3 +250,78 @@ class TestCliTelemetryAdapter:
                     assert payload_json["api_key"] is None
                     assert "remediation" in payload_json
                     assert "Run 'ed-telemetry auth keygen --register-env'" in buf_json.getvalue()
+
+    def test_cli_serve_non_loopback_security_gate(self) -> None:
+        import os
+        from unittest.mock import MagicMock, patch
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            win_dir = Path(tmp_dir) / "journals"
+            win_dir.mkdir()
+            (win_dir / "Journal.2026-10-09T100000.01.log").write_bytes(b'{"event":"FileHeader","part":1}\n')
+            db_file = Path(tmp_dir) / "test.db"
+
+            container = build_container(journal_dir=win_dir, db_path=db_file)
+            adapter = container.cli_adapter
+
+            creds_file = Path(tmp_dir) / "empty_creds.json"
+            target_patch = "ed_telemetry.adapters.driving.cli.main.resolve_default_credentials_path"
+
+            with patch.dict(os.environ, {}, clear=True):
+                with patch(target_patch, return_value=creds_file):
+                    # 1. Non-loopback without API key fails fast
+                    err_buf = io.StringIO()
+                    with redirect_stdout(io.StringIO()), patch("sys.stderr", err_buf):
+                        code, payload = adapter.run(["serve", "--host", "0.0.0.0"])
+                    assert code == 1
+                    assert "Refusing to bind to non-loopback host '0.0.0.0'" in err_buf.getvalue()
+                    assert payload["error"] == "Refusing to bind to non-loopback interface without authentication"
+
+                    # 2. Non-loopback with explicit --allow-insecure succeeds
+                    with patch.object(adapter._http_api_adapter, "start"):
+                        with patch.object(adapter._process_stream_port, "start_streaming"):
+                            mock_running = MagicMock()
+                            mock_running.__bool__.side_effect = [True, False]
+                            with patch.object(
+                                type(adapter._http_api_adapter), "is_running", new_callable=lambda: mock_running
+                            ):
+                                out_buf = io.StringIO()
+                                with redirect_stdout(out_buf):
+                                    code, _ = adapter.run(
+                                        [
+                                            "serve",
+                                            "--host",
+                                            "0.0.0.0",
+                                            "--journal-dir",
+                                            str(win_dir),
+                                            "--allow-insecure",
+                                        ]
+                                    )
+                                assert code == 0
+                                assert (
+                                    "SECURITY RISK: Running on non-loopback host in unauthenticated mode"
+                                    in out_buf.getvalue()
+                                )
+
+                    # 3. Non-loopback with ED_API_KEY environment succeeds
+                    with patch.dict(os.environ, {"ED_API_KEY": "test_token"}):
+                        with patch.object(adapter._http_api_adapter, "start"):
+                            with patch.object(adapter._process_stream_port, "start_streaming"):
+                                mock_running = MagicMock()
+                                mock_running.__bool__.side_effect = [True, False]
+                                with patch.object(
+                                    type(adapter._http_api_adapter), "is_running", new_callable=lambda: mock_running
+                                ):
+                                    out_buf = io.StringIO()
+                                    with redirect_stdout(out_buf):
+                                        code, _ = adapter.run(
+                                            [
+                                                "serve",
+                                                "--host",
+                                                "0.0.0.0",
+                                                "--journal-dir",
+                                                str(win_dir),
+                                            ]
+                                        )
+                                    assert code == 0
+                                    assert "Perimeter Authentication: ENABLED" in out_buf.getvalue()

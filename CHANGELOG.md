@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Non-loopback network binding authentication enforcement failing fast on startup (code 1) when `--host` is bound to external or unspecified interfaces (`0.0.0.0`, LAN IPs) without an API key (ADR 0032, SDD-030, #83).
+- Added `--allow-insecure` flag to `ed-telemetry serve` permitting explicit unauthenticated non-loopback operation with prominent console security warnings (ADR 0032, SDD-030, #83).
 - Root CLI `-v` and `--version` flags resolving installed package version via standard library `argparse` `action="version"` (ADR 0031, SDD-029, #84).
 - Actionable credential generation guidance when `ed-telemetry auth show` is invoked in unauthenticated mode across both human console text and `--json` outputs (ADR 0031, SDD-029, #84).
 
