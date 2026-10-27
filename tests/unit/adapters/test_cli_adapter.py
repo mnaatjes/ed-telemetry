@@ -325,3 +325,29 @@ class TestCliTelemetryAdapter:
                                         )
                                     assert code == 0
                                     assert "Perimeter Authentication: ENABLED" in out_buf.getvalue()
+
+    def test_cli_stream_authenticated_online_daemon(self) -> None:
+        import os
+        from unittest.mock import MagicMock, patch
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            # Mock _probe_daemon to return True
+            with patch("ed_telemetry.adapters.driving.cli.main._probe_daemon", return_value=True):
+                # 1. When API key is provided, verify it is injected into Authorization header
+                mock_resp = MagicMock()
+                mock_resp.__enter__.return_value = [
+                    b'data: {"topic": "telemetry.status", "payload": "{}"}\n',
+                ]
+                with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+                    with patch.dict(os.environ, {"ED_API_KEY": "test_stream_key"}):
+                        out_buf = io.StringIO()
+                        with redirect_stdout(out_buf):
+                            code, payload = adapter.run(["stream"])
+                        assert code == 0
+                        assert payload["streamed"] == 1
+                        # Assert request had authorization header
+                        sent_req = mock_urlopen.call_args[0][0]
+                        assert sent_req.headers["Authorization"] == "Bearer test_stream_key"
