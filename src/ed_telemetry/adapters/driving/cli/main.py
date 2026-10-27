@@ -774,14 +774,23 @@ class CliTelemetryAdapter:
                 pass
 
         env_registered = False
+        rc_target = None
         if register_env:
-            env_registered = self._register_environment_key(token)
+            env_registered, rc_target = self._register_environment_key(token)
 
-        payload = {
+        payload: dict[str, Any] = {
             "api_key": token,
             "credentials_file": str(creds_path),
             "environment_registered": env_registered,
         }
+        if register_env:
+            if sys.platform == "win32":
+                payload["activation_guidance"] = (
+                    "Restart running Command Prompt or PowerShell terminals to load ED_API_KEY."
+                )
+            else:
+                rc_file = rc_target or ("~/.zshrc" if "zsh" in os.environ.get("SHELL", "") else "~/.bashrc")
+                payload["activation_guidance"] = f"source {rc_file}"
 
         if as_json:
             print(json.dumps(payload, indent=2))
@@ -790,9 +799,24 @@ class CliTelemetryAdapter:
             print(f"Credentials saved to: {creds_path} (mode 0600)")
             if register_env:
                 if env_registered:
-                    print("Registered ED_API_KEY into user environment.")
+                    if sys.platform == "win32":
+                        print("Registered ED_API_KEY into Windows user environment.")
+                        print("\nTo apply to your current shell session, restart your terminal or run:")
+                        print(f"    set ED_API_KEY={token}")
+                    else:
+                        rc_display = rc_target or ("~/.zshrc" if "zsh" in os.environ.get("SHELL", "") else "~/.bashrc")
+                        print(f"Registered ED_API_KEY into user environment ({rc_display}).")
+                        print("\nTo apply immediately to your current shell session, run:")
+                        print(f"    source {rc_display}")
+                        print("    # or")
+                        print(f'    export ED_API_KEY="{token}"')
                 else:
                     print("Notice: Could not automatically register key into user shell/environment.")
+                    print("\nTo apply manually to your current shell session, run:")
+                    if sys.platform == "win32":
+                        print(f"    set ED_API_KEY={token}")
+                    else:
+                        print(f'    export ED_API_KEY="{token}"')
 
         return 0, payload
 
@@ -870,7 +894,7 @@ class CliTelemetryAdapter:
                 print("Stripped ED_API_KEY configuration from user shell environment.")
         return 0, payload
 
-    def _register_environment_key(self, token: str) -> bool:
+    def _register_environment_key(self, token: str) -> tuple[bool, str | None]:
         """Register ED_API_KEY into user shell rc (POSIX) or Windows user environment."""
         if sys.platform == "win32":
             try:
@@ -880,15 +904,16 @@ class CliTelemetryAdapter:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                return True
+                return True, "User Environment"
             except (subprocess.SubprocessError, OSError):
-                return False
+                return False, None
 
         # POSIX (Linux / macOS)
         shell = os.environ.get("SHELL", "")
         rc_name = ".zshrc" if "zsh" in shell else ".bashrc"
         rc_path = Path.home() / rc_name
         if not rc_path.exists() and rc_name == ".zshrc":
+            rc_name = ".bashrc"
             rc_path = Path.home() / ".bashrc"
 
         block = f'\n# >>> ed-telemetry auth >>>\nexport ED_API_KEY="{token}"\n# <<< ed-telemetry auth <<<\n'
@@ -905,9 +930,9 @@ class CliTelemetryAdapter:
                 new_content = content + block
 
             rc_path.write_text(new_content, encoding="utf-8")
-            return True
+            return True, f"~/{rc_name}"
         except OSError:
-            return False
+            return False, None
 
     def _strip_environment_key(self) -> bool:
         """Strip ED_API_KEY block from user shell rc files (POSIX) or registry (Windows)."""
