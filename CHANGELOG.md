@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-10-27
+
 ### Added
 - Non-loopback network binding authentication enforcement failing fast on startup (code 1) when `--host` is bound to external or unspecified interfaces (`0.0.0.0`, LAN IPs) without an API key (ADR 0032, SDD-030, #83).
 - Added `--allow-insecure` flag to `ed-telemetry serve` permitting explicit unauthenticated non-loopback operation with prominent console security warnings (ADR 0032, SDD-030, #83).
