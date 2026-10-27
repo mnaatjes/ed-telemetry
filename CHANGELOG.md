@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Root CLI `-v` and `--version` flags resolving installed package version via standard library `argparse` `action="version"` (ADR 0031, SDD-029, #84).
+- Actionable credential generation guidance when `ed-telemetry auth show` is invoked in unauthenticated mode across both human console text and `--json` outputs (ADR 0031, SDD-029, #84).
+
 ## [0.6.2] - 2026-10-26
 
 ### Added
