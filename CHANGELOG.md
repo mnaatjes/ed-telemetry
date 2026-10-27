@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-10-27
+
 ### Fixed
 - Injected resolved API key credentials into outbound HTTP daemon requests (`stream`, `status`, `logs`) and improved HTTP error diagnostics (ADR 0029, #87).
 
