@@ -195,3 +195,58 @@ class TestCliTelemetryAdapter:
                 code, _ = adapter.run(["logs", "--follow"])
                 assert code == 0
                 assert mock_tail.call_count == 1
+
+    def test_cli_version_flags(self) -> None:
+        import pytest
+
+        from ed_telemetry import __version__
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            # Test --version
+            buf = io.StringIO()
+            with pytest.raises(SystemExit) as exc_info:
+                with redirect_stdout(buf):
+                    adapter.run(["--version"])
+            assert exc_info.value.code == 0
+            assert f"ed-telemetry {__version__}" in buf.getvalue()
+
+            # Test -v
+            buf_short = io.StringIO()
+            with pytest.raises(SystemExit) as exc_short:
+                with redirect_stdout(buf_short):
+                    adapter.run(["-v"])
+            assert exc_short.value.code == 0
+            assert f"ed-telemetry {__version__}" in buf_short.getvalue()
+
+    def test_cli_auth_show_unauthenticated_guidance(self) -> None:
+        import os
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            creds_file = Path(tmp_dir) / "fake_creds.json"
+            container = build_container(db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            target_patch = "ed_telemetry.adapters.driving.cli.main.resolve_default_credentials_path"
+            with patch.dict(os.environ, {}, clear=True):
+                with patch(target_patch, return_value=creds_file):
+                    # 1. Text mode
+                    buf_text = io.StringIO()
+                    with redirect_stdout(buf_text):
+                        code, payload = adapter.run(["auth", "show"])
+                    assert code == 0
+                    assert payload["api_key"] is None
+                    assert "remediation" in payload
+                    assert "ed-telemetry auth keygen --register-env" in buf_text.getvalue()
+
+                    # 2. JSON mode
+                    buf_json = io.StringIO()
+                    with redirect_stdout(buf_json):
+                        code_json, payload_json = adapter.run(["auth", "show", "--json"])
+                    assert code_json == 0
+                    assert payload_json["api_key"] is None
+                    assert "remediation" in payload_json
+                    assert "Run 'ed-telemetry auth keygen --register-env'" in buf_json.getvalue()

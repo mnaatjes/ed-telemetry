@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ed_telemetry import __version__
 from ed_telemetry.adapters.driven.watcher.discovery.exceptions import PathDiscoveryError
 from ed_telemetry.adapters.paths import (
     resolve_default_credentials_path,
@@ -84,6 +85,12 @@ class CliTelemetryAdapter:
         parser = argparse.ArgumentParser(
             prog="ed-telemetry",
             description="Elite Dangerous Telemetry Daemon and Inspection Tool",
+        )
+        parser.add_argument(
+            "-v",
+            "--version",
+            action="version",
+            version=f"%(prog)s {__version__}",
         )
         subparsers = parser.add_subparsers(dest="subcommand", help="Available subcommands")
 
@@ -738,6 +745,10 @@ class CliTelemetryAdapter:
             "credentials_file": str(creds_path),
             "credentials_file_exists": creds_path.exists(),
         }
+        if not token:
+            payload["remediation"] = (
+                "Run 'ed-telemetry auth keygen --register-env' to generate and register credentials."
+            )
 
         if as_json:
             print(json.dumps(payload, indent=2))
@@ -748,6 +759,8 @@ class CliTelemetryAdapter:
             else:
                 print("No API Key configured (Local loopback unauthenticated mode).")
                 print(f"Credentials File: {creds_path} (Not Found)")
+                print("\nTo generate and register an API key for network security:")
+                print("  ed-telemetry auth keygen --register-env")
         return 0, payload
 
     def _handle_auth_revoke(self, args: argparse.Namespace, as_json: bool = False) -> tuple[int, dict[str, Any]]:
