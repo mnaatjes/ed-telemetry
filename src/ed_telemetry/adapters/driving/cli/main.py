@@ -57,6 +57,14 @@ def _probe_daemon(host: str = "127.0.0.1", port: int = 8080) -> bool:
         return False
 
 
+def _build_authenticated_request(url: str, api_key: str | None = None) -> urllib.request.Request:
+    """Build an HTTP Request with optional Bearer Authorization header."""
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return urllib.request.Request(url, headers=headers, method="GET")
+
+
 def is_loopback_host(host: str) -> bool:
     """Determine whether a host string represents a loopback interface."""
     host_clean = host.strip().lower()
@@ -273,11 +281,12 @@ class CliTelemetryAdapter:
         port = getattr(self._http_api_adapter, "port", 8080)
         is_online = _probe_daemon(host, port)
 
+        api_key = self._resolve_api_key(getattr(args, "api_key", None))
         if target == "game":
             if is_online:
                 try:
                     url = f"http://{host}:{port}/api/v1/status/game"
-                    req = urllib.request.Request(url, method="GET")
+                    req = _build_authenticated_request(url, api_key=api_key)
                     with urllib.request.urlopen(req, timeout=1.0) as resp:
                         payload = json.loads(resp.read().decode("utf-8"))
                         if payload.get("target_path"):
@@ -314,7 +323,7 @@ class CliTelemetryAdapter:
         if is_online:
             try:
                 url = f"http://{host}:{port}/api/v1/status"
-                req = urllib.request.Request(url, method="GET")
+                req = _build_authenticated_request(url, api_key=api_key)
                 with urllib.request.urlopen(req, timeout=1.0) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
                     if payload.get("monitored_directory"):
@@ -474,12 +483,13 @@ class CliTelemetryAdapter:
 
         if _probe_daemon(host, port):
             try:
+                api_key = self._resolve_api_key(getattr(args, "api_key", None))
                 params = [f"limit={limit}"]
                 if level:
                     params.append(f"min_level={level}")
                 query_str = "&".join(params)
                 url = f"http://{host}:{port}/api/v1/diagnostics/logs?{query_str}"
-                req = urllib.request.Request(url, method="GET")
+                req = _build_authenticated_request(url, api_key=api_key)
                 with urllib.request.urlopen(req, timeout=1.0) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
                     if as_json:
@@ -608,8 +618,9 @@ class CliTelemetryAdapter:
         count = 0
         if _probe_daemon(host, port):
             try:
+                api_key = self._resolve_api_key(getattr(args, "api_key", None))
                 url = f"http://{host}:{port}/api/v1/stream"
-                req = urllib.request.Request(url, method="GET")
+                req = _build_authenticated_request(url, api_key=api_key)
                 with urllib.request.urlopen(req, timeout=None) as resp:
                     for raw_line in resp:
                         line = raw_line.decode("utf-8", errors="replace").strip()
@@ -628,8 +639,16 @@ class CliTelemetryAdapter:
                                     print(f"[{msg.get('timestamp')}] ({msg.get('topic')}): {msg.get('payload')}")
                             except json.JSONDecodeError:
                                 pass
-            except (KeyboardInterrupt, urllib.error.URLError, OSError):
+            except KeyboardInterrupt:
                 print("\nStopped streaming.")
+                return 0, {"streamed": count}
+            except urllib.error.HTTPError as err:
+                err_detail = err.read().decode("utf-8", errors="replace")
+                sys.stderr.write(f"\n[ERROR] Daemon returned HTTP {err.code} {err.reason}: {err_detail}\n")
+                return 1, {"error": f"HTTP {err.code}", "detail": str(err.reason)}
+            except (urllib.error.URLError, OSError) as err:
+                sys.stderr.write(f"\n[ERROR] Network error while streaming: {err}\n")
+                return 1, {"error": str(err)}
             return 0, {"streamed": count}
 
         # Offline standalone fallback
