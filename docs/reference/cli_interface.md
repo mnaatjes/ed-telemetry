@@ -98,13 +98,14 @@ ed-telemetry logs [--level LEVEL] [--limit N] [-f | --follow] [--json]
 Follows live telemetry events and error bubbling from the egress stream (`/api/v1/stream` via SSE). When offline, activates a local standalone `FileSystemWatcher` streaming lifecycle.
 
 ```bash
-ed-telemetry stream [--topic TOPIC] [--json]
+ed-telemetry stream [--topic TOPIC] [--api-key KEY] [--json]
 ```
 
 #### Arguments
 | Argument | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--topic` | `str \| None` | `None` | Filter stream by topic (e.g. `telemetry.audit`, `telemetry.journal`). |
+| `--api-key` | `str \| None` | `None` | Pre-shared API key for authenticated streaming. |
 | `--json` | `flag` | `False` | Output events as one JSON line per event. |
 
 ---
@@ -113,9 +114,22 @@ ed-telemetry stream [--topic TOPIC] [--json]
 Backwards-compatible alias for `stream`. Follows live telemetry events and error bubbling from the egress stream.
 
 ```bash
-ed-telemetry tail [--topic TOPIC] [--json]
+ed-telemetry tail [--topic TOPIC] [--api-key KEY] [--json]
 ```
 
+---
+
+### 2.7 `auth`
+Manages pre-shared API keys and environment credentials for perimeter network protection.
+
+```bash
+ed-telemetry auth {keygen,show,revoke} [options]
+```
+
+#### Subcommands
+* `keygen`: Generate a new CSPRNG API key (`ed_sec_` + 48 hex characters). Options: `--force` (overwrite existing credentials file), `--register-env` (persist to shell rc or Windows environment), `--json`.
+* `show`: Display currently resolved API key and configuration source (`--json` supported).
+* `revoke`: Remove credentials file and strip registered environment variables (`--json` supported).
 
 ---
 

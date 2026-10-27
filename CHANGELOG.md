@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Dynamic credential hot-reloading via cached file `mtime` watch (`DynamicCredentialProvider`) allowing zero-downtime key rotation (`auth keygen --force`) without daemon restart (ADR 0033, #89).
 - Added `--api-key` argument to `ed-telemetry stream` and `ed-telemetry tail` subparsers for explicit token passing (#90).
+- Actionable interactive shell activation guidance (`source ~/.bashrc` or `export ED_API_KEY="..."`) on `ed-telemetry auth keygen --register-env` (#91).
+
 
 
 ## [0.6.4] - 2026-10-27

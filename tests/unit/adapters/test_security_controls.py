@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import stat
 import urllib.error
 import urllib.request
+from contextlib import redirect_stdout
 from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -192,12 +194,17 @@ def test_cli_auth_keygen_show_revoke(tmp_path: Path, monkeypatch: pytest.MonkeyP
     )
 
     # 1. Keygen without force
-    code, payload = cli.run(["auth", "keygen", "--register-env"])
+    out_buf = io.StringIO()
+    with redirect_stdout(out_buf):
+        code, payload = cli.run(["auth", "keygen", "--register-env"])
     assert code == 0
     token = payload["api_key"]
     assert token.startswith("ed_sec_")
     assert len(token) == len("ed_sec_") + 48  # 55 chars
     assert creds_file.exists()
+    assert payload["activation_guidance"] == "source ~/.bashrc"
+    assert "source ~/.bashrc" in out_buf.getvalue()
+    assert f'export ED_API_KEY="{token}"' in out_buf.getvalue()
 
     if os.name == "posix":
         mode = stat.S_IMODE(os.stat(creds_file).st_mode)

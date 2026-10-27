@@ -183,3 +183,31 @@ ed-telemetry stream --json
 
 * **When Daemon is Online:** Connects to the HTTP/SSE streaming endpoint (`/api/v1/stream`) and yields inbound events in real time.
 * **When Daemon is Offline:** Activates a local, standalone `FileSystemWatcher` streaming lifecycle, streaming events directly from the journal files until terminated with `Ctrl+C`.
+
+---
+
+## 7. Perimeter Security and API Key Management (`auth`)
+
+Manage pre-shared API keys to protect telemetry streams across LAN interfaces:
+
+```bash
+# Generate a new CSPRNG API key and automatically register into user environment:
+ed-telemetry auth keygen --register-env
+
+# Overwrite existing credentials file if rotating keys:
+ed-telemetry auth keygen --force --register-env
+
+# Display currently active API key and configuration source:
+ed-telemetry auth show
+
+# Revoke credentials and clean environment variables:
+ed-telemetry auth revoke
+```
+
+> [!NOTE] Shell Session Activation
+> When using `--register-env`, the definition `export ED_API_KEY="..."` is persisted to `~/.bashrc` (or `~/.zshrc`). Existing terminal sessions do not automatically inherit modifications; apply them immediately to your current session by running:
+> ```bash
+> source ~/.bashrc
+> # or explicitly set in current subshell:
+> export ED_API_KEY="ed_sec_..."
+> ```
