@@ -337,3 +337,81 @@ def test_sse_concurrent_connection_limiting() -> None:
 
     finally:
         server.stop()
+
+
+def test_dynamic_credential_hot_reloading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that updating credentials.json on disk immediately reloads in running daemon without restart."""
+    creds_file = tmp_path / "credentials.json"
+    key_initial = "ed_sec_initial11111111111111111111111111111111111111111111"
+    key_rotated = "ed_sec_rotated22222222222222222222222222222222222222222222"
+
+    creds_file.write_text(json.dumps({"api_key": key_initial}), encoding="utf-8")
+    monkeypatch.delenv("ED_API_KEY", raising=False)
+
+    watcher_mock = MagicMock()
+    watcher_mock.get_status.return_value = WatcherStatusDTO(
+        is_active=True,
+        monitored_directory="/path/to/journal",
+        active_journal="Journal.01.log",
+    )
+
+    from ed_telemetry.adapters.driving.api.server import DynamicCredentialProvider
+
+    provider = DynamicCredentialProvider(credentials_path=creds_file)
+    server = HttpApiAdapter(
+        host="127.0.0.1",
+        port=0,
+        api_key=None,
+        api_key_resolver=provider,
+        watcher_status_port=watcher_mock,
+    )
+    server.start()
+    try:
+        url = f"http://127.0.0.1:{server.port}/api/v1/status"
+
+        # 1. Query with initial key -> 200 OK
+        req1 = urllib.request.Request(url, headers={"Authorization": f"Bearer {key_initial}"})
+        with urllib.request.urlopen(req1) as resp:
+            assert resp.status == 200
+
+        # 2. Query with rotated key before rotation -> 401 Unauthorized
+        req_premature = urllib.request.Request(url, headers={"Authorization": f"Bearer {key_rotated}"})
+        with pytest.raises(urllib.error.HTTPError) as exc_premature:
+            urllib.request.urlopen(req_premature)
+        assert exc_premature.value.code == 401
+
+        # 3. Simulate `auth keygen --force`: write new key to disk
+        # Ensure mtime updates even on fast filesystems
+        new_mtime = creds_file.stat().st_mtime_ns + 10_000_000_000
+        creds_file.write_text(json.dumps({"api_key": key_rotated}), encoding="utf-8")
+        os.utime(creds_file, ns=(new_mtime, new_mtime))
+
+        # 4. Query with rotated key -> 200 OK (hot-reloaded without restart)
+        req_rotated = urllib.request.Request(url, headers={"Authorization": f"Bearer {key_rotated}"})
+        with urllib.request.urlopen(req_rotated) as resp_rotated:
+            assert resp_rotated.status == 200
+
+        # 5. Query with old initial key -> 401 Unauthorized
+        with pytest.raises(urllib.error.HTTPError) as exc_old:
+            urllib.request.urlopen(req1)
+        assert exc_old.value.code == 401
+
+    finally:
+        server.stop()
+
+
+def test_dynamic_credential_static_override_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify that an explicit static override pins the API key and ignores credentials.json modifications."""
+    creds_file = tmp_path / "credentials.json"
+    static_key = "ed_sec_static_pinned_key"
+    creds_file.write_text(json.dumps({"api_key": "ed_sec_file_key"}), encoding="utf-8")
+    monkeypatch.delenv("ED_API_KEY", raising=False)
+
+    from ed_telemetry.adapters.driving.api.server import DynamicCredentialProvider
+
+    provider = DynamicCredentialProvider(static_override=static_key, credentials_path=creds_file)
+    assert provider.resolve() == static_key
+
+    # Overwrite credentials file
+    creds_file.write_text(json.dumps({"api_key": "ed_sec_new_file_key"}), encoding="utf-8")
+    assert provider.resolve() == static_key

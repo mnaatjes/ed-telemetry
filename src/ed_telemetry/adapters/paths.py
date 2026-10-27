@@ -61,14 +61,25 @@ def resolve_default_credentials_path(platform: str | None = None) -> Path:
         user_profile = os.environ.get("USERPROFILE")
         if user_profile:
             return Path(user_profile) / ".config" / "ed-telemetry" / "credentials.json"
-        return Path.home() / ".config" / "ed-telemetry" / "credentials.json"
+        try:
+            return Path.home() / ".config" / "ed-telemetry" / "credentials.json"
+        except (RuntimeError, KeyError):
+            return (
+                Path(os.environ.get("HOMEDRIVE", "C:") + os.environ.get("HOMEPATH", "\\"))
+                / ".config"
+                / "ed-telemetry"
+                / "credentials.json"
+            )
 
     # Linux / Unix
     xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
     if xdg_config_home:
         return Path(xdg_config_home) / "ed-telemetry" / "credentials.json"
 
-    return Path.home() / ".config" / "ed-telemetry" / "credentials.json"
+    try:
+        return Path.home() / ".config" / "ed-telemetry" / "credentials.json"
+    except (RuntimeError, KeyError):
+        return Path("/tmp") / ".config" / "ed-telemetry" / "credentials.json"
 
 
 def sanitize_host_path(path: str | Path | None) -> str | None:

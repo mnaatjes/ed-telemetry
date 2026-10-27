@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import hmac
 import json
+import os
 import re
 import threading
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from ed_telemetry.adapters.paths import resolve_default_credentials_path
 from ed_telemetry.core.ports.driving.telemetry_port import (
     FindJournalPathPort,
     FindTelemetryEventsPort,
@@ -49,6 +53,49 @@ def _parse_clamped_limit(
         return max(min_val, min(val, max_val))
     except (ValueError, IndexError):
         return default
+
+
+class DynamicCredentialProvider:
+    """Thread-safe credential resolver caching and hot-reloading tokens via file mtime tracking."""
+
+    def __init__(
+        self,
+        static_override: str | None = None,
+        credentials_path: Path | None = None,
+    ) -> None:
+        self.static_override = static_override.strip() if static_override else None
+        self._credentials_path = credentials_path or resolve_default_credentials_path()
+        self._lock = threading.Lock()
+        self._cached_mtime_ns: int | None = None
+        self._cached_file_key: str | None = None
+
+    def __call__(self) -> str | None:
+        return self.resolve()
+
+    def resolve(self) -> str | None:
+        """Resolve current API key following precedence: static override -> env -> credentials file."""
+        if self.static_override:
+            return self.static_override
+
+        env_key = os.environ.get("ED_API_KEY")
+        if env_key:
+            return env_key.strip()
+
+        with self._lock:
+            try:
+                stat_res = self._credentials_path.stat()
+                current_mtime = stat_res.st_mtime_ns
+                if current_mtime != self._cached_mtime_ns:
+                    with open(self._credentials_path, encoding="utf-8") as fp:
+                        data = json.load(fp)
+                        key = data.get("api_key")
+                        self._cached_file_key = key.strip() if isinstance(key, str) else None
+                    self._cached_mtime_ns = current_mtime
+                return self._cached_file_key
+            except (OSError, json.JSONDecodeError):
+                self._cached_mtime_ns = None
+                self._cached_file_key = None
+                return None
 
 
 class SSEConnectionTracker:
@@ -97,31 +144,39 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
     diagnostic_logs_port: GetDiagnosticLogsPort | None
 
     server_api_key: str | None = None
+    api_key_resolver: Callable[[], str | None] | None = None
     allowed_origins: tuple[str, ...] = DEFAULT_ALLOWED_ORIGINS
     sse_tracker: SSEConnectionTracker | None = None
 
+    def _resolve_expected_key(self) -> str | None:
+        """Resolve current active API key from dynamic resolver or static property."""
+        if self.api_key_resolver is not None:
+            return self.api_key_resolver()
+        return self.server_api_key
+
     def _authenticate_request(self) -> bool:
         """Authenticate request using constant-time token comparison if API key is configured."""
-        if not self.server_api_key:
+        expected_key = self._resolve_expected_key()
+        if not expected_key:
             return True
 
         # 1. Check Bearer token
         auth_hdr = self.headers.get("Authorization", "")
         if auth_hdr.startswith("Bearer "):
             token = auth_hdr[7:].strip()
-            if hmac.compare_digest(token, self.server_api_key):
+            if hmac.compare_digest(token, expected_key):
                 return True
 
         # 2. Check X-API-Key header
         api_key_hdr = self.headers.get("X-API-Key", "")
-        if api_key_hdr and hmac.compare_digest(api_key_hdr, self.server_api_key):
+        if api_key_hdr and hmac.compare_digest(api_key_hdr, expected_key):
             return True
 
         # 3. Check query param for SSE EventSource / browser clients
         parsed_query = parse_qs(urlparse(self.path).query)
         if "api_key" in parsed_query:
             query_token = parsed_query["api_key"][0]
-            if hmac.compare_digest(query_token, self.server_api_key):
+            if hmac.compare_digest(query_token, expected_key):
                 return True
 
         self._send_problem(
@@ -394,10 +449,12 @@ class HttpApiAdapter:
         aux_snapshot_port: GetAuxiliarySnapshotPort | None = None,
         diagnostic_logs_port: GetDiagnosticLogsPort | None = None,
         max_sse_clients: int = 16,
+        api_key_resolver: Callable[[], str | None] | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.api_key = api_key
+        self.api_key_resolver = api_key_resolver
         self.allowed_origins = allowed_origins
         self.max_sse_clients = max_sse_clients
         self.watcher_status_port = watcher_status_port
@@ -417,6 +474,11 @@ class HttpApiAdapter:
 
     def start(self) -> None:
         """Start the background HTTP server."""
+        # Determine active resolver: explicit resolver > DynamicCredentialProvider(static_override=self.api_key)
+        active_resolver = self.api_key_resolver
+        if active_resolver is None:
+            active_resolver = DynamicCredentialProvider(static_override=self.api_key)
+
         handler_cls = type(
             "BoundTelemetryHttpHandler",
             (TelemetryHttpHandler,),
@@ -432,6 +494,7 @@ class HttpApiAdapter:
                 "aux_snapshot_port": self.aux_snapshot_port,
                 "diagnostic_logs_port": self.diagnostic_logs_port,
                 "server_api_key": self.api_key,
+                "api_key_resolver": active_resolver,
                 "allowed_origins": self.allowed_origins,
                 "sse_tracker": self._sse_tracker,
             },

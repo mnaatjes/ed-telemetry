@@ -233,6 +233,11 @@ class CliTelemetryAdapter:
             "--topic",
             help="Optional topic filter (e.g. telemetry.audit or telemetry.journal)",
         )
+        stream_parser.add_argument(
+            "--api-key",
+            default=None,
+            help="Pre-shared API key for authentication (default: resolved from env or credentials.json)",
+        )
         stream_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
         # Subcommand: tail (Backwards-compatible alias for stream)
@@ -240,6 +245,11 @@ class CliTelemetryAdapter:
         tail_parser.add_argument(
             "--topic",
             help="Optional topic filter (e.g. telemetry.audit or telemetry.journal)",
+        )
+        tail_parser.add_argument(
+            "--api-key",
+            default=None,
+            help="Pre-shared API key for authentication (default: resolved from env or credentials.json)",
         )
         tail_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
@@ -383,8 +393,19 @@ class CliTelemetryAdapter:
         self._http_api_adapter.host = args.host
         self._http_api_adapter.port = args.port
 
-        resolved_key = self._resolve_api_key(getattr(args, "api_key", None))
-        self._http_api_adapter.api_key = resolved_key
+        # If explicit CLI flag was passed, pin that key; otherwise use dynamic provider for hot-reloading
+        cli_override = getattr(args, "api_key", None)
+        resolved_key = self._resolve_api_key(cli_override)
+        if cli_override:
+            self._http_api_adapter.api_key = cli_override.strip()
+            self._http_api_adapter.api_key_resolver = None
+        else:
+            self._http_api_adapter.api_key = None
+            from ed_telemetry.adapters.driving.api.server import DynamicCredentialProvider
+
+            self._http_api_adapter.api_key_resolver = DynamicCredentialProvider(
+                credentials_path=resolve_default_credentials_path()
+            )
         if getattr(args, "allowed_origins", None):
             self._http_api_adapter.allowed_origins = tuple(args.allowed_origins)
 
