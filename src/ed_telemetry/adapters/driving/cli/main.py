@@ -403,7 +403,9 @@ class CliTelemetryAdapter:
             self._http_api_adapter.api_key = None
             from ed_telemetry.adapters.driving.api.server import DynamicCredentialProvider
 
-            self._http_api_adapter.api_key_resolver = DynamicCredentialProvider()
+            self._http_api_adapter.api_key_resolver = DynamicCredentialProvider(
+                credentials_path=resolve_default_credentials_path()
+            )
         if getattr(args, "allowed_origins", None):
             self._http_api_adapter.allowed_origins = tuple(args.allowed_origins)
 
