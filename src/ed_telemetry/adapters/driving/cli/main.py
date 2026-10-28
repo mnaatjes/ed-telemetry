@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import ipaddress
 import json
 import os
@@ -469,7 +470,23 @@ class CliTelemetryAdapter:
         if active_journal_name:
             print(f"Active Journal: {active_journal_name}")
         self._process_stream_port.start_streaming()
-        self._http_api_adapter.start()
+        try:
+            self._http_api_adapter.start()
+        except OSError as err:
+            self._process_stream_port.stop_streaming()
+            if err.errno == errno.EADDRINUSE:
+                sys.stderr.write(f"\n[ERROR] Port {args.port} is already in use by another process.\n")
+                sys.stderr.write("Remediation:\n")
+                sys.stderr.write('  1. Stop existing process:      pkill -f "ed-telemetry serve"\n')
+                sys.stderr.write(
+                    f"  2. Or specify a different port: ed-telemetry serve --port {args.port + 1} (or custom)\n"
+                )
+                return 1, {
+                    "error": "Address already in use",
+                    "host": args.host,
+                    "port": args.port,
+                }
+            raise
 
         print(f"HTTP/SSE API listening on http://{args.host}:{self._http_api_adapter.port}/api/v1")
         print("Press Ctrl+C to stop.")
