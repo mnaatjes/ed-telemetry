@@ -368,3 +368,39 @@ class TestCliTelemetryAdapter:
                     assert code == 0
                     sent_req = mock_urlopen.call_args[0][0]
                     assert sent_req.headers["Authorization"] == "Bearer explicit_tail_key"
+
+    def test_cli_serve_socket_collision_eaddrinuse(self) -> None:
+        import errno
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            win_dir = Path(tmp_dir) / "journals"
+            win_dir.mkdir()
+            (win_dir / "Journal.01.log").write_bytes(b'{"event":"FileHeader"}\n')
+            container = build_container(journal_dir=win_dir, db_path=Path(tmp_dir) / "test.db")
+            adapter = container.cli_adapter
+
+            # 1. EADDRINUSE raises clean error and returns code 1
+            with patch.object(
+                adapter._http_api_adapter, "start", side_effect=OSError(errno.EADDRINUSE, "Address in use")
+            ):
+                err_buf = io.StringIO()
+                with redirect_stdout(io.StringIO()), patch("sys.stderr", err_buf):
+                    code, payload = adapter.run(["serve", "--journal-dir", str(win_dir), "--port", "8080"])
+                assert code == 1
+                assert "Port 8080 is already in use by another process." in err_buf.getvalue()
+                assert 'pkill -f "ed-telemetry serve"' in err_buf.getvalue()
+                assert payload["error"] == "Address already in use"
+                assert payload["port"] == 8080
+
+            # 2. Other OSError (e.g. EACCES) is re-raised
+            with patch.object(
+                adapter._http_api_adapter, "start", side_effect=OSError(errno.EACCES, "Permission denied")
+            ):
+                err_buf = io.StringIO()
+                import pytest
+
+                with pytest.raises(OSError) as exc_info:
+                    with redirect_stdout(io.StringIO()), patch("sys.stderr", err_buf):
+                        adapter.run(["serve", "--journal-dir", str(win_dir), "--port", "80"])
+                assert exc_info.value.errno == errno.EACCES
