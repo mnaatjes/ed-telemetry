@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-10-27
+
 ### Fixed
 - Handled socket binding address collision (`errno.EADDRINUSE`) cleanly on `ed-telemetry serve` with actionable diagnostic and remediation steps instead of an unhandled traceback (#94).
 
