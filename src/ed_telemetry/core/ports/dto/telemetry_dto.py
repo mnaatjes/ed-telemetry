@@ -181,3 +181,24 @@ class DiagnosticLogSnapshotDTO(DataTransferObject):
 
     records: tuple[DiagnosticLogRecordDTO, ...]
     total_retained: int
+
+
+@dataclass(frozen=True, slots=True)
+class DatabaseStatsDTO(DataTransferObject):
+    """Metrics and operational state of the telemetry persistence store."""
+
+    db_path: str
+    file_size_bytes: int
+    total_events: int
+    oldest_event_timestamp: datetime | None
+    newest_event_timestamp: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class DatabaseMaintenanceResultDTO(DataTransferObject):
+    """Summary of database maintenance operations."""
+
+    pruned_count: int
+    vacuumed: bool
+    initial_size_bytes: int
+    final_size_bytes: int

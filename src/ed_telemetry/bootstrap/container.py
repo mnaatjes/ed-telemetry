@@ -29,6 +29,7 @@ from ..core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
 from ..core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
 from ..core.use_cases.get_telemetry_stream import GetTelemetryStreamUseCase
 from ..core.use_cases.get_watcher_status import GetWatcherStatusUseCase
+from ..core.use_cases.maintain_database import GetDatabaseStatsUseCase, MaintainDatabaseUseCase
 from ..core.use_cases.process_telemetry_stream import ProcessTelemetryStreamUseCase
 from ..core.use_cases.submit_snapshot_refresh import SubmitSnapshotRefreshUseCase
 from ..core.use_cases.sync_journal_snapshot import SyncJournalSnapshotUseCase
@@ -50,6 +51,8 @@ class Container:
     find_telemetry_events_use_case: FindTelemetryEventsUseCase
     get_telemetry_stream_use_case: GetTelemetryStreamUseCase
     get_diagnostic_logs_use_case: GetDiagnosticLogsUseCase
+    get_database_stats_use_case: GetDatabaseStatsUseCase
+    maintain_database_use_case: MaintainDatabaseUseCase
     diagnostic_log_buffer: DiagnosticLogBuffer
     cli_adapter: CliTelemetryAdapter
     http_api_adapter: HttpApiAdapter
@@ -129,6 +132,8 @@ def build_container(
     find_events = FindTelemetryEventsUseCase(repository=sqlite_repo)
     stream_events = GetTelemetryStreamUseCase(queue=egress_buffer)
     get_diagnostic_logs = GetDiagnosticLogsUseCase(log_port=diagnostic_buffer)
+    get_db_stats = GetDatabaseStatsUseCase(repository=sqlite_repo)
+    maintain_db = MaintainDatabaseUseCase(repository=sqlite_repo)
 
     http_api_adapter = HttpApiAdapter(
         host=http_host,
@@ -154,6 +159,8 @@ def build_container(
         stream_events_port=stream_events,
         journal_path_port=find_path,
         journal_files_port=get_journals,
+        database_stats_port=get_db_stats,
+        maintain_database_port=maintain_db,
     )
 
     return Container(
@@ -169,6 +176,8 @@ def build_container(
         find_telemetry_events_use_case=find_events,
         get_telemetry_stream_use_case=stream_events,
         get_diagnostic_logs_use_case=get_diagnostic_logs,
+        get_database_stats_use_case=get_db_stats,
+        maintain_database_use_case=maintain_db,
         diagnostic_log_buffer=diagnostic_buffer,
         cli_adapter=cli_adapter,
         http_api_adapter=http_api_adapter,

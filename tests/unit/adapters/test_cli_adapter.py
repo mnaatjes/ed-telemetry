@@ -404,3 +404,103 @@ class TestCliTelemetryAdapter:
                     with redirect_stdout(io.StringIO()), patch("sys.stderr", err_buf):
                         adapter.run(["serve", "--journal-dir", str(win_dir), "--port", "80"])
                 assert exc_info.value.errno == errno.EACCES
+
+    def test_cli_db_status_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_file = Path(tmp_dir) / "test_cli_db.db"
+            container = build_container(db_path=db_file)
+            adapter = container.cli_adapter
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code, payload = adapter.run(["db", "status"])
+            assert code == 0
+            assert payload["total_events"] == 0
+            assert "Database Storage Status:" in buf.getvalue()
+
+            buf_json = io.StringIO()
+            with redirect_stdout(buf_json):
+                code, payload = adapter.run(["db", "status", "--json"])
+            assert code == 0
+            assert '"total_events": 0' in buf_json.getvalue()
+
+    def test_cli_db_prune_and_vacuum(self) -> None:
+        from datetime import UTC, datetime
+        from unittest.mock import patch
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_file = Path(tmp_dir) / "test_cli_prune.db"
+            container = build_container(db_path=db_file)
+            adapter = container.cli_adapter
+
+            # Insert some records via repository/egress
+            for i in range(5):
+                t = datetime(2026, 10, i + 1, 12, 0, 0, tzinfo=UTC)
+                container.process_telemetry_stream_use_case._egress.send(
+                    TelemetryPayloadDTO(topic="telemetry.journal", timestamp=t, payload_bytes=b"{}")
+                )
+
+            # Test prune with no flags fails
+            err_buf = io.StringIO()
+            with redirect_stdout(io.StringIO()), patch("sys.stderr", err_buf):
+                code, _ = adapter.run(["db", "prune"])
+            assert code == 1
+            assert "Must specify at least one pruning criteria" in err_buf.getvalue()
+
+            # Test prune --max-records 2 with --force
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code, payload = adapter.run(["db", "prune", "--max-records", "2", "--force"])
+            assert code == 0
+            assert payload["pruned_count"] == 3
+            assert "Prune completed: Removed 3 events." in buf.getvalue()
+
+            # Test vacuum
+            buf_vac = io.StringIO()
+            with redirect_stdout(buf_vac):
+                code, payload = adapter.run(["db", "vacuum"])
+            assert code == 0
+            assert payload["vacuumed"] is True
+            assert "Vacuum completed: Reclaimed" in buf_vac.getvalue()
+
+    def test_cli_serve_with_retention_flags(self) -> None:
+        from datetime import UTC, datetime
+        from unittest.mock import patch
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            win_dir = Path(tmp_dir) / "journals"
+            win_dir.mkdir()
+            (win_dir / "Journal.01.log").write_bytes(b'{"event":"FileHeader"}\n')
+            db_file = Path(tmp_dir) / "test_retention.db"
+
+            container = build_container(journal_dir=win_dir, db_path=db_file)
+            adapter = container.cli_adapter
+
+            # Populate database with historical events to verify startup pruning output
+            for i in range(10):
+                t = datetime(2026, 9, i + 1, 12, 0, 0, tzinfo=UTC)
+                container.process_telemetry_stream_use_case._egress.send(
+                    TelemetryPayloadDTO(topic="telemetry.journal", timestamp=t, payload_bytes=b"{}")
+                )
+
+            with patch.object(adapter._http_api_adapter, "start"), patch.object(adapter._http_api_adapter, "stop"):
+                buf = io.StringIO()
+                with redirect_stdout(buf):
+                    code, _ = adapter.run(
+                        [
+                            "serve",
+                            "--journal-dir",
+                            str(win_dir),
+                            "--retention-days",
+                            "30",
+                            "--retention-max-records",
+                            "5",
+                        ]
+                    )
+                assert code == 0
+                out = buf.getvalue()
+                assert "Database Retention: Pruned" in out

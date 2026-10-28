@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 from ..base import DrivenPort
 from ..dto.telemetry_dto import (
     AuxiliarySnapshotDTO,
+    DatabaseStatsDTO,
     DiagnosticLogSnapshotDTO,
     FileIngestionEventDTO,
     GameStatusSnapshotDTO,
@@ -104,3 +106,13 @@ class TelemetryRepositoryPort(DrivenPort, Protocol):
     def find_events(self, query: TelemetryQueryDTO) -> tuple[TelemetryRecordDTO, ...]: ...
 
     def get_latest_event(self, topic: str) -> TelemetryRecordDTO | None: ...
+
+    def get_database_stats(self) -> DatabaseStatsDTO: ...
+
+    def prune_events(
+        self,
+        older_than: datetime | None = None,
+        max_records: int | None = None,
+    ) -> int: ...
+
+    def vacuum(self) -> None: ...
