@@ -8,6 +8,8 @@ from typing import Protocol, runtime_checkable
 from ..base import DrivingPort
 from ..dto.telemetry_dto import (
     AuxiliarySnapshotDTO,
+    DatabaseMaintenanceResultDTO,
+    DatabaseStatsDTO,
     DiagnosticLogRecordDTO,
     DiagnosticLogSnapshotDTO,
     GameStatusSnapshotDTO,
@@ -114,20 +116,43 @@ class GetDiagnosticLogsPort(DrivingPort, Protocol):
     ) -> DiagnosticLogSnapshotDTO: ...
 
 
+@runtime_checkable
+class GetDatabaseStatsPort(DrivingPort, Protocol):
+    """Primary driving port for inspecting SQLite database metrics and storage."""
+
+    def get_stats(self) -> DatabaseStatsDTO: ...
+
+
+@runtime_checkable
+class MaintainDatabasePort(DrivingPort, Protocol):
+    """Primary driving port for pruning and maintaining the SQLite database."""
+
+    def maintain(
+        self,
+        retention_days: int | None = None,
+        max_records: int | None = None,
+        run_vacuum: bool = False,
+    ) -> DatabaseMaintenanceResultDTO: ...
+
+
 __all__ = (
     "FindJournalPathPort",
     "FindTelemetryEventsPort",
     "GetAuxiliarySnapshotPort",
+    "GetDatabaseStatsPort",
     "GetDiagnosticLogsPort",
     "GetJournalFilesPort",
     "GetLatestGameStatusPort",
     "GetTelemetryEventsPort",
     "GetTelemetryStreamPort",
     "GetWatcherStatusPort",
+    "MaintainDatabasePort",
     "ProcessTelemetryStreamPort",
     "SubmitSnapshotRefreshPort",
     "SyncJournalSnapshotPort",
     "AuxiliarySnapshotDTO",
+    "DatabaseMaintenanceResultDTO",
+    "DatabaseStatsDTO",
     "DiagnosticLogRecordDTO",
     "DiagnosticLogSnapshotDTO",
     "GameStatusSnapshotDTO",

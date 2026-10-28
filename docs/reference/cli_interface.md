@@ -27,7 +27,7 @@ When invoked with no arguments or `--help`, the CLI displays command assistance 
 Runs the background telemetry ingestion daemon, SQLite WAL event persistence, and HTTP/SSE API server.
 
 ```bash
-ed-telemetry serve [--host HOST] [--port PORT] [--log-level LEVEL] [--log-file PATH] [--journal-dir PATH] [--db-path PATH] [--poll-interval SEC]
+ed-telemetry serve [--host HOST] [--port PORT] [--log-level LEVEL] [--log-file PATH] [--journal-dir PATH] [--db-path PATH] [--poll-interval SEC] [--retention-days DAYS] [--retention-max-records RECORDS]
 ```
 
 #### Arguments
@@ -40,7 +40,8 @@ ed-telemetry serve [--host HOST] [--port PORT] [--log-level LEVEL] [--log-file P
 | `--journal-dir` | `Path \| None` | `None` | Explicit path to journal folder (fallback: `$ED_JOURNAL_DIR` or auto-discovery). |
 | `--db-path` | `Path \| None` | `None` | SQLite database file path (fallback: `$ED_DB_PATH` or OS canonical data path). |
 | `--poll-interval` | `float \| None` | `None` | Watcher poll interval in seconds (fallback: `$ED_POLL_INTERVAL` or OS default). |
-
+| `--retention-days` | `int \| None` | `None` | Opt-in retention policy: prune events older than $N$ days on startup (fallback: `$ED_RETENTION_DAYS`). |
+| `--retention-max-records` | `int \| None` | `None` | Opt-in retention policy: FIFO limit retaining newest $N$ events on startup (fallback: `$ED_RETENTION_MAX_RECORDS`). |
 
 ---
 
@@ -130,6 +131,20 @@ ed-telemetry auth {keygen,show,revoke} [options]
 * `keygen`: Generate a new CSPRNG API key (`ed_sec_` + 48 hex characters). Options: `--force` (overwrite existing credentials file), `--register-env` (persist to shell rc or Windows environment), `--json`.
 * `show`: Display currently resolved API key and configuration source (`--json` supported).
 * `revoke`: Remove credentials file and strip registered environment variables (`--json` supported).
+
+---
+
+### 2.8 `db`
+Administrative maintenance operations and storage statistics for the SQLite event persistence store.
+
+```bash
+ed-telemetry db {status,prune,vacuum} [options]
+```
+
+#### Subcommands
+* `status`: Inspect database path, file size on disk, total stored event count, and oldest/newest timestamps (`--json` supported).
+* `prune`: Prune historical telemetry events based on age (`--days <N>`) or FIFO total record ceiling (`--max-records <N>`). Prompts for interactive confirmation unless `--force` or `--json` is supplied. Supports optional `--vacuum` to immediately reclaim freed database pages.
+* `vacuum`: Execute an explicit SQLite database defragmentation (`VACUUM`) to reclaim unused disk space (`--json` supported).
 
 ---
 

@@ -260,6 +260,7 @@ def test_use_cases_follow_lexical_and_structural_conventions() -> None:
         "Sync",
         "Register",
         "Submit",
+        "Maintain",
     )
 
     use_cases_audited = 0

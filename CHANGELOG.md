@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Formulated default indefinite persistence retention policy with opt-in retention governance for development and low-resource environments (ADR 0034, SDD-031).
+- Added administrative `ed-telemetry db` subcommand family (`status`, `prune`, `vacuum`) for database inspection and maintenance (ADR 0034, SDD-031).
+- Added opt-in retention enforcement flags `--retention-days <N>` and `--retention-max-records <N>` to `ed-telemetry serve` with startup pruning and safe shutdown guarantees (ADR 0034, SDD-031).
+- Implemented `GetDatabaseStatsUseCase` and `MaintainDatabaseUseCase` driving ports and interactors wired into composition root.
+
 ## [0.6.6] - 2026-10-27
 
 ### Fixed

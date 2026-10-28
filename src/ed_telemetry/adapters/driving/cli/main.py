@@ -6,6 +6,7 @@ import argparse
 import errno
 import ipaddress
 import json
+import logging
 import os
 import re
 import secrets
@@ -29,11 +30,13 @@ from ed_telemetry.adapters.paths import (
 from ed_telemetry.core.ports.driving.telemetry_port import (
     FindJournalPathPort,
     FindTelemetryEventsPort,
+    GetDatabaseStatsPort,
     GetDiagnosticLogsPort,
     GetJournalFilesPort,
     GetLatestGameStatusPort,
     GetTelemetryStreamPort,
     GetWatcherStatusPort,
+    MaintainDatabasePort,
     ProcessTelemetryStreamPort,
     TelemetryQueryDTO,
 )
@@ -92,6 +95,8 @@ class CliTelemetryAdapter:
         stream_events_port: GetTelemetryStreamPort | None = None,
         journal_path_port: FindJournalPathPort | None = None,
         journal_files_port: GetJournalFilesPort | None = None,
+        database_stats_port: GetDatabaseStatsPort | None = None,
+        maintain_database_port: MaintainDatabasePort | None = None,
     ) -> None:
         self._watcher_status_port = watcher_status_port
         self._game_status_port = game_status_port
@@ -102,6 +107,8 @@ class CliTelemetryAdapter:
         self._stream_events_port = stream_events_port
         self._journal_path_port = journal_path_port
         self._journal_files_port = journal_files_port
+        self._database_stats_port = database_stats_port
+        self._maintain_database_port = maintain_database_port
 
     def _build_parser(self) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
@@ -182,6 +189,56 @@ class CliTelemetryAdapter:
             default=float(os.environ["ED_POLL_INTERVAL"]) if "ED_POLL_INTERVAL" in os.environ else None,
             help="Watcher polling interval in seconds (default: OS default or $ED_POLL_INTERVAL)",
         )
+        serve_parser.add_argument(
+            "--retention-days",
+            type=int,
+            default=int(os.environ["ED_DB_RETENTION_DAYS"]) if "ED_DB_RETENTION_DAYS" in os.environ else None,
+            help="Optional max event retention in days (default: unlimited or $ED_DB_RETENTION_DAYS)",
+        )
+        serve_parser.add_argument(
+            "--retention-max-records",
+            type=int,
+            default=int(os.environ["ED_DB_MAX_RECORDS"]) if "ED_DB_MAX_RECORDS" in os.environ else None,
+            help="Optional maximum number of records to retain (default: unlimited or $ED_DB_MAX_RECORDS)",
+        )
+
+        # Subcommand: db
+        db_parser = subparsers.add_parser("db", help="Manage SQLite persistence database, stats, and retention")
+        db_subparsers = db_parser.add_subparsers(dest="db_action", help="Database actions")
+
+        # db status
+        db_status_parser = db_subparsers.add_parser("status", help="Inspect database size, record counts, and bounds")
+        db_status_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
+        # db prune
+        db_prune_parser = db_subparsers.add_parser("prune", help="Prune historical events by age or record ceiling")
+        db_prune_parser.add_argument(
+            "--days",
+            type=int,
+            default=None,
+            help="Prune records older than specified number of days",
+        )
+        db_prune_parser.add_argument(
+            "--max-records",
+            type=int,
+            default=None,
+            help="Retain at most specified number of newest records (FIFO pruning)",
+        )
+        db_prune_parser.add_argument(
+            "--vacuum",
+            action="store_true",
+            help="Run SQLite VACUUM after pruning to reclaim disk space",
+        )
+        db_prune_parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Bypass confirmation prompt",
+        )
+        db_prune_parser.add_argument("--json", action="store_true", help="Format output as JSON")
+
+        # db vacuum
+        db_vacuum_parser = db_subparsers.add_parser("vacuum", help="Reclaim fragmented disk space via SQLite VACUUM")
+        db_vacuum_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
         # Subcommand: auth
         auth_parser = subparsers.add_parser("auth", help="Manage pre-shared API keys and environment credentials")
@@ -277,6 +334,9 @@ class CliTelemetryAdapter:
 
         if args.subcommand == "auth":
             return self._handle_auth(args)
+
+        if args.subcommand == "db":
+            return self._handle_db(args)
 
         if args.subcommand in ("stream", "tail"):
             return self._handle_stream(args)
@@ -488,6 +548,21 @@ class CliTelemetryAdapter:
                 }
             raise
 
+        # Execute optional startup retention maintenance (ADR 0034)
+        retention_days = getattr(args, "retention_days", None)
+        max_records = getattr(args, "retention_max_records", None)
+        if (retention_days or max_records) and self._maintain_database_port:
+            try:
+                res = self._maintain_database_port.maintain(
+                    retention_days=retention_days,
+                    max_records=max_records,
+                    run_vacuum=False,
+                )
+                if res.pruned_count > 0:
+                    print(f"Database Retention: Pruned {res.pruned_count} historical records.")
+            except Exception as err:
+                logging.warning("Failed to execute startup database retention: %s", err)
+
         print(f"HTTP/SSE API listening on http://{args.host}:{self._http_api_adapter.port}/api/v1")
         print("Press Ctrl+C to stop.")
 
@@ -499,6 +574,15 @@ class CliTelemetryAdapter:
         finally:
             self._http_api_adapter.stop()
             self._process_stream_port.stop_streaming()
+            if (retention_days or max_records) and self._maintain_database_port:
+                try:
+                    self._maintain_database_port.maintain(
+                        retention_days=retention_days,
+                        max_records=max_records,
+                        run_vacuum=False,
+                    )
+                except Exception:
+                    pass
             print("Stopped cleanly.")
 
         return 0, {"status": "stopped"}
@@ -984,3 +1068,151 @@ class CliTelemetryAdapter:
                 except OSError:
                     pass
         return stripped
+
+    def _handle_db(self, args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+        """Dispatch db subcommands."""
+        action = getattr(args, "db_action", None)
+        as_json = getattr(args, "json", False)
+
+        if action == "status":
+            return self._handle_db_status(args, as_json=as_json)
+        if action == "prune":
+            return self._handle_db_prune(args, as_json=as_json)
+        if action == "vacuum":
+            return self._handle_db_vacuum(args, as_json=as_json)
+
+        print("Usage: ed-telemetry db {status,prune,vacuum} [options]")
+        return 0, {}
+
+    def _handle_db_status(self, args: argparse.Namespace, as_json: bool = False) -> tuple[int, dict[str, Any]]:
+        if not self._database_stats_port:
+            err_msg = "Database stats port is not configured."
+            if as_json:
+                print(json.dumps({"error": err_msg}))
+            else:
+                sys.stderr.write(f"[ERROR] {err_msg}\n")
+            return 1, {"error": err_msg}
+
+        stats = self._database_stats_port.get_stats()
+        payload = {
+            "db_path": sanitize_host_path(stats.db_path),
+            "file_size_bytes": stats.file_size_bytes,
+            "total_events": stats.total_events,
+            "oldest_event": stats.oldest_event_timestamp.isoformat() if stats.oldest_event_timestamp else None,
+            "newest_event": stats.newest_event_timestamp.isoformat() if stats.newest_event_timestamp else None,
+        }
+
+        if as_json:
+            print(json.dumps(payload, indent=2))
+        else:
+            mb_size = stats.file_size_bytes / (1024 * 1024)
+            print("Database Storage Status:")
+            print(f"  Path:         {payload['db_path']}")
+            print(f"  File Size:    {mb_size:.2f} MB ({stats.file_size_bytes:,} bytes)")
+            print(f"  Total Events: {stats.total_events:,}")
+            oldest_str = (
+                stats.oldest_event_timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
+                if stats.oldest_event_timestamp
+                else "N/A"
+            )
+            newest_str = (
+                stats.newest_event_timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
+                if stats.newest_event_timestamp
+                else "N/A"
+            )
+            print(f"  Oldest Event: {oldest_str}")
+            print(f"  Newest Event: {newest_str}")
+
+        return 0, payload
+
+    def _handle_db_prune(self, args: argparse.Namespace, as_json: bool = False) -> tuple[int, dict[str, Any]]:
+        if not self._maintain_database_port:
+            err_msg = "Database maintenance port is not configured."
+            if as_json:
+                print(json.dumps({"error": err_msg}))
+            else:
+                sys.stderr.write(f"[ERROR] {err_msg}\n")
+            return 1, {"error": err_msg}
+
+        days = getattr(args, "days", None)
+        max_records = getattr(args, "max_records", None)
+        vacuum = getattr(args, "vacuum", False)
+        force = getattr(args, "force", False)
+
+        if days is None and max_records is None:
+            err_msg = "Must specify at least one pruning criteria: --days <N> or --max-records <N>."
+            if as_json:
+                print(json.dumps({"error": err_msg}))
+            else:
+                sys.stderr.write(f"[ERROR] {err_msg}\n")
+            return 1, {"error": err_msg}
+
+        if not force and not as_json:
+            criteria = []
+            if days is not None:
+                criteria.append(f"records older than {days} days")
+            if max_records is not None:
+                criteria.append(f"FIFO oldest exceeding {max_records} total records")
+            print(f"Pruning criteria: {', '.join(criteria)}.")
+            try:
+                confirm = input("Are you sure you want to prune historical telemetry events? [y/N]: ").strip().lower()
+                if confirm not in ("y", "yes"):
+                    print("Prune aborted.")
+                    return 0, {"aborted": True}
+            except (KeyboardInterrupt, EOFError):
+                print("\nPrune aborted.")
+                return 0, {"aborted": True}
+
+        res = self._maintain_database_port.maintain(
+            retention_days=days,
+            max_records=max_records,
+            run_vacuum=vacuum,
+        )
+
+        payload = {
+            "pruned_count": res.pruned_count,
+            "vacuumed": res.vacuumed,
+            "initial_size_bytes": res.initial_size_bytes,
+            "final_size_bytes": res.final_size_bytes,
+            "freed_bytes": max(0, res.initial_size_bytes - res.final_size_bytes),
+        }
+
+        if as_json:
+            print(json.dumps(payload, indent=2))
+        else:
+            freed_kb = payload["freed_bytes"] / 1024
+            print(f"Prune completed: Removed {res.pruned_count:,} events.")
+            if res.vacuumed:
+                print(f"Vacuum completed: Freed {freed_kb:.2f} KB disk space.")
+
+        return 0, payload
+
+    def _handle_db_vacuum(self, args: argparse.Namespace, as_json: bool = False) -> tuple[int, dict[str, Any]]:
+        if not self._maintain_database_port:
+            err_msg = "Database maintenance port is not configured."
+            if as_json:
+                print(json.dumps({"error": err_msg}))
+            else:
+                sys.stderr.write(f"[ERROR] {err_msg}\n")
+            return 1, {"error": err_msg}
+
+        res = self._maintain_database_port.maintain(
+            retention_days=None,
+            max_records=None,
+            run_vacuum=True,
+        )
+
+        payload = {
+            "vacuumed": True,
+            "initial_size_bytes": res.initial_size_bytes,
+            "final_size_bytes": res.final_size_bytes,
+            "freed_bytes": max(0, res.initial_size_bytes - res.final_size_bytes),
+        }
+
+        if as_json:
+            print(json.dumps(payload, indent=2))
+        else:
+            freed_kb = payload["freed_bytes"] / 1024
+            print(f"Vacuum completed: Reclaimed {freed_kb:.2f} KB disk space.")
+
+        return 0, payload

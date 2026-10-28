@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ed_telemetry.core.ports.driven.telemetry_driven_port import EgressPort, TelemetryRepositoryPort
 from ed_telemetry.core.ports.dto.telemetry_dto import (
+    DatabaseStatsDTO,
     TelemetryPayloadDTO,
     TelemetryQueryDTO,
     TelemetryRecordDTO,
@@ -201,3 +202,62 @@ class SqliteRepositoryAdapter(TelemetryRepositoryPort):
             payload_json=row["payload_json"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
+
+    def get_database_stats(self) -> DatabaseStatsDTO:
+        """Inspect storage metrics and event bounds of the SQLite persistence store."""
+        db_file = self._manager.db_path
+        file_size = db_file.stat().st_size if db_file.exists() else 0
+
+        with self._manager._lock, self._manager.connection() as conn:
+            row_count_res = conn.execute("SELECT COUNT(*) AS total FROM telemetry_events").fetchone()
+            total_events = int(row_count_res["total"]) if row_count_res else 0
+
+            oldest_res = conn.execute("SELECT timestamp FROM telemetry_events ORDER BY id ASC LIMIT 1").fetchone()
+            newest_res = conn.execute("SELECT timestamp FROM telemetry_events ORDER BY id DESC LIMIT 1").fetchone()
+
+        oldest_ts = datetime.fromisoformat(oldest_res["timestamp"]) if oldest_res and oldest_res["timestamp"] else None
+        newest_ts = datetime.fromisoformat(newest_res["timestamp"]) if newest_res and newest_res["timestamp"] else None
+
+        return DatabaseStatsDTO(
+            db_path=str(db_file),
+            file_size_bytes=file_size,
+            total_events=total_events,
+            oldest_event_timestamp=oldest_ts,
+            newest_event_timestamp=newest_ts,
+        )
+
+    def prune_events(
+        self,
+        older_than: datetime | None = None,
+        max_records: int | None = None,
+    ) -> int:
+        """Prune historical events by timestamp or FIFO maximum record ceiling."""
+        deleted_count = 0
+
+        with self._manager._lock, self._manager.connection() as conn:
+            # 1. Prune by timestamp
+            if older_than is not None:
+                iso_ts = older_than.isoformat()
+                cur = conn.execute("DELETE FROM telemetry_events WHERE timestamp < ?", (iso_ts,))
+                deleted_count += cur.rowcount if cur.rowcount > 0 else 0
+
+            # 2. Prune by max_records limit (keep only newest max_records)
+            if max_records is not None and max_records >= 0:
+                cur = conn.execute(
+                    """
+                    DELETE FROM telemetry_events WHERE id IN (
+                        SELECT id FROM telemetry_events ORDER BY id DESC LIMIT -1 OFFSET ?
+                    )
+                    """,
+                    (max_records,),
+                )
+                deleted_count += cur.rowcount if cur.rowcount > 0 else 0
+
+            conn.commit()
+
+        return deleted_count
+
+    def vacuum(self) -> None:
+        """Execute SQLite VACUUM to defragment storage and return free pages to the host OS."""
+        with self._manager._lock, self._manager.connection() as conn:
+            conn.execute("VACUUM;")

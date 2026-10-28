@@ -10,6 +10,7 @@ from .get_latest_game_status import GetLatestGameStatusUseCase
 from .get_telemetry_events import GetTelemetryEventsUseCase
 from .get_telemetry_stream import GetTelemetryStreamUseCase
 from .get_watcher_status import GetWatcherStatusUseCase
+from .maintain_database import GetDatabaseStatsUseCase, MaintainDatabaseUseCase
 from .process_telemetry_stream import ProcessTelemetryStreamUseCase
 from .submit_snapshot_refresh import SubmitSnapshotRefreshUseCase
 from .sync_journal_snapshot import SyncJournalSnapshotUseCase
@@ -19,12 +20,14 @@ __all__ = [
     "FindJournalPathUseCase",
     "FindTelemetryEventsUseCase",
     "GetAuxiliarySnapshotUseCase",
+    "GetDatabaseStatsUseCase",
     "GetDiagnosticLogsUseCase",
     "GetJournalFilesUseCase",
     "GetLatestGameStatusUseCase",
     "GetTelemetryEventsUseCase",
     "GetTelemetryStreamUseCase",
     "GetWatcherStatusUseCase",
+    "MaintainDatabaseUseCase",
     "ProcessTelemetryStreamUseCase",
     "SubmitSnapshotRefreshUseCase",
     "SyncJournalSnapshotUseCase",
