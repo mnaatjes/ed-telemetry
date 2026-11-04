@@ -148,8 +148,10 @@ class TestHttpApiAdapter:
                     assert head_data["latest_journal_event"] is not None
                     assert "Eravate" in head_data["latest_journal_event"]["payload_json"]
 
-                # 13. /api/v1/events?order=desc (Reverse sorting order)
-                with urllib.request.urlopen(f"{base_url}/api/v1/events?order=desc&limit=1") as resp:
+                # 13. /api/v1/events?order=desc (Reverse sorting order on journal topic)
+                with urllib.request.urlopen(
+                    f"{base_url}/api/v1/events?topic=telemetry.journal&order=desc&limit=1"
+                ) as resp:
                     assert resp.status == 200
                     desc_events = json.loads(resp.read().decode("utf-8"))
                     assert len(desc_events) == 1
