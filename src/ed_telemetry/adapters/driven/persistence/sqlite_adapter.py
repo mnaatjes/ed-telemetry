@@ -155,9 +155,10 @@ class SqliteRepositoryAdapter(TelemetryRepositoryPort):
             params.append(query.topic)
 
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        order_dir = "DESC" if getattr(query, "order", "asc").lower() == "desc" else "ASC"
         sql = (
             "SELECT id, event_id, topic, timestamp, raw_hash, payload_json, created_at "
-            f"FROM telemetry_events {where_sql} ORDER BY id ASC LIMIT ?"
+            f"FROM telemetry_events {where_sql} ORDER BY id {order_dir} LIMIT ?"
         )
         params.append(query.limit if query.limit > 0 else 100)
 
