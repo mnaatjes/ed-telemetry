@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-04
+
 ### Added
 - Dedicated non-destructive `GET /api/v1/telemetry/head` endpoint returning point-in-time consolidated ambient state (latest journal event, active `Status.json`, and registered snapshots) in a single HTTP round-trip (ADR 0036, SDD-032, #98).
 - Implemented `GetTelemetryHeadUseCase` and `GetTelemetryHeadPort` domain driving contracts wired into composition root.
