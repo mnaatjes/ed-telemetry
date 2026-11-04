@@ -27,6 +27,7 @@ from ..core.use_cases.get_diagnostic_logs import GetDiagnosticLogsUseCase
 from ..core.use_cases.get_journal_files import GetJournalFilesUseCase
 from ..core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
 from ..core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
+from ..core.use_cases.get_telemetry_head import GetTelemetryHeadUseCase
 from ..core.use_cases.get_telemetry_stream import GetTelemetryStreamUseCase
 from ..core.use_cases.get_watcher_status import GetWatcherStatusUseCase
 from ..core.use_cases.maintain_database import GetDatabaseStatsUseCase, MaintainDatabaseUseCase
@@ -49,6 +50,7 @@ class Container:
     submit_snapshot_refresh_use_case: SubmitSnapshotRefreshUseCase
     get_telemetry_events_use_case: GetTelemetryEventsUseCase
     find_telemetry_events_use_case: FindTelemetryEventsUseCase
+    get_telemetry_head_use_case: GetTelemetryHeadUseCase
     get_telemetry_stream_use_case: GetTelemetryStreamUseCase
     get_diagnostic_logs_use_case: GetDiagnosticLogsUseCase
     get_database_stats_use_case: GetDatabaseStatsUseCase
@@ -134,6 +136,12 @@ def build_container(
     get_diagnostic_logs = GetDiagnosticLogsUseCase(log_port=diagnostic_buffer)
     get_db_stats = GetDatabaseStatsUseCase(repository=sqlite_repo)
     maintain_db = MaintainDatabaseUseCase(repository=sqlite_repo)
+    get_telemetry_head = GetTelemetryHeadUseCase(
+        repository=sqlite_repo,
+        game_status_port=get_game_status,
+        aux_snapshot_port=get_aux,
+        watcher_status_port=get_status,
+    )
 
     http_api_adapter = HttpApiAdapter(
         host=http_host,
@@ -148,6 +156,7 @@ def build_container(
         journal_files_port=get_journals,
         aux_snapshot_port=get_aux,
         diagnostic_logs_port=get_diagnostic_logs,
+        telemetry_head_port=get_telemetry_head,
     )
     cli_adapter = CliTelemetryAdapter(
         watcher_status_port=get_status,
@@ -174,6 +183,7 @@ def build_container(
         submit_snapshot_refresh_use_case=submit_refresh,
         get_telemetry_events_use_case=get_events,
         find_telemetry_events_use_case=find_events,
+        get_telemetry_head_use_case=get_telemetry_head,
         get_telemetry_stream_use_case=stream_events,
         get_diagnostic_logs_use_case=get_diagnostic_logs,
         get_database_stats_use_case=get_db_stats,

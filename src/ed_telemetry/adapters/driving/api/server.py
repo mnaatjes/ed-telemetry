@@ -24,6 +24,7 @@ from ed_telemetry.core.ports.driving.telemetry_port import (
     GetJournalFilesPort,
     GetLatestGameStatusPort,
     GetTelemetryEventsPort,
+    GetTelemetryHeadPort,
     GetTelemetryStreamPort,
     GetWatcherStatusPort,
     ProcessTelemetryStreamPort,
@@ -142,6 +143,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
     journal_files_port: GetJournalFilesPort
     aux_snapshot_port: GetAuxiliarySnapshotPort
     diagnostic_logs_port: GetDiagnosticLogsPort | None
+    telemetry_head_port: GetTelemetryHeadPort | None = None
 
     server_api_key: str | None = None
     api_key_resolver: Callable[[], str | None] | None = None
@@ -230,6 +232,19 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         if not self._authenticate_request():
             return
 
+        if path == "/api/v1/telemetry/head":
+            if not self.telemetry_head_port:
+                self._send_problem(
+                    status_code=503,
+                    title="Service Unavailable",
+                    detail="Telemetry head port is not configured.",
+                    instance=path,
+                )
+                return
+            head_dto = self.telemetry_head_port.get_head()
+            self._send_json(200, asdict(head_dto))
+            return
+
         if path == "/api/v1/diagnostics/logs":
             if not self.diagnostic_logs_port:
                 self._send_problem(
@@ -253,8 +268,13 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         if path == "/api/v1/events":
             since_id = int(query["since_id"][0]) if "since_id" in query else None
             topic = query["topic"][0] if "topic" in query else None
+            order = (
+                query["order"][0].lower()
+                if "order" in query and query["order"][0].lower() in ("asc", "desc")
+                else "asc"
+            )
             limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
-            q_dto = TelemetryQueryDTO(since_id=since_id, topic=topic, limit=limit)
+            q_dto = TelemetryQueryDTO(since_id=since_id, topic=topic, limit=limit, order=order)
             records = self.find_events_port.find_events(q_dto)
             self._send_json(200, [asdict(r) for r in records])
             return
@@ -448,6 +468,7 @@ class HttpApiAdapter:
         journal_files_port: GetJournalFilesPort | None = None,
         aux_snapshot_port: GetAuxiliarySnapshotPort | None = None,
         diagnostic_logs_port: GetDiagnosticLogsPort | None = None,
+        telemetry_head_port: GetTelemetryHeadPort | None = None,
         max_sse_clients: int = 16,
         api_key_resolver: Callable[[], str | None] | None = None,
     ) -> None:
@@ -467,6 +488,7 @@ class HttpApiAdapter:
         self.journal_files_port = journal_files_port
         self.aux_snapshot_port = aux_snapshot_port
         self.diagnostic_logs_port = diagnostic_logs_port
+        self.telemetry_head_port = telemetry_head_port
 
         self._sse_tracker = SSEConnectionTracker(max_clients=max_sse_clients)
         self._server: ThreadingHTTPServer | None = None
@@ -493,6 +515,7 @@ class HttpApiAdapter:
                 "journal_files_port": self.journal_files_port,
                 "aux_snapshot_port": self.aux_snapshot_port,
                 "diagnostic_logs_port": self.diagnostic_logs_port,
+                "telemetry_head_port": self.telemetry_head_port,
                 "server_api_key": self.api_key,
                 "api_key_resolver": active_resolver,
                 "allowed_origins": self.allowed_origins,

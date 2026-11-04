@@ -19,6 +19,7 @@ from ..dto.telemetry_dto import (
     SnapshotSyncResultDTO,
     StartMonitoringDTO,
     TelemetryBatchDTO,
+    TelemetryHeadDTO,
     TelemetryPayloadDTO,
     TelemetryQueryDTO,
     TelemetryRecordDTO,
@@ -135,6 +136,13 @@ class MaintainDatabasePort(DrivingPort, Protocol):
     ) -> DatabaseMaintenanceResultDTO: ...
 
 
+@runtime_checkable
+class GetTelemetryHeadPort(DrivingPort, Protocol):
+    """Primary driving port for retrieving consolidated head state snapshot."""
+
+    def get_head(self) -> TelemetryHeadDTO: ...
+
+
 __all__ = (
     "FindJournalPathPort",
     "FindTelemetryEventsPort",
@@ -144,6 +152,7 @@ __all__ = (
     "GetJournalFilesPort",
     "GetLatestGameStatusPort",
     "GetTelemetryEventsPort",
+    "GetTelemetryHeadPort",
     "GetTelemetryStreamPort",
     "GetWatcherStatusPort",
     "MaintainDatabasePort",
@@ -162,6 +171,7 @@ __all__ = (
     "SnapshotSyncResultDTO",
     "StartMonitoringDTO",
     "TelemetryBatchDTO",
+    "TelemetryHeadDTO",
     "TelemetryPayloadDTO",
     "TelemetryQueryDTO",
     "TelemetryRecordDTO",

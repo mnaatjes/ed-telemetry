@@ -163,6 +163,18 @@ class TelemetryQueryDTO(DataTransferObject):
     since_id: int | None = None
     topic: str | None = None
     limit: int = 100
+    order: str = "asc"
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryHeadDTO(DataTransferObject):
+    """Consolidated instantaneous head state snapshot."""
+
+    timestamp: datetime
+    active_journal: str | None
+    latest_journal_event: TelemetryRecordDTO | None
+    game_status: GameStatusSnapshotDTO | None
+    snapshots: dict[str, AuxiliarySnapshotDTO]
 
 
 @dataclass(frozen=True, slots=True)

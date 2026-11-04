@@ -136,5 +136,26 @@ class TestHttpApiAdapter:
                     assert "records" in diag_data
                     assert "total_retained" in diag_data
 
+                # 12. /api/v1/telemetry/head (Consolidated head state snapshot)
+                with urllib.request.urlopen(f"{base_url}/api/v1/telemetry/head") as resp:
+                    assert resp.status == 200
+                    head_data = json.loads(resp.read().decode("utf-8"))
+                    assert "timestamp" in head_data
+                    assert "latest_journal_event" in head_data
+                    assert "game_status" in head_data
+                    assert "snapshots" in head_data
+                    assert "Market" in head_data["snapshots"]
+                    assert head_data["latest_journal_event"] is not None
+                    assert "Eravate" in head_data["latest_journal_event"]["payload_json"]
+
+                # 13. /api/v1/events?order=desc (Reverse sorting order on journal topic)
+                with urllib.request.urlopen(
+                    f"{base_url}/api/v1/events?topic=telemetry.journal&order=desc&limit=1"
+                ) as resp:
+                    assert resp.status == 200
+                    desc_events = json.loads(resp.read().decode("utf-8"))
+                    assert len(desc_events) == 1
+                    assert "Eravate" in desc_events[0]["payload_json"]
+
             finally:
                 server.stop()
