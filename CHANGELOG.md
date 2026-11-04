@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Dedicated non-destructive `GET /api/v1/telemetry/head` endpoint returning point-in-time consolidated ambient state (latest journal event, active `Status.json`, and registered snapshots) in a single HTTP round-trip (ADR 0036, SDD-032, #98).
+- Implemented `GetTelemetryHeadUseCase` and `GetTelemetryHeadPort` domain driving contracts wired into composition root.
+- Added bidirectional query ordering (`?order=asc|desc`) to `GET /api/v1/events` enabling $O(1)$ reverse queries for recent events without ring buffer popping (ADR 0036, SDD-032, #98).
+
 ## [0.7.0] - 2026-10-28
 
 ### Added
