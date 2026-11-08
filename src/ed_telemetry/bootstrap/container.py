@@ -20,12 +20,14 @@ from ..adapters.driven.watcher.watcher import FileSystemWatcher
 from ..adapters.driving.api.server import HttpApiAdapter
 from ..adapters.driving.cli.main import CliTelemetryAdapter
 from ..adapters.paths import resolve_default_db_path, resolve_default_log_path
+from ..core.state.sequence import StateSequenceTracker
 from ..core.use_cases.find_journal_path import FindJournalPathUseCase
 from ..core.use_cases.find_telemetry_events import FindTelemetryEventsUseCase
 from ..core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
 from ..core.use_cases.get_diagnostic_logs import GetDiagnosticLogsUseCase
 from ..core.use_cases.get_journal_files import GetJournalFilesUseCase
 from ..core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
+from ..core.use_cases.get_state_heartbeat import GetStateHeartbeatUseCase
 from ..core.use_cases.get_telemetry_events import GetTelemetryEventsUseCase
 from ..core.use_cases.get_telemetry_head import GetTelemetryHeadUseCase
 from ..core.use_cases.get_telemetry_stream import GetTelemetryStreamUseCase
@@ -51,6 +53,7 @@ class Container:
     get_telemetry_events_use_case: GetTelemetryEventsUseCase
     find_telemetry_events_use_case: FindTelemetryEventsUseCase
     get_telemetry_head_use_case: GetTelemetryHeadUseCase
+    get_state_heartbeat_use_case: GetStateHeartbeatUseCase
     get_telemetry_stream_use_case: GetTelemetryStreamUseCase
     get_diagnostic_logs_use_case: GetDiagnosticLogsUseCase
     get_database_stats_use_case: GetDatabaseStatsUseCase
@@ -122,6 +125,7 @@ def build_container(
 
     composite_egress = CompositeEgressAdapter(sinks=[egress_buffer, sqlite_egress])
 
+    sequence_tracker = StateSequenceTracker()
     get_status = GetWatcherStatusUseCase(watcher=watcher)
     process_stream = ProcessTelemetryStreamUseCase(watcher=watcher, egress=composite_egress)
     sync_snapshot = SyncJournalSnapshotUseCase(watcher=watcher, egress=composite_egress)
@@ -142,6 +146,14 @@ def build_container(
         aux_snapshot_port=get_aux,
         watcher_status_port=get_status,
         watcher_port=watcher,
+        sequence_tracker=sequence_tracker,
+    )
+    get_state_heartbeat = GetStateHeartbeatUseCase(
+        game_status_port=get_game_status,
+        aux_snapshot_port=get_aux,
+        watcher_status_port=get_status,
+        watcher_port=watcher,
+        sequence_tracker=sequence_tracker,
     )
 
     http_api_adapter = HttpApiAdapter(
@@ -158,6 +170,8 @@ def build_container(
         aux_snapshot_port=get_aux,
         diagnostic_logs_port=get_diagnostic_logs,
         telemetry_head_port=get_telemetry_head,
+        telemetry_state_port=get_telemetry_head,
+        state_heartbeat_port=get_state_heartbeat,
     )
     cli_adapter = CliTelemetryAdapter(
         watcher_status_port=get_status,
@@ -185,6 +199,7 @@ def build_container(
         get_telemetry_events_use_case=get_events,
         find_telemetry_events_use_case=find_events,
         get_telemetry_head_use_case=get_telemetry_head,
+        get_state_heartbeat_use_case=get_state_heartbeat,
         get_telemetry_stream_use_case=stream_events,
         get_diagnostic_logs_use_case=get_diagnostic_logs,
         get_database_stats_use_case=get_db_stats,

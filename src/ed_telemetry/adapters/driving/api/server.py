@@ -23,8 +23,10 @@ from ed_telemetry.core.ports.driving.telemetry_port import (
     GetDiagnosticLogsPort,
     GetJournalFilesPort,
     GetLatestGameStatusPort,
+    GetStateHeartbeatPort,
     GetTelemetryEventsPort,
     GetTelemetryHeadPort,
+    GetTelemetryStatePort,
     GetTelemetryStreamPort,
     GetWatcherStatusPort,
     ProcessTelemetryStreamPort,
@@ -144,6 +146,8 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
     aux_snapshot_port: GetAuxiliarySnapshotPort
     diagnostic_logs_port: GetDiagnosticLogsPort | None
     telemetry_head_port: GetTelemetryHeadPort | None = None
+    telemetry_state_port: GetTelemetryStatePort | None = None
+    state_heartbeat_port: GetStateHeartbeatPort | None = None
 
     server_api_key: str | None = None
     api_key_resolver: Callable[[], str | None] | None = None
@@ -225,71 +229,139 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/")
         query = parse_qs(parsed.query)
 
-        if path in ("", "/api/v1/health"):
-            self._send_json(200, {"status": "ok", "service": "ed-telemetry"})
+        # 1. System Health: /api/v1/system/health (Canonical) & /api/v1/health (Legacy)
+        if path in ("", "/api/v1/health", "/api/v1/system/health"):
+            self._send_json(
+                200,
+                {"status": "ok", "service": "ed-telemetry"},
+                source="memory-buffer",
+                plane="system",
+            )
             return
 
         if not self._authenticate_request():
             return
 
-        if path == "/api/v1/telemetry/head":
-            if not self.telemetry_head_port:
+        # 2. State Hydration: /api/v1/state (Canonical) & /api/v1/telemetry/head (Legacy)
+        if path in ("/api/v1/state", "/api/v1/telemetry/head"):
+            port = self.telemetry_state_port or self.telemetry_head_port
+            if not port:
                 self._send_problem(
                     status_code=503,
                     title="Service Unavailable",
-                    detail="Telemetry head port is not configured.",
+                    detail="Telemetry state port is not configured.",
                     instance=path,
+                    source="memory-buffer",
+                    plane="state",
                 )
                 return
-            head_dto = self.telemetry_head_port.get_head()
-            self._send_json(200, asdict(head_dto))
-            return
-
-        if path == "/api/v1/diagnostics/logs":
-            if not self.diagnostic_logs_port:
-                self._send_problem(
-                    status_code=503,
-                    title="Service Unavailable",
-                    detail="Diagnostic log port is not configured.",
-                    instance=path,
-                )
-                return
-            min_level = query["min_level"][0] if "min_level" in query else None
-            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
-            snapshot = self.diagnostic_logs_port.get_logs(min_level=min_level, limit=limit)
-            self._send_json(200, asdict(snapshot))
-            return
-
-        if path == "/api/v1/status":
-            status_dto = self.watcher_status_port.get_status()
-            self._send_json(200, asdict(status_dto))
-            return
-
-        if path == "/api/v1/events":
-            since_id = int(query["since_id"][0]) if "since_id" in query else None
-            topic = query["topic"][0] if "topic" in query else None
-            order = (
-                query["order"][0].lower()
-                if "order" in query and query["order"][0].lower() in ("asc", "desc")
-                else "asc"
+            state_dto = port.get_state() if hasattr(port, "get_state") else port.get_head()
+            etag = f'W/"{state_dto.state_sequence}"'
+            self._send_json(
+                200,
+                asdict(state_dto),
+                source="memory-buffer",
+                plane="state",
+                etag=etag,
             )
-            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
-            q_dto = TelemetryQueryDTO(since_id=since_id, topic=topic, limit=limit, order=order)
-            records = self.find_events_port.find_events(q_dto)
-            self._send_json(200, [asdict(r) for r in records])
             return
 
-        if path == "/api/v1/events/buffer":
-            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
-            batch = self.get_events_port.get_events(limit=limit)
-            self._send_json(200, asdict(batch))
+        # 3. State Heartbeat: /api/v1/state/heartbeat (Canonical)
+        if path == "/api/v1/state/heartbeat":
+            if not self.state_heartbeat_port:
+                self._send_problem(
+                    status_code=503,
+                    title="Service Unavailable",
+                    detail="State heartbeat port is not configured.",
+                    instance=path,
+                    source="memory-buffer",
+                    plane="state",
+                )
+                return
+            heartbeat_dto = self.state_heartbeat_port.get_heartbeat()
+            etag = f'W/"{heartbeat_dto.state_sequence}"'
+            self._send_json(
+                200,
+                asdict(heartbeat_dto),
+                source="memory-buffer",
+                plane="state",
+                etag=etag,
+            )
             return
 
+        # 4. Status.json: /api/v1/status/game
         if path == "/api/v1/status/game":
+            if not self.game_status_port:
+                self._send_problem(
+                    status_code=503,
+                    title="Service Unavailable",
+                    detail="Game status port is not configured.",
+                    instance=path,
+                    source="memory-buffer",
+                    plane="status",
+                )
+                return
             snap = self.game_status_port.get_game_status()
-            self._send_json(200, asdict(snap))
+            etag_status: str | None = f'W/"{snap.raw_hash}"' if snap.raw_hash else None
+            self._send_json(
+                200,
+                asdict(snap),
+                source="memory-buffer",
+                plane="status",
+                etag=etag_status,
+            )
             return
 
+        # 4b. Watcher Status: /api/v1/system/watcher (Canonical) & /api/v1/status (Legacy)
+        if path in ("/api/v1/system/watcher", "/api/v1/status"):
+            if not self.watcher_status_port:
+                self._send_problem(
+                    status_code=503,
+                    title="Service Unavailable",
+                    detail="Watcher status port is not configured.",
+                    instance=path,
+                    source="memory-buffer",
+                    plane="system",
+                )
+                return
+            status_dto = self.watcher_status_port.get_status()
+            self._send_json(
+                200,
+                asdict(status_dto),
+                source="memory-buffer",
+                plane="system",
+            )
+            return
+
+        # 5. Snapshots Map: /api/v1/snapshots
+        if path == "/api/v1/snapshots":
+            snapshots_dict = {}
+            for name in (
+                "Market.json",
+                "Outfitting.json",
+                "Shipyard.json",
+                "ModulesInfo.json",
+                "Cargo.json",
+                "Backpack.json",
+                "NavRoute.json",
+                "ShipLocker.json",
+                "FCMaterials.json",
+            ):
+                try:
+                    s = self.aux_snapshot_port.get_snapshot(name)
+                    if s.exists:
+                        snapshots_dict[name.replace(".json", "")] = asdict(s)
+                except Exception:
+                    continue
+            self._send_json(
+                200,
+                snapshots_dict,
+                source="memory-buffer",
+                plane="snapshots",
+            )
+            return
+
+        # 6. Specific Snapshot: /api/v1/snapshots/{name}
         if path.startswith("/api/v1/snapshots/"):
             snapshot_name = path[len("/api/v1/snapshots/") :]
             if not snapshot_name.endswith(".json"):
@@ -302,6 +374,8 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                     title="Snapshot Not Found",
                     detail=f"Auxiliary game snapshot '{snapshot_name}' is not recognized or does not exist.",
                     instance=path,
+                    source="memory-buffer",
+                    plane="snapshots",
                 )
                 return
 
@@ -311,13 +385,107 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                     title="Snapshot Not Found",
                     detail=f"Auxiliary game snapshot '{snapshot_name}' does not exist.",
                     instance=path,
+                    source="memory-buffer",
+                    plane="snapshots",
                 )
                 return
-            self._send_json(200, asdict(aux_snap))
+            etag_aux: str | None = f'W/"{aux_snap.raw_hash}"' if aux_snap.raw_hash else None
+            self._send_json(
+                200,
+                asdict(aux_snap),
+                source="memory-buffer",
+                plane="snapshots",
+                etag=etag_aux,
+            )
             return
 
-        if path == "/api/v1/stream":
+        # 7. Journal Latest: /api/v1/journal/latest
+        if path == "/api/v1/journal/latest":
+            if hasattr(self, "telemetry_state_port") and self.telemetry_state_port:
+                st = self.telemetry_state_port.get_state()
+                rec = st.latest_journal_event
+            elif self.telemetry_head_port:
+                st = self.telemetry_head_port.get_head()
+                rec = st.latest_journal_event
+            else:
+                rec = None
+            self._send_json(
+                200,
+                asdict(rec) if rec is not None else None,
+                source="memory-buffer",
+                plane="journal",
+            )
+            return
+
+        # 8. Journal Query: /api/v1/journal/query (Canonical) & /api/v1/events (Legacy)
+        if path in ("/api/v1/journal/query", "/api/v1/events"):
+            since_id = int(query["since_id"][0]) if "since_id" in query else None
+            topic = query["topic"][0] if "topic" in query else None
+            order = (
+                query["order"][0].lower()
+                if "order" in query and query["order"][0].lower() in ("asc", "desc")
+                else "asc"
+            )
+            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
+            q_dto = TelemetryQueryDTO(since_id=since_id, topic=topic, limit=limit, order=order)
+            records = self.find_events_port.find_events(q_dto)
+            self._send_json(
+                200,
+                [asdict(r) for r in records],
+                source="sqlite-wal",
+                plane="journal",
+            )
+            return
+
+        # 9. Journal Queue: /api/v1/journal/queue (Canonical) & /api/v1/events/buffer (Legacy)
+        if path in ("/api/v1/journal/queue", "/api/v1/events/buffer"):
+            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
+            batch = self.get_events_port.get_events(limit=limit)
+            self._send_json(
+                200,
+                asdict(batch),
+                source="memory-buffer",
+                plane="journal",
+            )
+            return
+
+        # 10. Journal Stream: /api/v1/journal/stream (Canonical) & /api/v1/stream (Legacy)
+        if path in ("/api/v1/journal/stream", "/api/v1/stream"):
             self._handle_sse_stream()
+            return
+
+        # 11. System Watcher: /api/v1/system/watcher
+        if path == "/api/v1/system/watcher":
+            status_dto = self.watcher_status_port.get_status()
+            self._send_json(
+                200,
+                asdict(status_dto),
+                source="memory-buffer",
+                plane="system",
+            )
+            return
+
+        # 12. System Logs: /api/v1/system/logs (Canonical) & /api/v1/diagnostics/logs (Legacy)
+        if path in ("/api/v1/system/logs", "/api/v1/diagnostics/logs"):
+            if not self.diagnostic_logs_port:
+                self._send_problem(
+                    status_code=503,
+                    title="Service Unavailable",
+                    detail="Diagnostic log port is not configured.",
+                    instance=path,
+                    source="memory-buffer",
+                    plane="system",
+                )
+                return
+            min_level = query["min_level"][0] if "min_level" in query else None
+            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
+            snapshot = self.diagnostic_logs_port.get_logs(min_level=min_level, limit=limit)
+            self._send_json(
+                200,
+                asdict(snapshot),
+                source="memory-buffer",
+                plane="system",
+            )
             return
 
         self._send_problem(
@@ -325,6 +493,8 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             title="Not Found",
             detail=f"Resource '{path}' does not exist on this server.",
             instance=path,
+            source="memory-buffer",
+            plane="system",
         )
 
     def do_POST(self) -> None:
@@ -335,7 +505,8 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
-        if path == "/api/v1/control/watch":
+        # System Control: /api/v1/system/control (Canonical) & /api/v1/control/watch (Legacy)
+        if path in ("/api/v1/system/control", "/api/v1/control/watch"):
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length) if length > 0 else b"{}"
             try:
@@ -346,22 +517,36 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                     title="Bad Request",
                     detail="Invalid JSON body provided.",
                     instance=path,
+                    source="memory-buffer",
+                    plane="system",
                 )
                 return
 
             action = data.get("action", "start")
             if action == "start":
                 self.process_stream_port.start_streaming()
-                self._send_json(200, {"action": "start", "result": "started"})
+                self._send_json(
+                    200,
+                    {"action": "start", "result": "started"},
+                    source="memory-buffer",
+                    plane="system",
+                )
             elif action == "stop":
                 self.process_stream_port.stop_streaming()
-                self._send_json(200, {"action": "stop", "result": "stopped"})
+                self._send_json(
+                    200,
+                    {"action": "stop", "result": "stopped"},
+                    source="memory-buffer",
+                    plane="system",
+                )
             else:
                 self._send_problem(
                     status_code=400,
                     title="Bad Request",
                     detail=f"Unknown control action: '{action}'. Expected 'start' or 'stop'.",
                     instance=path,
+                    source="memory-buffer",
+                    plane="system",
                 )
             return
 
@@ -370,6 +555,8 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             title="Not Found",
             detail=f"Endpoint '{path}' does not accept POST requests.",
             instance=path,
+            source="memory-buffer",
+            plane="system",
         )
 
     def _handle_sse_stream(self) -> None:
@@ -411,8 +598,16 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             if self.sse_tracker:
                 self.sse_tracker.release()
 
-    def _send_problem(self, status_code: int, title: str, detail: str, instance: str) -> None:
-        """Send RFC 7807 problem details error response."""
+    def _send_problem(
+        self,
+        status_code: int,
+        title: str,
+        detail: str,
+        instance: str,
+        source: str = "memory-buffer",
+        plane: str = "system",
+    ) -> None:
+        """Send RFC 7807 problem details error response with telemetry headers."""
         problem = {
             "type": "about:blank",
             "title": title,
@@ -424,11 +619,32 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/problem+json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Telemetry-Source", source)
+        self.send_header("X-Telemetry-Plane", plane)
         self._apply_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_json(self, status_code: int, data: Any) -> None:
+    def _send_json(
+        self,
+        status_code: int,
+        data: Any,
+        source: str = "memory-buffer",
+        plane: str = "system",
+        etag: str | None = None,
+    ) -> None:
+        """Send JSON response with mandatory X-Telemetry-Source, X-Telemetry-Plane, and optional ETag."""
+        if etag:
+            if_none_match = self.headers.get("If-None-Match")
+            if if_none_match and (if_none_match == etag or if_none_match == f'"{etag}"'):
+                self.send_response(304)
+                self.send_header("ETag", f'"{etag}"' if not etag.startswith('"') else etag)
+                self.send_header("X-Telemetry-Source", source)
+                self.send_header("X-Telemetry-Plane", plane)
+                self._apply_cors_headers()
+                self.end_headers()
+                return
+
         def _default_encoder(obj: Any) -> Any:
             if isinstance(obj, datetime):
                 return obj.isoformat()
@@ -440,6 +656,10 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Telemetry-Source", source)
+        self.send_header("X-Telemetry-Plane", plane)
+        if etag:
+            self.send_header("ETag", f'"{etag}"' if not etag.startswith('"') else etag)
         self._apply_cors_headers()
         self.end_headers()
         self.wfile.write(body)
@@ -469,6 +689,8 @@ class HttpApiAdapter:
         aux_snapshot_port: GetAuxiliarySnapshotPort | None = None,
         diagnostic_logs_port: GetDiagnosticLogsPort | None = None,
         telemetry_head_port: GetTelemetryHeadPort | None = None,
+        telemetry_state_port: GetTelemetryStatePort | None = None,
+        state_heartbeat_port: GetStateHeartbeatPort | None = None,
         max_sse_clients: int = 16,
         api_key_resolver: Callable[[], str | None] | None = None,
     ) -> None:
@@ -489,6 +711,8 @@ class HttpApiAdapter:
         self.aux_snapshot_port = aux_snapshot_port
         self.diagnostic_logs_port = diagnostic_logs_port
         self.telemetry_head_port = telemetry_head_port
+        self.telemetry_state_port = telemetry_state_port
+        self.state_heartbeat_port = state_heartbeat_port
 
         self._sse_tracker = SSEConnectionTracker(max_clients=max_sse_clients)
         self._server: ThreadingHTTPServer | None = None
@@ -516,6 +740,8 @@ class HttpApiAdapter:
                 "aux_snapshot_port": self.aux_snapshot_port,
                 "diagnostic_logs_port": self.diagnostic_logs_port,
                 "telemetry_head_port": self.telemetry_head_port,
+                "telemetry_state_port": self.telemetry_state_port,
+                "state_heartbeat_port": self.state_heartbeat_port,
                 "server_api_key": self.api_key,
                 "api_key_resolver": active_resolver,
                 "allowed_origins": self.allowed_origins,

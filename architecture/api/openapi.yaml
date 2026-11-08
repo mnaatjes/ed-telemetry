@@ -11,115 +11,77 @@ servers:
     description: Local daemon server
 
 paths:
-  /api/v1/health:
+  /api/v1/state:
     get:
-      summary: Health check probe
-      description: Returns liveness status and service metadata.
-      responses:
-        '200':
-          description: Service is healthy.
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - status
-                  - service
-                properties:
-                  status:
-                    type: string
-                    example: "ok"
-                  service:
-                    type: string
-                    example: "ed-telemetry"
-
-  /api/v1/telemetry/head:
-    get:
-      summary: Consolidated head state snapshot
+      summary: Consolidated state hydration snapshot
       description: Returns the latest live player status, active journal state, most recent journal event, and all auxiliary snapshots.
       responses:
         '200':
           description: Consolidated head telemetry state snapshot.
+          headers:
+            X-Telemetry-Source:
+              schema:
+                type: string
+                example: "memory-buffer"
+            X-Telemetry-Plane:
+              schema:
+                type: string
+                example: "state"
+            ETag:
+              schema:
+                type: string
+                example: 'W/"42"'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TelemetryHead'
+        '304':
+          description: State has not changed since provided ETag.
         '503':
           $ref: '#/components/responses/ProblemDetailsResponse'
 
-  /api/v1/diagnostics/logs:
+  /api/v1/state/heartbeat:
     get:
-      summary: Diagnostic logs snapshot
-      description: Returns recent diagnostic log records from the in-memory ring buffer.
-      parameters:
-        - name: min_level
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
-          description: Minimum log severity level filter.
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 100
-            minimum: 1
-            maximum: 500
-          description: Maximum number of log records to return.
+      summary: Ultra-lightweight state delta heartbeat
+      description: Returns monotonic sequence ID, event ID, status hash, and snapshot hashes for sub-millisecond polling.
       responses:
         '200':
-          description: Diagnostic logs snapshot.
+          description: State heartbeat payload.
+          headers:
+            X-Telemetry-Source:
+              schema:
+                type: string
+                example: "memory-buffer"
+            X-Telemetry-Plane:
+              schema:
+                type: string
+                example: "state"
+            ETag:
+              schema:
+                type: string
+                example: 'W/"42"'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DiagnosticLogSnapshot'
+                $ref: '#/components/schemas/TelemetryHeartbeat'
+        '304':
+          description: Heartbeat has not changed since provided ETag.
         '503':
           $ref: '#/components/responses/ProblemDetailsResponse'
 
   /api/v1/status:
     get:
-      summary: Watcher operational status
-      description: Returns filesystem ingestion watcher status and metrics.
+      summary: Watcher operational status or cockpit state
+      description: Returns ingestion watcher metrics or cockpit status flags.
       responses:
         '200':
-          description: Ingestion thread metrics.
+          description: Status response.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WatcherStatus'
-
-  /api/v1/control/watch:
-    post:
-      summary: Watcher lifecycle control
-      description: Start or stop the journal watcher thread.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - action
-              properties:
-                action:
-                  type: string
-                  enum: [start, stop]
-      responses:
-        '200':
-          description: Control command executed successfully.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  action:
-                    type: string
-                  result:
-                    type: string
-        '400':
-          $ref: '#/components/responses/ProblemDetailsResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/WatcherStatus'
+                  - $ref: '#/components/schemas/GameStatusSnapshot'
 
   /api/v1/status/game:
     get:
@@ -133,9 +95,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/GameStatusSnapshot'
 
+  /api/v1/snapshots:
+    get:
+      summary: All registered auxiliary snapshots
+      description: Returns map of all recognized auxiliary snapshots that currently exist on disk.
+      responses:
+        '200':
+          description: Map of active auxiliary snapshots.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/AuxiliarySnapshot'
+
   /api/v1/snapshots/{name}:
     get:
-      summary: Auxiliary game snapshot
+      summary: Auxiliary game snapshot by name
       description: Returns auxiliary JSON state file (e.g. Market, Cargo, NavRoute).
       parameters:
         - name: name
@@ -154,9 +130,22 @@ paths:
         '404':
           $ref: '#/components/responses/ProblemDetailsResponse'
 
-  /api/v1/events:
+  /api/v1/journal/latest:
     get:
-      summary: Query historical telemetry events
+      summary: Latest active journal event
+      description: Returns the single most recent journal event read directly from the active file tail.
+      responses:
+        '200':
+          description: Latest journal record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryRecord'
+                nullable: true
+
+  /api/v1/journal/query:
+    get:
+      summary: Query historical journal events
       description: Queries the persistent SQLite database in WAL mode with indexing.
       parameters:
         - name: topic
@@ -164,7 +153,7 @@ paths:
           required: false
           schema:
             type: string
-          description: Filter by event topic (e.g. telemetry.journal, telemetry.status).
+          description: Filter by event topic.
         - name: since_id
           in: query
           required: false
@@ -196,7 +185,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/TelemetryRecord'
 
-  /api/v1/events/buffer:
+  /api/v1/journal/queue:
     get:
       summary: Read and drain buffered queue
       description: Retrieves and drains events currently held in the in-memory ring buffer.
@@ -215,7 +204,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TelemetryBatch'
 
-  /api/v1/stream:
+  /api/v1/journal/stream:
     get:
       summary: Real-time Server-Sent Events (SSE) feed
       description: Yields real-time events as they are emitted by the ingestion pipeline.
@@ -226,7 +215,160 @@ paths:
             text/event-stream:
               schema:
                 type: string
-                example: "data: {\"topic\":\"telemetry.journal\",\"timestamp\":\"2026-10-25T12:00:00Z\",\"payload\":\"...\"}\n\n"
+
+  /api/v1/system/health:
+    get:
+      summary: Health check probe
+      description: Returns liveness status and service metadata.
+      responses:
+        '200':
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - service
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  service:
+                    type: string
+                    example: "ed-telemetry"
+
+  /api/v1/system/watcher:
+    get:
+      summary: Ingestion watcher operational status
+      description: Returns filesystem ingestion watcher status and metrics.
+      responses:
+        '200':
+          description: Ingestion thread metrics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatcherStatus'
+
+  /api/v1/system/logs:
+    get:
+      summary: Diagnostic logs snapshot
+      description: Returns recent diagnostic log records from the in-memory ring buffer.
+      parameters:
+        - name: min_level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        '200':
+          description: Diagnostic logs snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticLogSnapshot'
+
+  /api/v1/system/control:
+    post:
+      summary: Watcher lifecycle control
+      description: Start or stop the journal watcher thread.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop]
+      responses:
+        '200':
+          description: Control command executed successfully.
+        '400':
+          $ref: '#/components/responses/ProblemDetailsResponse'
+
+  # Legacy Aliases
+  /api/v1/health:
+    get:
+      summary: Health check probe (legacy alias)
+      deprecated: true
+      responses:
+        '200':
+          description: Service is healthy.
+
+  /api/v1/telemetry/head:
+    get:
+      summary: Consolidated head state snapshot (legacy alias)
+      deprecated: true
+      responses:
+        '200':
+          description: Consolidated head telemetry state snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryHead'
+
+  /api/v1/diagnostics/logs:
+    get:
+      summary: Diagnostic logs snapshot (legacy alias)
+      deprecated: true
+      responses:
+        '200':
+          description: Diagnostic logs snapshot.
+
+  /api/v1/control/watch:
+    post:
+      summary: Watcher lifecycle control (legacy alias)
+      deprecated: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop]
+      responses:
+        '200':
+          description: Control command executed successfully.
+
+  /api/v1/events:
+    get:
+      summary: Query historical telemetry events (legacy alias)
+      deprecated: true
+      responses:
+        '200':
+          description: Array of telemetry records.
+
+  /api/v1/events/buffer:
+    get:
+      summary: Read and drain buffered queue (legacy alias)
+      deprecated: true
+      responses:
+        '200':
+          description: Batch of buffered events.
+
+  /api/v1/stream:
+    get:
+      summary: Real-time Server-Sent Events (SSE) feed (legacy alias)
+      deprecated: true
+      responses:
+        '200':
+          description: Live SSE event stream.
 
 components:
   responses:
@@ -290,6 +432,8 @@ components:
       properties:
         exists:
           type: boolean
+        is_live_session:
+          type: boolean
         target_path:
           type: string
           nullable: true
@@ -313,6 +457,8 @@ components:
         target_name:
           type: string
         exists:
+          type: boolean
+        is_live_session:
           type: boolean
         target_path:
           type: string
@@ -339,6 +485,7 @@ components:
       properties:
         id:
           type: integer
+          nullable: true
         event_id:
           type: string
         topic:
@@ -400,7 +547,10 @@ components:
         - latest_journal_event
         - game_status
         - snapshots
+        - state_sequence
       properties:
+        state_sequence:
+          type: integer
         timestamp:
           type: string
           format: date-time
@@ -417,6 +567,35 @@ components:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/AuxiliarySnapshot'
+
+    TelemetryHeartbeat:
+      type: object
+      required:
+        - state_sequence
+        - timestamp
+        - active_journal
+        - latest_event_id
+        - status_hash
+        - snapshot_hashes
+      properties:
+        state_sequence:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        active_journal:
+          type: string
+          nullable: true
+        latest_event_id:
+          type: string
+          nullable: true
+        status_hash:
+          type: string
+          nullable: true
+        snapshot_hashes:
+          type: object
+          additionalProperties:
+            type: string
 
     DiagnosticLogRecord:
       type: object
