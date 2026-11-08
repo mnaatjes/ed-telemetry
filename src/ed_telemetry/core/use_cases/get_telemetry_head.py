@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ..ports.driven.telemetry_driven_port import TelemetryRepositoryPort
+from ..ports.driven.telemetry_driven_port import TelemetryRepositoryPort, WatcherPort
 from ..ports.driving.telemetry_port import (
     AuxiliarySnapshotDTO,
     GetAuxiliarySnapshotPort,
@@ -13,6 +13,7 @@ from ..ports.driving.telemetry_port import (
     GetWatcherStatusPort,
     TelemetryHeadDTO,
     TelemetryQueryDTO,
+    TelemetryRecordDTO,
 )
 
 STANDARD_SNAPSHOT_NAMES = (
@@ -35,18 +36,25 @@ class GetTelemetryHeadUseCase(GetTelemetryHeadPort):
         game_status_port: GetLatestGameStatusPort,
         aux_snapshot_port: GetAuxiliarySnapshotPort,
         watcher_status_port: GetWatcherStatusPort,
+        watcher_port: WatcherPort | None = None,
     ) -> None:
         self._repository = repository
         self._game_status_port = game_status_port
         self._aux_snapshot_port = aux_snapshot_port
         self._watcher_status_port = watcher_status_port
+        self._watcher_port = watcher_port
 
     def get_head(self) -> TelemetryHeadDTO:
         """Assemble latest journal event, active status, and known snapshots."""
-        latest_records = self._repository.find_events(
-            TelemetryQueryDTO(topic="telemetry.journal", limit=1, order="desc")
-        )
-        latest_event = latest_records[0] if latest_records else None
+        latest_event: TelemetryRecordDTO | None = None
+        if self._watcher_port is not None:
+            latest_event = self._watcher_port.read_active_journal_tail()
+
+        if latest_event is None:
+            latest_records = self._repository.find_events(
+                TelemetryQueryDTO(topic="telemetry.journal", limit=1, order="desc")
+            )
+            latest_event = latest_records[0] if latest_records else None
 
         watcher_status = self._watcher_status_port.get_status()
         status_dto = self._game_status_port.get_game_status()

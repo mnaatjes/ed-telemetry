@@ -147,7 +147,7 @@ class TelemetryBatchDTO(DataTransferObject):
 class TelemetryRecordDTO(DataTransferObject):
     """Indexed telemetry event stored in persistence."""
 
-    id: int
+    id: int | None
     event_id: str
     topic: str
     timestamp: datetime
