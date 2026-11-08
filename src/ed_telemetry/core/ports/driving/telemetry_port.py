@@ -20,6 +20,7 @@ from ..dto.telemetry_dto import (
     StartMonitoringDTO,
     TelemetryBatchDTO,
     TelemetryHeadDTO,
+    TelemetryHeartbeatDTO,
     TelemetryPayloadDTO,
     TelemetryQueryDTO,
     TelemetryRecordDTO,
@@ -138,9 +139,23 @@ class MaintainDatabasePort(DrivingPort, Protocol):
 
 @runtime_checkable
 class GetTelemetryHeadPort(DrivingPort, Protocol):
-    """Primary driving port for retrieving consolidated head state snapshot."""
+    """Primary driving port for retrieving consolidated head state snapshot (legacy)."""
 
     def get_head(self) -> TelemetryHeadDTO: ...
+
+
+@runtime_checkable
+class GetTelemetryStatePort(DrivingPort, Protocol):
+    """Primary driving port for retrieving consolidated instantaneous state."""
+
+    def get_state(self) -> TelemetryHeadDTO: ...
+
+
+@runtime_checkable
+class GetStateHeartbeatPort(DrivingPort, Protocol):
+    """Primary driving port for retrieving state delta heartbeat."""
+
+    def get_heartbeat(self) -> TelemetryHeartbeatDTO: ...
 
 
 __all__ = (
@@ -151,8 +166,10 @@ __all__ = (
     "GetDiagnosticLogsPort",
     "GetJournalFilesPort",
     "GetLatestGameStatusPort",
+    "GetStateHeartbeatPort",
     "GetTelemetryEventsPort",
     "GetTelemetryHeadPort",
+    "GetTelemetryStatePort",
     "GetTelemetryStreamPort",
     "GetWatcherStatusPort",
     "MaintainDatabasePort",
@@ -172,6 +189,7 @@ __all__ = (
     "StartMonitoringDTO",
     "TelemetryBatchDTO",
     "TelemetryHeadDTO",
+    "TelemetryHeartbeatDTO",
     "TelemetryPayloadDTO",
     "TelemetryQueryDTO",
     "TelemetryRecordDTO",

@@ -80,6 +80,7 @@ class FileSystemWatcher(WatcherPort):
         self._thread: threading.Thread | None = None
         self._reactor: WatcherReactor | None = None
         self._is_active = False
+        self._live_snapshot_names: set[str] = set()
         self._lock = threading.RLock()
 
     def register_event_handler(self, handler: IngestionEventHandler) -> None:
@@ -234,6 +235,7 @@ class FileSystemWatcher(WatcherPort):
                 raw_hash=None,
             )
 
+        is_live = "Status.json" in self._live_snapshot_names
         reader = SnapshotReader()
         ev, _ = reader.read_snapshot(candidate.resolved_path, FileKind.STATUS)
         if ev is None:
@@ -245,6 +247,7 @@ class FileSystemWatcher(WatcherPort):
                 timestamp=datetime.fromtimestamp(candidate.mtime, tz=UTC),
                 raw_payload=raw_bytes,
                 raw_hash=None,
+                is_live_session=is_live,
             )
 
         return GameStatusSnapshotDTO(
@@ -253,6 +256,7 @@ class FileSystemWatcher(WatcherPort):
             timestamp=ev.timestamp,
             raw_payload=ev.raw_payload,
             raw_hash=ev.raw_hash,
+            is_live_session=is_live,
         )
 
     def read_auxiliary_snapshot(self, name: str) -> AuxiliarySnapshotDTO:
@@ -275,8 +279,10 @@ class FileSystemWatcher(WatcherPort):
                 timestamp=None,
                 raw_payload=b"",
                 raw_hash=None,
+                is_live_session=False,
             )
 
+        is_live = candidate.canonical_name in self._live_snapshot_names
         reader = SnapshotReader()
         ev, _ = reader.read_snapshot(candidate.resolved_path, FileKind.SNAPSHOT)
         if ev is None:
@@ -288,6 +294,7 @@ class FileSystemWatcher(WatcherPort):
                 timestamp=datetime.fromtimestamp(candidate.mtime, tz=UTC),
                 raw_payload=raw_bytes,
                 raw_hash=None,
+                is_live_session=is_live,
             )
 
         return AuxiliarySnapshotDTO(
@@ -297,6 +304,7 @@ class FileSystemWatcher(WatcherPort):
             timestamp=ev.timestamp,
             raw_payload=ev.raw_payload,
             raw_hash=ev.raw_hash,
+            is_live_session=is_live,
         )
 
     def read_active_journal_tail(self) -> TelemetryRecordDTO | None:
@@ -435,6 +443,9 @@ class FileSystemWatcher(WatcherPort):
 
     def _dispatch_event(self, event: FileIngestionEvent) -> None:
         """Dispatch FileIngestionEvent to all registered handlers with exception shielding."""
+        if event.file_kind in (FileKind.STATUS, FileKind.SNAPSHOT):
+            self._live_snapshot_names.add(event.target_path.name)
+
         with self._lock:
             handlers = list(self._event_handlers)
 

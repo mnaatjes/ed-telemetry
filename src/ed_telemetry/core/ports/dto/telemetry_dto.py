@@ -110,6 +110,7 @@ class GameStatusSnapshotDTO(DataTransferObject):
     timestamp: datetime | None
     raw_payload: bytes
     raw_hash: str | None
+    is_live_session: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +123,7 @@ class AuxiliarySnapshotDTO(DataTransferObject):
     timestamp: datetime | None
     raw_payload: bytes
     raw_hash: str | None
+    is_live_session: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +177,19 @@ class TelemetryHeadDTO(DataTransferObject):
     latest_journal_event: TelemetryRecordDTO | None
     game_status: GameStatusSnapshotDTO | None
     snapshots: dict[str, AuxiliarySnapshotDTO]
+    state_sequence: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryHeartbeatDTO(DataTransferObject):
+    """Ultra-lightweight state synchronization heartbeat (< 200 bytes)."""
+
+    state_sequence: int
+    timestamp: datetime
+    active_journal: str | None
+    latest_event_id: str | None
+    status_hash: str | None
+    snapshot_hashes: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)

@@ -157,5 +157,59 @@ class TestHttpApiAdapter:
                     assert len(desc_events) == 1
                     assert "Eravate" in desc_events[0]["payload_json"]
 
+                # 14. Canonical /api/v1/state & Headers
+                with urllib.request.urlopen(f"{base_url}/api/v1/state") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "memory-buffer"
+                    assert resp.headers.get("X-Telemetry-Plane") == "state"
+                    etag = resp.headers.get("ETag")
+                    assert etag is not None
+                    state_data = json.loads(resp.read().decode("utf-8"))
+                    assert "state_sequence" in state_data
+
+                # 15. ETag & 304 Not Modified
+                req_304 = urllib.request.Request(f"{base_url}/api/v1/state", headers={"If-None-Match": etag})
+                try:
+                    urllib.request.urlopen(req_304)
+                except urllib.error.HTTPError as err:
+                    assert err.code == 304
+
+                # 16. Canonical /api/v1/state/heartbeat
+                with urllib.request.urlopen(f"{base_url}/api/v1/state/heartbeat") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "memory-buffer"
+                    assert resp.headers.get("X-Telemetry-Plane") == "state"
+                    hb = json.loads(resp.read().decode("utf-8"))
+                    assert "state_sequence" in hb
+                    assert "snapshot_hashes" in hb
+
+                # 17. Canonical /api/v1/journal/latest
+                with urllib.request.urlopen(f"{base_url}/api/v1/journal/latest") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "memory-buffer"
+                    assert resp.headers.get("X-Telemetry-Plane") == "journal"
+                    latest_j = json.loads(resp.read().decode("utf-8"))
+                    assert "Eravate" in latest_j["payload_json"]
+
+                # 18. Canonical /api/v1/journal/query (SQLite WAL header)
+                with urllib.request.urlopen(f"{base_url}/api/v1/journal/query") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "sqlite-wal"
+                    assert resp.headers.get("X-Telemetry-Plane") == "journal"
+
+                # 19. Canonical /api/v1/snapshots
+                with urllib.request.urlopen(f"{base_url}/api/v1/snapshots") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "memory-buffer"
+                    assert resp.headers.get("X-Telemetry-Plane") == "snapshots"
+                    snaps = json.loads(resp.read().decode("utf-8"))
+                    assert "Market" in snaps
+
+                # 20. Canonical /api/v1/system/watcher
+                with urllib.request.urlopen(f"{base_url}/api/v1/system/watcher") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "memory-buffer"
+                    assert resp.headers.get("X-Telemetry-Plane") == "system"
+
             finally:
                 server.stop()

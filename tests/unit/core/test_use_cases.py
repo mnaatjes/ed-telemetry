@@ -378,6 +378,8 @@ class TestGetTelemetryHeadUseCase:
             watcher_port=watcher,
         )
 
+        # Under ADR 0038 Invariant 1 (Zero-DB Head Hydration),
+        # /api/v1/state NEVER executes fallback queries against the repository.
+        # If no active journal is open, latest_journal_event remains None.
         head = use_case.get_head()
-        assert head.latest_journal_event is not None
-        assert "FallbackEvent" in head.latest_journal_event.payload_json
+        assert head.latest_journal_event is None
