@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-08
+
 ### Added
 - Resource-first canonical REST and SSE endpoint taxonomy (`/api/v1/state`, `/api/v1/state/heartbeat`, `/api/v1/status`, `/api/v1/snapshots`, `/api/v1/journal/*`, `/api/v1/system/*`) organizing telemetry by resource plane (ADR 0038, SDD-033, #101).
 - In-memory state synchronization heartbeat (`GET /api/v1/state/heartbeat`) delivering sub-200 byte state sequence counters and content hashes for drift detection (ADR 0038, SDD-033, #101).
