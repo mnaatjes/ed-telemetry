@@ -75,10 +75,44 @@ Chosen Option: **Adopt Clean Resource-First API Taxonomy with 100% In-Memory Sta
   * `X-Telemetry-Source: sqlite-wal` for database queries (`/journal/query`).
   * `X-Telemetry-Plane: state | status | snapshots | journal | system` declaring the architectural plane.
 * **Invariant 3 (Idempotency of GET Endpoints):** All `GET` requests except `/journal/queue` must be completely non-destructive and side-effect free. Destructive queue operations remain confined to `/journal/queue`.
+* **Invariant 4 (Initial Snapshot Preloading & Presence Guarantees):** Upon daemon startup (regardless of whether mid-game or cold boot), the ingestion coordinator immediately preloads the last-known disk state of all registered snapshot files (`Cargo.json`, `Market.json`, `NavRoute.json`, etc.) into in-memory caches. Responses for auxiliary files must explicitly convey `exists: bool`, `raw_payload: str`, and `timestamp: datetime | null`. This ensures UIs never experience null reference exceptions or cold-start emptiness when files have not yet been rewritten in the current session.
 
 ---
 
-### 3. CI-Enforceable Quality Gates and Conventions
+### 3. Real-Time UI Synchronization Lifecycle
+
+To eliminate UI value flipping, cycling stale records, and cold-start race conditions, downstream dashboards and overlays must implement this three-phase lifecycle:
+
+```
+┌────────────────────────────────────────────────────────┐
+│ UI Lifecycle Phase 1: Instant State Hydration          │
+│ - Call GET /api/v1/state ONCE at startup               │
+│ - Fully populates cockpit status, active journal tail, │
+│   and all preloaded auxiliary snapshots (< 1ms)        │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ UI Lifecycle Phase 2: Reactive Live Push               │
+│ - Connect to GET /api/v1/journal/stream (SSE)          │
+│ - Process incremental mutations as they occur:         │
+│   • telemetry.journal  -> Append to event log / route  │
+│   • telemetry.status   -> Update cockpit gauges / pips │
+│   • telemetry.snapshot -> Refresh cargo / market state │
+└──────────────────────────┬─────────────────────────────┘
+                           │ (On disconnect or background check)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ UI Lifecycle Phase 3: Drift Detection & Reconnection   │
+│ - If SSE disconnects or periodically every 5s:         │
+│ - Fetch GET /api/v1/state/heartbeat (< 200 bytes)      │
+│ - If state_sequence differs, resync via /api/v1/state  │
+└────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 4. CI-Enforceable Quality Gates and Conventions
 
 To prevent architectural drift and ensure strict adherence to API standards across future PRs, the following automated checks are codified into `tests/architecture/test_api_standards.py` and executed via `.venv/bin/python scripts/verify.py`:
 
