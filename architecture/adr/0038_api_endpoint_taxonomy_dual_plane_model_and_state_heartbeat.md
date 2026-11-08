@@ -52,7 +52,7 @@ Chosen Option: **Adopt Clean Resource-First API Taxonomy with 100% In-Memory Sta
 
 | Canonical Endpoint | HTTP Method | Data Source | Source File / Scope | Legacy Route (Deprecated Alias) | Role & Behavior |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`/api/v1/telemetry/head`** | `GET` | **In-memory cache only** | All (`Status.json`, snapshots, active journal tail) | — | **Full State Hydration.** Returns instantaneous cockpit state, all active snapshots, and active journal tail with zero database queries. |
+| **`/api/v1/state`** | `GET` | **In-memory cache only** | All (`Status.json`, snapshots, active journal tail) | `/api/v1/telemetry/head` | **Full State Hydration.** Returns instantaneous cockpit state, all active snapshots, and active journal tail with zero database queries. |
 | **`/api/v1/status`** | `GET` | **In-memory cache** | `Status.json` | `/api/v1/status/game` | Returns active cockpit telemetry payload, bitflags, and raw SHA-256 hash. |
 | **`/api/v1/snapshots/{name}`** | `GET` | **In-memory cache** | `Market.json`, `Cargo.json`, etc. | — | Returns raw payload and hash of a specific auxiliary snapshot by name (e.g. `/snapshots/market`). |
 | **`/api/v1/snapshots`** | `GET` | **In-memory cache** | All registered snapshot files | — | Returns a dictionary containing all currently active auxiliary snapshots in a single call. |
@@ -69,11 +69,11 @@ Chosen Option: **Adopt Clean Resource-First API Taxonomy with 100% In-Memory Sta
 
 ### 2. Architectural Invariants
 
-* **Invariant 1 (Zero-DB Head Hydration):** `/api/v1/telemetry/head` must resolve `latest_journal_event` exclusively from the active in-memory journal tail reader (`WatcherPort.read_active_journal_tail()`). It must **never** execute fallback SQL queries against `TelemetryRepositoryPort`. If no journal file is actively open, `latest_journal_event` must return `null`.
+* **Invariant 1 (Zero-DB Head Hydration):** `/api/v1/state` (and legacy `/api/v1/telemetry/head`) must resolve `latest_journal_event` exclusively from the active in-memory journal tail reader (`WatcherPort.read_active_journal_tail()`). It must **never** execute fallback SQL queries against `TelemetryRepositoryPort`. If no journal file is actively open, `latest_journal_event` must return `null`.
 * **Invariant 2 (Source Transparency Headers):** Every HTTP response emitted by `HttpApiAdapter` must include:
-  * `X-Telemetry-Source: memory-buffer` for in-memory and disk-cached responses (`/telemetry/head`, `/status`, `/snapshots/*`, `/journal/latest`, `/journal/queue`, `/system/*`).
+  * `X-Telemetry-Source: memory-buffer` for in-memory and disk-cached responses (`/state`, `/status`, `/snapshots/*`, `/journal/latest`, `/journal/queue`, `/system/*`).
   * `X-Telemetry-Source: sqlite-wal` for database queries (`/journal/query`).
-  * `X-Telemetry-Plane: telemetry | status | snapshots | journal | system` declaring the architectural plane.
+  * `X-Telemetry-Plane: state | status | snapshots | journal | system` declaring the architectural plane.
 * **Invariant 3 (Idempotency of GET Endpoints):** All `GET` requests except `/journal/queue` must be completely non-destructive and side-effect free. Destructive queue operations remain confined to `/journal/queue`.
 
 ---
@@ -84,7 +84,7 @@ To prevent architectural drift and ensure strict adherence to API standards acro
 
 1. **Router Path Naming Convention Enforcement:**
    * All endpoints registered in `ed_telemetry.adapters.driving.api.server.TelemetryHttpHandler` must match the canonical regex:
-     `^/api/v1/(telemetry/head|status|snapshots(/[a-zA-Z0-9_-]+)?|journal/(latest|query|stream|queue)|system/(health|watcher|logs|control))$`
+     `^/api/v1/(state|status|snapshots(/[a-zA-Z0-9_-]+)?|journal/(latest|query|stream|queue)|system/(health|watcher|logs|control))$`
      or belong to the explicit `DEPRECATED_LEGACY_ROUTES` tuple.
 2. **OpenAPI Schema Synchronization Gate:**
    * Every canonical route present in `server.py` must exist as an operational path in `architecture/api/openapi.yaml`.
