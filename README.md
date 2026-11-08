@@ -153,19 +153,23 @@ ed-telemetry tail --topic telemetry.audit
 
 ## 4. HTTP REST & Server-Sent Events (SSE) API
 
-When `ed-telemetry serve` is active, the API listens on `http://127.0.0.1:8080/api/v1`:
+When `ed-telemetry serve` is active, the API listens on `http://127.0.0.1:8080/api/v1` with a dual-plane architecture (In-Memory State Plane & Durable SQLite Log Plane):
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/health` | Service health status |
-| `GET` | `/api/v1/status` | Ingestion watcher state and monitored paths |
-| `GET` | `/api/v1/status/game` | Cockpit snapshot (`Status.json`) |
-| `GET` | `/api/v1/snapshots/{name}` | Auxiliary game snapshots (`market`, `cargo`, `navroute`) |
-| `GET` | `/api/v1/events` | Historical SQLite events (`?topic=...&since_id=...&limit=...`) |
-| `GET` | `/api/v1/events/buffer` | Drain recent in-memory event buffer |
-| `GET` | `/api/v1/stream` | Real-time Server-Sent Events (SSE) event stream |
-| `GET` | `/api/v1/diagnostics/logs` | Diagnostic log snapshot (`?min_level=...&limit=...`) |
-| `POST` | `/api/v1/control/watch` | Control watcher lifecycle (`{"action": "start"|"stop"}`) |
+| Method | Canonical Endpoint | Legacy Alias (Deprecated) | Plane | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/state` | `/telemetry/head` | `state` | Consolidated instantaneous state hydration (Zero-DB tail reader + snapshots). |
+| `GET` | `/api/v1/state/heartbeat` | N/A | `state` | State synchronization heartbeat (< 200B) with monotonic sequence & hashes. |
+| `GET` | `/api/v1/status` | `/status/game` | `status` | Real-time player cockpit telemetry (`Status.json`) and freshness flags. |
+| `GET` | `/api/v1/snapshots` | N/A | `snapshots` | Consolidated dictionary of all 9 auxiliary snapshot files. |
+| `GET` | `/api/v1/snapshots/{name}` | N/A | `snapshots` | Specific game snapshot file (`Market`, `Cargo`, `NavRoute`, etc.). |
+| `GET` | `/api/v1/journal/latest` | N/A | `journal` | Most recent journal line from active memory tail buffer. |
+| `GET` | `/api/v1/journal/query` | `/events` | `journal` | Historical SQLite events (`?topic=...&since_id=...&limit=...`). |
+| `GET` | `/api/v1/journal/queue` | `/events/buffer` | `journal` | Drain recent in-memory event buffer. |
+| `GET` | `/api/v1/journal/stream` | `/stream` | `journal` | Real-time Server-Sent Events (SSE) stream (`text/event-stream`). |
+| `GET` | `/api/v1/system/health` | `/health` | `system` | Service health status. |
+| `GET` | `/api/v1/system/watcher` | `/status` | `system` | Ingestion watcher state and monitored paths. |
+| `GET` | `/api/v1/system/logs` | `/diagnostics/logs` | `system` | Diagnostic log snapshot (`?min_level=...&limit=...`). |
+| `POST` | `/api/v1/system/control` | `/control/watch` | `system` | Control watcher lifecycle (`{"action": "start"|"stop"}`). |
 
 ---
 

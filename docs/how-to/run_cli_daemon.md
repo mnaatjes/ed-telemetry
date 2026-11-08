@@ -157,7 +157,7 @@ ed-telemetry logs --follow
 ed-telemetry logs -f
 ```
 
-* **When Daemon is Online:** `ed-telemetry logs` queries the running daemon's in-memory ring buffer via `GET /api/v1/diagnostics/logs`.
+* **When Daemon is Online:** `ed-telemetry logs` queries the running daemon's in-memory ring buffer via `GET /api/v1/system/logs` (or legacy `/api/v1/diagnostics/logs`).
 * **When Daemon is Offline:** `ed-telemetry logs` falls back to reading and parsing recent entries from the rotating log file on disk (`resolve_default_log_path()`).
 * **With `-f` / `--follow`:** Continuously polls and streams new log records from the disk log file as they are appended.
 
@@ -181,7 +181,7 @@ ed-telemetry stream --topic telemetry.audit
 ed-telemetry stream --json
 ```
 
-* **When Daemon is Online:** Connects to the HTTP/SSE streaming endpoint (`/api/v1/stream`) and yields inbound events in real time.
+* **When Daemon is Online:** Connects to the HTTP/SSE streaming endpoint (`/api/v1/journal/stream`, with backward-compatible alias `/api/v1/stream`) and yields inbound events in real time.
 * **When Daemon is Offline:** Activates a local, standalone `FileSystemWatcher` streaming lifecycle, streaming events directly from the journal files until terminated with `Ctrl+C`.
 
 ---

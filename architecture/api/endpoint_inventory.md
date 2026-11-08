@@ -9,27 +9,64 @@ last_updated_at: "2026-11-08"
 
 This document provides a comprehensive operational inventory of all HTTP REST and streaming endpoints hosted by `ed_telemetry.adapters.driving.api.server.HttpApiAdapter`.
 
----
-
-## 1. Endpoint Classification & Source Analysis
-
-| Endpoint URL | HTTP Method | Sourcefile Contents | Data-Source | Behavior(s) |
-| :--- | :--- | :--- | :--- | :--- |
-| `/api/v1/health` | `GET` | N/A | In-memory | Liveness check; returns service metadata without authentication. |
-| `/api/v1/telemetry/head` | `GET` | `all` (`journal`, `status`, `snapshot`) | In-memory buffer + SQLite DB | Aggregates instantaneous consolidated state: active journal, latest persisted journal event from SQLite, latest `Status.json` state, and all auxiliary snapshot caches. |
-| `/api/v1/diagnostics/logs` | `GET` | N/A | In-memory buffer | Queries in-memory diagnostic ring buffer; supports filtering by `min_level` (`DEBUG`, `INFO`, etc.) and `limit` (clamped 1–500). |
-| `/api/v1/status` | `GET` | `journal` | In-memory | Returns telemetry watcher operational metrics: running status, active journal file, monitored directory path. |
-| `/api/v1/control/watch` | `POST` | N/A | Reactor control loop | Triggers primary driving port `ProcessTelemetryStreamPort` to `start` or `stop` continuous ingestion threads. Returns RFC 7807 problem details on invalid action. |
-| `/api/v1/status/game` | `GET` | `status` (`Status.json`) | In-memory buffer | Returns cached content and SHA-256 hash of active cockpit telemetry (`Status.json`). |
-| `/api/v1/snapshots/{name}` | `GET` | `snapshot` (`Market`, `Cargo`, `NavRoute`, etc.) | In-memory buffer | Inspects auxiliary game state snapshot files. Returns 404 Problem Details if snapshot is unregistered or missing on disk. |
-| `/api/v1/events` | `GET` | `journal` (and persisted snapshots) | SQLite DB | Queries persisted historical telemetry in WAL mode. Supports query filters: `topic`, `since_id`, `limit` (clamped 1–500), and `order` (`asc`/`desc`). |
-| `/api/v1/events/buffer` | `GET` | `journal` | In-memory buffer | Drains and returns transient telemetry events currently queued in the outbound in-memory ring buffer. |
-| `/api/v1/stream` | `GET` | `all` | In-memory stream generator | Long-lived Server-Sent Events (SSE) stream (`text/event-stream`). Emits initial connection heartbeat, enforces concurrent client limits (HTTP 429), and streams live journal/status/snapshot events. |
+The architecture implements a dual-plane model decoupling the in-memory state synchronization plane (for real-time dashboards and overlays) from the durable SQLite log plane (for historical queries and audit replay) as formalized in [ADR 0038](file:///home/michael/src/github.com/mnaatjes/ed-telemetry/architecture/adr/0038_api_endpoint_taxonomy_dual_plane_model_and_state_heartbeat.md).
 
 ---
 
-## 2. Ingestion & Persistence Topology
+## 1. Canonical Endpoint Classification & Storage Source Inventory
 
-* **Direct Disk to Ring Buffer:** Active journal file lines, `Status.json`, and auxiliary snapshots (`Market.json`, etc.) are continuously monitored by the ingestion engine and cached in thread-safe memory buffers.
-* **Asynchronous Persistence:** Journal events and snapshot mutations are indexed and written to SQLite in Write-Ahead Logging (WAL) mode for fast historical queries.
-* **Zero-Copy / Memory-First Egress:** Fast path endpoints (`/telemetry/head`, `/status/game`, `/snapshots/{name}`, `/events/buffer`, `/stream`) read directly from memory representations, shielding SQLite from high-frequency polling.
+| Endpoint URL | HTTP Method | Architectural Plane | Storage Source | RFC 7807 Errors | Description / Behavior |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `/api/v1/state` | `GET` | `state` | `memory-buffer` | `503` | Consolidated instantaneous state hydration (Zero-DB tail reader + cockpit status + all snapshots). Injects weak ETag `W/"<seq>"`; supports `304 Not Modified`. |
+| `/api/v1/state/heartbeat` | `GET` | `state` | `memory-buffer` | N/A | Ultra-lightweight state delta heartbeat (< 200 bytes) with atomic `state_sequence` counter and content hashes for drift detection. Supports `304 Not Modified`. |
+| `/api/v1/status` | `GET` | `status` | `memory-buffer` | `503` | Real-time cockpit telemetry (`Status.json`) content, `is_live_session` freshness flag, and SHA-256 hash. (Falls back to watcher status if game status port unconfigured). |
+| `/api/v1/snapshots` | `GET` | `snapshots` | `memory-buffer` | N/A | Dictionary of all 9 registered auxiliary snapshots (`Market`, `Cargo`, `NavRoute`, `ModulesInfo`, `Outfitting`, `Shipyard`, `Backpack`, `ShipLocker`, `FCMaterials`). |
+| `/api/v1/snapshots/{name}` | `GET` | `snapshots` | `memory-buffer` | `404` | Single auxiliary game snapshot payload, `is_live_session` freshness indicator, and SHA-256 hash. |
+| `/api/v1/journal/latest` | `GET` | `journal` | `memory-buffer` | N/A | Most recent journal event read directly from the active log tail buffer. |
+| `/api/v1/journal/query` | `GET` | `journal` | `sqlite-wal` | `400` | Historical persisted telemetry query across SQLite WAL index (`since_id`, `topic`, `limit`, `order`). |
+| `/api/v1/journal/stream` | `GET` | `journal` | `memory-buffer` | `429` | Server-Sent Events (SSE) live push stream. Enforces connection tracker guardrail (`429 Too Many Requests`). |
+| `/api/v1/journal/queue` | `GET` | `journal` | `memory-buffer` | N/A | Drains outbound in-memory ring queue buffer. |
+| `/api/v1/system/health` | `GET` | `system` | `memory-buffer` | N/A | Unauthenticated service liveness check (`{"status": "ok", "service": "ed-telemetry"}`). |
+| `/api/v1/system/watcher` | `GET` | `system` | `memory-buffer` | `503` | Ingestion watcher operational metrics (active journal file, monitored directory, active status). |
+| `/api/v1/system/logs` | `GET` | `system` | `memory-buffer` | N/A | Queries thread-safe in-memory diagnostic log ring buffer (`min_level`, `limit`). |
+| `/api/v1/system/control` | `POST` | `system` | `memory-buffer` | `400` | Controls filesystem watcher reactor lifecycle (`{"action": "start" \| "stop"}`). |
+
+---
+
+## 2. Deprecated Legacy Route Aliases
+
+For seamless backward compatibility with v0.x clients, all legacy routes are maintained as exact dispatch aliases:
+
+| Legacy Route (Deprecated) | Canonical Equivalent | Redirection / Dispatch Behavior |
+| :--- | :--- | :--- |
+| `GET /api/v1/telemetry/head` | `GET /api/v1/state` | Directly dispatches to state hydration handler with zero DB calls. |
+| `GET /api/v1/status/game` | `GET /api/v1/status` | Dispatches to cockpit status handler. |
+| `GET /api/v1/events` | `GET /api/v1/journal/query` | Dispatches to SQLite historical query handler. |
+| `GET /api/v1/events/buffer` | `GET /api/v1/journal/queue` | Dispatches to in-memory queue drain handler. |
+| `GET /api/v1/stream` | `GET /api/v1/journal/stream` | Dispatches to SSE streaming handler. |
+| `GET /api/v1/health` | `GET /api/v1/system/health` | Dispatches to system health check. |
+| `GET /api/v1/diagnostics/logs` | `GET /api/v1/system/logs` | Dispatches to diagnostic logs handler. |
+| `POST /api/v1/control/watch` | `POST /api/v1/system/control` | Dispatches to system control handler. |
+
+---
+
+## 3. Storage Transparency & Metadata Invariants
+
+### 3.1 HTTP Diagnostic Response Headers
+Every response from `HttpApiAdapter` injects two mandatory transparency headers plus optional caching negotiation:
+
+| Header | Example Value | Architectural Meaning |
+| :--- | :--- | :--- |
+| `X-Telemetry-Source` | `memory-buffer` \| `sqlite-wal` | Informs callers whether payload was generated from ephemeral RAM cache or durable SQLite storage. |
+| `X-Telemetry-Plane` | `state` \| `status` \| `snapshots` \| `journal` \| `system` | Declares the architectural resource plane of the endpoint. |
+| `ETag` | `W/"42"` \| `W/"365d6ebac12925c3"` | Weak entity tag enabling conditional caching via `If-None-Match` (returns `304 Not Modified`). |
+
+### 3.2 Payload Metadata Properties
+The core data transfer objects expose standard telemetry metadata:
+
+| Property | Location | Type | Semantic Description |
+| :--- | :--- | :--- | :--- |
+| `state_sequence` | `/state`, `/state/heartbeat` | `int64` | Monotonically increasing atomic sequence counter incremented on every journal event or snapshot rewrite. |
+| `is_live_session` | `/status`, `/snapshots/*`, `/state` | `bool` | Freshness indicator: `true` if file modified during the active daemon session; `false` if preloaded cold from disk. |
+| `raw_hash` | `/status`, `/snapshots/*`, `/state` | `str` (SHA-256) | Content hash for change detection without parsing deep JSON trees. |
+| `timestamp` | All DTOs | `str` (ISO 8601 UTC) | File modification time or game event creation timestamp. |
