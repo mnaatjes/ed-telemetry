@@ -141,6 +141,7 @@ def build_container(
         game_status_port=get_game_status,
         aux_snapshot_port=get_aux,
         watcher_status_port=get_status,
+        watcher_port=watcher,
     )
 
     http_api_adapter = HttpApiAdapter(

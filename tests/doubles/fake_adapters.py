@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from ed_telemetry.core.ports.driven.telemetry_driven_port import (
     AuditEventHandler,
@@ -157,6 +158,17 @@ class FakeWatcherAdapter(WatcherPort):
             raw_hash="fake_aux_hash",
         )
 
+    def read_active_journal_tail(self) -> TelemetryRecordDTO | None:
+        return TelemetryRecordDTO(
+            id=None,
+            event_id="telemetry.journal_1729814400.0",
+            topic="telemetry.journal",
+            timestamp=datetime(2026, 10, 25, 0, 0, 0, tzinfo=UTC),
+            raw_hash="fake_tail_hash",
+            payload_json='{"timestamp":"2026-10-25T00:00:00Z","event":"Location"}',
+            created_at=datetime.now(UTC),
+        )
+
     def submit_ingest_hint(self, action: str, target_name: str | None = None) -> HintSubmissionDTO:
         return HintSubmissionDTO(
             action=action,
@@ -224,7 +236,7 @@ class FakeTelemetryRepositoryAdapter(TelemetryRepositoryPort):
     def find_events(self, query: TelemetryQueryDTO) -> tuple[TelemetryRecordDTO, ...]:
         matched = self.records
         if query.since_id is not None:
-            matched = [r for r in matched if r.id > query.since_id]
+            matched = [r for r in matched if r.id is not None and r.id > query.since_id]
         if query.topic is not None:
             matched = [r for r in matched if r.topic == query.topic]
         return tuple(matched[: query.limit])
@@ -232,6 +244,19 @@ class FakeTelemetryRepositoryAdapter(TelemetryRepositoryPort):
     def get_latest_event(self, topic: str) -> TelemetryRecordDTO | None:
         matched = [r for r in self.records if r.topic == topic]
         return matched[-1] if matched else None
+
+    def get_database_stats(self) -> Any:
+        return None
+
+    def prune_events(
+        self,
+        older_than: datetime | None = None,
+        max_records: int | None = None,
+    ) -> int:
+        return 0
+
+    def vacuum(self) -> None:
+        pass
 
 
 class FakeDiagnosticLogAdapter(DiagnosticLogPort):

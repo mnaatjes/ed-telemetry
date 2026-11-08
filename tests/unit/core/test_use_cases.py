@@ -308,3 +308,76 @@ class TestGetTelemetryStreamUseCase:
         yielded = next(gen)
         assert yielded.topic == "telemetry.journal"
         assert yielded.payload_bytes == b'{"event":"Docked"}'
+
+
+class TestGetTelemetryHeadUseCase:
+    """Verifies GetTelemetryHeadUseCase resolving active journal tail and fallback."""
+
+    def test_prefers_active_journal_tail_over_repository(self) -> None:
+        from datetime import UTC, datetime
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO
+        from ed_telemetry.core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
+        from ed_telemetry.core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
+        from ed_telemetry.core.use_cases.get_telemetry_head import GetTelemetryHeadUseCase
+        from ed_telemetry.core.use_cases.get_watcher_status import GetWatcherStatusUseCase
+        from tests.doubles.fake_adapters import FakeTelemetryRepositoryAdapter, FakeWatcherAdapter
+
+        watcher = FakeWatcherAdapter()
+        repo = FakeTelemetryRepositoryAdapter()
+        repo.insert_event(
+            TelemetryPayloadDTO(
+                topic="telemetry.journal",
+                timestamp=datetime(2025, 1, 1, 0, 0, 0, tzinfo=UTC),
+                payload_bytes=b'{"event":"OldHistoricalEvent"}',
+            )
+        )
+
+        use_case = GetTelemetryHeadUseCase(
+            repository=repo,
+            game_status_port=GetLatestGameStatusUseCase(watcher=watcher),
+            aux_snapshot_port=GetAuxiliarySnapshotUseCase(watcher=watcher),
+            watcher_status_port=GetWatcherStatusUseCase(watcher=watcher),
+            watcher_port=watcher,
+        )
+
+        head = use_case.get_head()
+        assert head.latest_journal_event is not None
+        assert head.latest_journal_event.raw_hash == "fake_tail_hash"
+        assert "Location" in head.latest_journal_event.payload_json
+
+    def test_falls_back_to_repository_when_no_active_journal_tail(self) -> None:
+        from datetime import UTC, datetime
+
+        from ed_telemetry.core.ports.dto import TelemetryPayloadDTO
+        from ed_telemetry.core.use_cases.get_auxiliary_snapshot import GetAuxiliarySnapshotUseCase
+        from ed_telemetry.core.use_cases.get_latest_game_status import GetLatestGameStatusUseCase
+        from ed_telemetry.core.use_cases.get_telemetry_head import GetTelemetryHeadUseCase
+        from ed_telemetry.core.use_cases.get_watcher_status import GetWatcherStatusUseCase
+        from tests.doubles.fake_adapters import FakeTelemetryRepositoryAdapter, FakeWatcherAdapter
+
+        class EmptyWatcherAdapter(FakeWatcherAdapter):
+            def read_active_journal_tail(self):
+                return None
+
+        watcher = EmptyWatcherAdapter()
+        repo = FakeTelemetryRepositoryAdapter()
+        repo.insert_event(
+            TelemetryPayloadDTO(
+                topic="telemetry.journal",
+                timestamp=datetime(2026, 11, 8, 5, 0, 0, tzinfo=UTC),
+                payload_bytes=b'{"event":"FallbackEvent"}',
+            )
+        )
+
+        use_case = GetTelemetryHeadUseCase(
+            repository=repo,
+            game_status_port=GetLatestGameStatusUseCase(watcher=watcher),
+            aux_snapshot_port=GetAuxiliarySnapshotUseCase(watcher=watcher),
+            watcher_status_port=GetWatcherStatusUseCase(watcher=watcher),
+            watcher_port=watcher,
+        )
+
+        head = use_case.get_head()
+        assert head.latest_journal_event is not None
+        assert "FallbackEvent" in head.latest_journal_event.payload_json

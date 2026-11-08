@@ -178,3 +178,51 @@ class TestFileSystemWatcherLifecycleAndDispatch:
 
         assert len(faulty_calls) >= 1
         assert len(healthy_events) >= 1
+
+
+class TestReadActiveJournalTail:
+    """Validate FileSystemWatcher.read_active_journal_tail functionality and edge cases."""
+
+    def test_returns_none_when_no_journals_exist(self, tmp_path: Path) -> None:
+        watcher = FileSystemWatcher(journal_dir=tmp_path)
+        tail = watcher.read_active_journal_tail()
+        assert tail is None
+
+    def test_returns_none_for_empty_journal_file(self, tmp_path: Path) -> None:
+        empty_journal = tmp_path / "Journal.2026-11-08T000000.01.log"
+        empty_journal.write_bytes(b"")
+        watcher = FileSystemWatcher(journal_dir=tmp_path)
+        tail = watcher.read_active_journal_tail()
+        assert tail is None
+
+    def test_reads_latest_record_from_active_journal(self, tmp_path: Path) -> None:
+        journal = tmp_path / "Journal.2026-11-08T010000.01.log"
+        content = (
+            '{"timestamp":"2026-11-08T01:00:00Z","event":"Fileheader"}\n'
+            '{"timestamp":"2026-11-08T01:05:00Z","event":"Location","StarSystem":"Sol"}\n'
+            '{"timestamp":"2026-11-08T01:10:00Z","event":"Docked","StationName":"Binet Port"}\n'
+        )
+        journal.write_text(content, encoding="utf-8")
+
+        watcher = FileSystemWatcher(journal_dir=tmp_path)
+        tail = watcher.read_active_journal_tail()
+
+        assert tail is not None
+        assert tail.id is None
+        assert tail.topic == "telemetry.journal"
+        assert "Binet Port" in tail.payload_json
+        assert tail.raw_hash is not None
+
+    def test_handles_trailing_newlines_and_whitespace(self, tmp_path: Path) -> None:
+        journal = tmp_path / "Journal.2026-11-08T020000.01.log"
+        content = (
+            '{"timestamp":"2026-11-08T02:00:00Z","event":"Fileheader"}\n'
+            '{"timestamp":"2026-11-08T02:15:00Z","event":"FSDJump","StarSystem":"Wolf 397"}\n\n\r\n'
+        )
+        journal.write_bytes(content.encode("utf-8"))
+
+        watcher = FileSystemWatcher(journal_dir=tmp_path)
+        tail = watcher.read_active_journal_tail()
+
+        assert tail is not None
+        assert "Wolf 397" in tail.payload_json

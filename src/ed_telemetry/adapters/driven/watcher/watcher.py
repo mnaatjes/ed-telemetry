@@ -1,5 +1,7 @@
 """Inbound filesystem watcher adapter implementing WatcherPort."""
 
+import hashlib
+import json
 import logging
 import threading
 import time
@@ -36,6 +38,7 @@ from ed_telemetry.core.ports.dto.telemetry_dto import (
     JournalCandidateDTO,
     JournalFileListDTO,
     JournalPathDTO,
+    TelemetryRecordDTO,
     WatcherAuditEventDTO,
 )
 
@@ -294,6 +297,79 @@ class FileSystemWatcher(WatcherPort):
             timestamp=ev.timestamp,
             raw_payload=ev.raw_payload,
             raw_hash=ev.raw_hash,
+        )
+
+    def read_active_journal_tail(self) -> TelemetryRecordDTO | None:
+        """Extract and return the literal latest telemetry record from the active journal file."""
+        active_path: Path
+        with self._lock:
+            if self._journal_dir is None:
+                discoverer = PathDiscoverer()
+                res = discoverer.discover_journal_directory()
+                self._journal_dir = res.resolved_path
+            active_path = self._journal_dir
+
+        selector = JournalSelector(active_path)
+        active = selector.get_active_journal()
+        if active is None or not active.path.exists():
+            return None
+
+        last_line = b""
+        try:
+            with open(active.path, "rb") as f:
+                f.seek(0, 2)
+                size = f.tell()
+                if size == 0:
+                    return None
+
+                # Read backwards in blocks up to 8KB to find the last non-empty line
+                buffer = bytearray()
+                pos = size
+                block_size = min(8192, size)
+
+                while pos > 0:
+                    read_len = min(block_size, pos)
+                    pos -= read_len
+                    f.seek(pos)
+                    chunk = f.read(read_len)
+                    buffer = bytearray(chunk) + buffer
+                    lines = buffer.split(b"\n")
+                    # If we have multiple lines, check for trailing non-empty line
+                    for line in reversed(lines):
+                        stripped = bytes(line.strip())
+                        if stripped:
+                            last_line = stripped
+                            break
+                    if last_line:
+                        break
+        except OSError as ex:
+            logger.warning("Failed to tail active journal %s: %s", active.path, ex)
+            return None
+
+        if not last_line:
+            return None
+
+        raw_str = last_line.decode("utf-8", errors="replace")
+        raw_hash = hashlib.sha256(last_line).hexdigest()
+
+        try:
+            parsed = json.loads(raw_str)
+            ts_str = parsed.get("timestamp")
+            if ts_str:
+                ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            else:
+                ts = datetime.fromtimestamp(active.path.stat().st_mtime, tz=UTC)
+        except Exception:
+            ts = datetime.fromtimestamp(active.path.stat().st_mtime, tz=UTC)
+
+        return TelemetryRecordDTO(
+            id=None,
+            event_id=f"telemetry.journal_{ts.timestamp()}",
+            topic="telemetry.journal",
+            timestamp=ts,
+            raw_hash=raw_hash,
+            payload_json=raw_str,
+            created_at=datetime.now(UTC),
         )
 
     def submit_ingest_hint(self, action: str, target_name: str | None = None) -> HintSubmissionDTO:
