@@ -76,14 +76,14 @@ Example JSON output:
 
 ## 3. Querying Logs via HTTP REST API
 
-When the daemon is running (`ed-telemetry serve`), logs can be fetched over HTTP:
+When the daemon is running (`ed-telemetry serve`), logs can be fetched over HTTP via the canonical `/api/v1/system/logs` endpoint (legacy alias `/api/v1/diagnostics/logs` is also supported):
 
 ```bash
-# Query all recent logs
-curl http://127.0.0.1:8080/api/v1/diagnostics/logs
+# Query all recent logs (Canonical endpoint)
+curl http://127.0.0.1:8080/api/v1/system/logs
 
 # Filter by minimum level and limit
-curl "http://127.0.0.1:8080/api/v1/diagnostics/logs?min_level=WARNING&limit=25"
+curl "http://127.0.0.1:8080/api/v1/system/logs?min_level=WARNING&limit=25"
 ```
 
 ---
@@ -95,13 +95,13 @@ Operational transitions (file rotation, truncated file recovery) and unrecoverab
 ### Live Terminal Tailing
 Follow audit events live in your console:
 ```bash
-ed-telemetry tail --topic telemetry.audit
+ed-telemetry stream --topic telemetry.audit
 ```
 
 ### Live SSE HTTP Subscription
-Subscribe using `curl`:
+Subscribe using `curl` via the canonical `/api/v1/journal/stream` endpoint (legacy alias `/api/v1/stream` is also supported):
 ```bash
-curl -N http://127.0.0.1:8080/api/v1/stream
+curl -N http://127.0.0.1:8080/api/v1/journal/stream
 ```
 
 Example SSE frame:
