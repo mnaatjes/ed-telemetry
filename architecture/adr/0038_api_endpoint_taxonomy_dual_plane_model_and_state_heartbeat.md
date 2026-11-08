@@ -69,17 +69,34 @@ Chosen Option: **Adopt Clean Resource-First API Taxonomy with 100% In-Memory Sta
 
 ### 2. Architectural Invariants
 
-* **Invariant 1 (Zero-DB Head Hydration):** `/api/v1/state` (and legacy `/api/v1/telemetry/head`) must resolve `latest_journal_event` exclusively from the active in-memory journal tail reader (`WatcherPort.read_active_journal_tail()`). It must **never** execute fallback SQL queries against `TelemetryRepositoryPort`. If no journal file is actively open, `latest_journal_event` must return `null`.
-* **Invariant 2 (Source Transparency Headers):** Every HTTP response emitted by `HttpApiAdapter` must include:
+* **Invariant 1 (Zero-DB Head Hydration & State Sequencing):** `/api/v1/state` (and legacy `/api/v1/telemetry/head`) must resolve `latest_journal_event` exclusively from the active in-memory journal tail reader (`WatcherPort.read_active_journal_tail()`). It must **never** execute fallback SQL queries against `TelemetryRepositoryPort`. If no journal file is actively open, `latest_journal_event` must return `null`. Furthermore, `/api/v1/state` must return an atomic `state_sequence: int` incremented on every ingestion mutation.
+* **Invariant 2 (Source Transparency & Cache Headers):** Every HTTP response emitted by `HttpApiAdapter` must include:
   * `X-Telemetry-Source: memory-buffer` for in-memory and disk-cached responses (`/state`, `/status`, `/snapshots/*`, `/journal/latest`, `/journal/queue`, `/system/*`).
   * `X-Telemetry-Source: sqlite-wal` for database queries (`/journal/query`).
   * `X-Telemetry-Plane: state | status | snapshots | journal | system` declaring the architectural plane.
+  * `ETag: W/"<state_sequence>-<content_hash>"` on state endpoints, supporting HTTP `304 Not Modified` via `If-None-Match`.
 * **Invariant 3 (Idempotency of GET Endpoints):** All `GET` requests except `/journal/queue` must be completely non-destructive and side-effect free. Destructive queue operations remain confined to `/journal/queue`.
-* **Invariant 4 (Initial Snapshot Preloading & Presence Guarantees):** Upon daemon startup (regardless of whether mid-game or cold boot), the ingestion coordinator immediately preloads the last-known disk state of all registered snapshot files (`Cargo.json`, `Market.json`, `NavRoute.json`, etc.) into in-memory caches. Responses for auxiliary files must explicitly convey `exists: bool`, `raw_payload: str`, and `timestamp: datetime | null`. This ensures UIs never experience null reference exceptions or cold-start emptiness when files have not yet been rewritten in the current session.
+* **Invariant 4 (Initial Snapshot Preloading & Presence Guarantees):** Upon daemon startup (regardless of whether mid-game or cold boot), the ingestion coordinator immediately preloads the last-known disk state of all registered snapshot files (`Cargo.json`, `Market.json`, `NavRoute.json`, etc.) into in-memory caches. Responses for auxiliary files must explicitly convey `exists: bool`, `is_live_session: bool`, `raw_payload: str`, and `timestamp: datetime | null`. This ensures UIs never experience null reference exceptions or cold-start emptiness when files have not yet been rewritten in the current session.
 
 ---
 
-### 3. Real-Time UI Synchronization Lifecycle
+### 3. Metadata Architecture & Payload Reference
+
+To ensure downstream UIs never suffer from out-of-order flipping, stale record cycling, or cold-start ambiguity, the following metadata fields are formalized across HTTP headers and response envelopes:
+
+| Metadata Field | Location | Data Type | Purpose & UI Utilization |
+| :--- | :--- | :--- | :--- |
+| **`state_sequence`** | Payload (`/state`, `/heartbeat`) | `int` (64-bit monotonic) | **Ordering Anchor.** Strictly increments on every journal append or snapshot overwrite. UIs drop any payload where `incoming.seq < current.seq`. |
+| **`is_live_session`** | Payload (`/status`, `/snapshots/*`) | `bool` | **Freshness Indicator.** `true` if file was written/updated during the active daemon session; `false` if preloaded cold from a prior session. |
+| **`raw_hash`** | Payload (`/status`, `/snapshots/*`, events) | `str` (SHA-256 slice) | **Content Identity.** Enables instant change detection without parsing deep JSON trees. |
+| **`timestamp`** | Payload (All records) | `str` (ISO 8601 UTC) | **Temporal Anchor.** The in-game timestamp or file mtime. |
+| **`X-Telemetry-Source`** | HTTP Response Header | `string` (`memory-buffer` \| `sqlite-wal`) | **Storage Transparency.** Informs caller whether data originates from RAM cache or SQLite WAL. |
+| **`X-Telemetry-Plane`** | HTTP Response Header | `string` (`state` \| `status` \| `journal` \| `system`) | **Domain Scope.** Declares the architectural plane of the endpoint. |
+| **`ETag`** | HTTP Response Header | `string` (`W/"<seq>-<hash>"`) | **Cache Negotiation.** Enables browsers and desktop UIs to avoid redundant JSON parsing via `304 Not Modified`. |
+
+---
+
+### 4. Real-Time UI Synchronization Lifecycle
 
 To eliminate UI value flipping, cycling stale records, and cold-start race conditions, downstream dashboards and overlays must implement this three-phase lifecycle:
 
@@ -112,7 +129,7 @@ To eliminate UI value flipping, cycling stale records, and cold-start race condi
 
 ---
 
-### 4. CI-Enforceable Quality Gates and Conventions
+### 5. CI-Enforceable Quality Gates and Conventions
 
 To prevent architectural drift and ensure strict adherence to API standards across future PRs, the following automated checks are codified into `tests/architecture/test_api_standards.py` and executed via `.venv/bin/python scripts/verify.py`:
 
