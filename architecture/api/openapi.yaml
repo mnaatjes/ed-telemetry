@@ -33,6 +33,51 @@ paths:
                     type: string
                     example: "ed-telemetry"
 
+  /api/v1/telemetry/head:
+    get:
+      summary: Consolidated head state snapshot
+      description: Returns the latest live player status, active journal state, most recent journal event, and all auxiliary snapshots.
+      responses:
+        '200':
+          description: Consolidated head telemetry state snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryHead'
+        '503':
+          $ref: '#/components/responses/ProblemDetailsResponse'
+
+  /api/v1/diagnostics/logs:
+    get:
+      summary: Diagnostic logs snapshot
+      description: Returns recent diagnostic log records from the in-memory ring buffer.
+      parameters:
+        - name: min_level
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+          description: Minimum log severity level filter.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+          description: Maximum number of log records to return.
+      responses:
+        '200':
+          description: Diagnostic logs snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticLogSnapshot'
+        '503':
+          $ref: '#/components/responses/ProblemDetailsResponse'
+
   /api/v1/status:
     get:
       summary: Watcher operational status
@@ -133,6 +178,14 @@ paths:
             type: integer
             default: 100
           description: Maximum number of records to return.
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+          description: Sort ordering by record ID.
       responses:
         '200':
           description: Array of telemetry records.
@@ -338,3 +391,60 @@ components:
             type: array
             items:
               type: string
+
+    TelemetryHead:
+      type: object
+      required:
+        - timestamp
+        - active_journal
+        - latest_journal_event
+        - game_status
+        - snapshots
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        active_journal:
+          type: string
+          nullable: true
+        latest_journal_event:
+          $ref: '#/components/schemas/TelemetryRecord'
+          nullable: true
+        game_status:
+          $ref: '#/components/schemas/GameStatusSnapshot'
+          nullable: true
+        snapshots:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/AuxiliarySnapshot'
+
+    DiagnosticLogRecord:
+      type: object
+      required:
+        - timestamp
+        - level
+        - logger_name
+        - message
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        level:
+          type: string
+        logger_name:
+          type: string
+        message:
+          type: string
+
+    DiagnosticLogSnapshot:
+      type: object
+      required:
+        - records
+        - total_retained
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiagnosticLogRecord'
+        total_retained:
+          type: integer
