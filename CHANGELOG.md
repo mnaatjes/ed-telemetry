@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Resource-first canonical REST and SSE endpoint taxonomy (`/api/v1/state`, `/api/v1/state/heartbeat`, `/api/v1/status`, `/api/v1/snapshots`, `/api/v1/journal/*`, `/api/v1/system/*`) organizing telemetry by resource plane (ADR 0038, SDD-033, #101).
+- In-memory state synchronization heartbeat (`GET /api/v1/state/heartbeat`) delivering sub-200 byte state sequence counters and content hashes for drift detection (ADR 0038, SDD-033, #101).
+- Inbound driving ports `GetTelemetryStatePort` and `GetStateHeartbeatPort` with atomic monotonic `StateSequenceTracker` (ADR 0038, SDD-033, #101).
+- Storage source transparency headers `X-Telemetry-Source: memory-buffer | sqlite-wal` and `X-Telemetry-Plane: state | status | snapshots | journal | system` injected across all HTTP responses (ADR 0038, SDD-033, #101).
+- Weak `ETag` negotiation and HTTP `304 Not Modified` caching on `/api/v1/state` and `/api/v1/state/heartbeat` via `If-None-Match` (ADR 0038, SDD-033, #101).
+- Ingestion watcher snapshot preloading on daemon startup with `is_live_session` freshness indicators distinguishing preloaded state from active gameplay mutations (ADR 0038, SDD-033, #101).
+- Architectural CI compliance gate `test_api_standards.py` enforcing route regex pattern conformance and 1:1 OpenAPI specification synchronization (ADR 0038, SDD-033, #101).
+
+### Deprecated
+- Legacy route aliases (`/telemetry/head`, `/status/game`, `/events`, `/events/buffer`, `/stream`, `/health`, `/diagnostics/logs`, `/control/watch`) marked deprecated in favor of canonical resource-first endpoints, retained with 100% backward compatibility until v1.0.0 (ADR 0038, #101).
+
+### Documentation
+- Updated OpenAPI 3.1 contract (`architecture/api/openapi.yaml`), endpoint analysis inventory (`architecture/api/endpoint_inventory.md`), HTTP reference manual (`docs/reference/http_api_endpoints.md`), runbooks (`docs/how-to/`), and root README (ADR 0038, #101, #102).
+
 ## [0.8.1] - 2026-11-08
 
 ### Fixed
