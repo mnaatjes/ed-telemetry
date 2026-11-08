@@ -61,3 +61,13 @@ Governed by repository ADRs (`architecture/adr/`) and SDDs (`architecture/design
 2. **Invariant D (Downward Layering):** Infrastructure depends on Domain; Interfaces depend on Services; Services depend on Domain Ports.
 3. **Invariant G (Infrastructure Isolation):** Services and ApplicationContext must never directly reference or import concrete classes from `src/infrastructure/`. Adapters must be injected via abstract Port contracts.
 4. **Protocols with Properties:** In Python `typing.Protocol`, protocols defining non-method members (e.g., `@property def is_active(self) -> bool` on `LifecyclePort`) do not support `issubclass()`. In tests, assert protocol composition via MRO inspection (`LifecyclePort in WatcherPort.__mro__`) and instance validation (`isinstance(instance, LifecyclePort)`).
+
+---
+
+## 5. Interaction & Conversation Directives
+
+* **ADHD-Friendly Structure:** Short sections, high scannability, bold key terms.
+* **Format for Clarity:** Use bullet points, bold markers, and structured tables; avoid walls of text.
+* **Plain Language:** Use direct, concrete words; eliminate fluff, filler, and unnecessary jargon.
+* **Bulleted Output:** Default to bullet points for lists, statuses, instructions, and breakdowns.
+* **Extreme Brevity:** Keep answers concise, actionable, and strictly scoped to the immediate task.
