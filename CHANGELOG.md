@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Resolved `latest_journal_event` in `GET /api/v1/telemetry/head` directly from the active journal file tail via $O(1)$ reverse block seek, eliminating historical SQLite backfill distortion during startup (ADR 0037, #99).
+- Added `read_active_journal_tail()` to `WatcherPort` protocol and `FileSystemWatcher` adapter.
+- Made `id` nullable on `TelemetryRecordDTO` to represent unpersisted live disk events safely across API boundaries.
+
 ## [0.8.0] - 2026-11-04
 
 ### Added
