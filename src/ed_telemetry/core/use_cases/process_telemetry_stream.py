@@ -78,3 +78,25 @@ class ProcessTelemetryStreamUseCase(ProcessTelemetryStreamPort):
             metadata=(("action", event.action),),
         )
         self._egress.send(payload)
+
+        # Emit file delta notification for journal file lifecycle events
+        if event.action in ("selected", "part_rollover"):
+            from pathlib import Path
+
+            target_filename = Path(event.target_path).name
+            if target_filename.startswith("Journal."):
+                delta_action = "rollover" if event.action == "part_rollover" else "created"
+                delta_dict = {
+                    "topic": "telemetry.file_delta",
+                    "target": target_filename,
+                    "action": delta_action,
+                    "raw_hash": "",
+                    "timestamp": event.timestamp.isoformat(),
+                }
+                delta_payload = TelemetryPayloadDTO(
+                    topic="telemetry.file_delta",
+                    timestamp=event.timestamp,
+                    payload_bytes=json.dumps(delta_dict).encode("utf-8"),
+                    metadata=(("target", target_filename), ("action", delta_action)),
+                )
+                self._egress.send(delta_payload)
