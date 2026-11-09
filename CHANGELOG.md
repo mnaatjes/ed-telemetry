@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-09
+
 ### Changed
 - Strictly quarantined the **Journal Plane** (`/api/v1/journal/*`) to Frontier Developments `Journal.*.log` records, isolating `/api/v1/journal/events` to strictly journal topics with mandatory `WHERE topic NOT LIKE 'telemetry.%'` SQL filtering (ADR 0041, SDD-035, #105).
 - Realigned multi-topic ingestion queries to canonical **Events Plane** endpoint `/api/v1/events/query` (with legacy alias `/api/v1/events`) (ADR 0041, SDD-035, #105).
