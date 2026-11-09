@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Strictly quarantined the **Journal Plane** (`/api/v1/journal/*`) to Frontier Developments `Journal.*.log` records, isolating `/api/v1/journal/events` to strictly journal topics with mandatory `WHERE topic NOT LIKE 'telemetry.%'` SQL filtering (ADR 0041, SDD-035, #105).
+- Realigned multi-topic ingestion queries to canonical **Events Plane** endpoint `/api/v1/events/query` (with legacy alias `/api/v1/events`) (ADR 0041, SDD-035, #105).
+- Realigned outbound transmission queue drain to canonical `/api/v1/events/queue` (with legacy alias `/api/v1/events/buffer`) (ADR 0041, SDD-035, #105).
+- Realigned unified real-time SSE stream to canonical `/api/v1/events/stream` (with legacy alias `/api/v1/stream`) (ADR 0041, SDD-035, #105).
+- Maintained 100% backward-compatibility aliases for `/api/v1/journal/query`, `/api/v1/journal/queue`, and `/api/v1/journal/stream` (ADR 0041, SDD-035, #105).
+
+### Documentation
+- Authored ADR 0041: Journal Plane Isolation and Events Plane Taxonomy Realignment (`architecture/adr/0041_journal_plane_isolation_and_events_plane_taxonomy.md`).
+- Authored SDD-035: Journal Plane Isolation and Events Plane Implementation (`architecture/designs/0035_journal_and_events_plane_separation.md`).
+- Updated OpenAPI 3.1 specification (`architecture/api/openapi.yaml`), endpoint inventory (`architecture/api/endpoint_inventory.md`), and Diátaxis operator manuals.
+
+
 ## [0.11.0] - 2026-11-09
 
 ### Added
