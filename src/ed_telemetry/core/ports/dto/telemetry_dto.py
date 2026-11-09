@@ -166,6 +166,7 @@ class TelemetryQueryDTO(DataTransferObject):
     topic: str | None = None
     limit: int = 100
     order: str = "asc"
+    exclude_internal_topics: bool = False
 
 
 @dataclass(frozen=True, slots=True)

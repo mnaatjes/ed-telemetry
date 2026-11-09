@@ -191,7 +191,19 @@ class TestHttpApiAdapter:
                     latest_j = json.loads(resp.read().decode("utf-8"))
                     assert "Eravate" in latest_j["payload_json"]
 
-                # 18. Canonical /api/v1/journal/query (SQLite WAL header)
+                # 18a. Canonical /api/v1/journal/events (Strict Journal Plane)
+                with urllib.request.urlopen(f"{base_url}/api/v1/journal/events") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "sqlite-wal"
+                    assert resp.headers.get("X-Telemetry-Plane") == "journal"
+
+                # 18b. Canonical /api/v1/events/query (Unified Events Plane)
+                with urllib.request.urlopen(f"{base_url}/api/v1/events/query") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Source") == "sqlite-wal"
+                    assert resp.headers.get("X-Telemetry-Plane") == "events"
+
+                # 18c. Deprecated /api/v1/journal/query (Alias for journal/events)
                 with urllib.request.urlopen(f"{base_url}/api/v1/journal/query") as resp:
                     assert resp.status == 200
                     assert resp.headers.get("X-Telemetry-Source") == "sqlite-wal"

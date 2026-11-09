@@ -157,31 +157,52 @@ Retrieves a specific auxiliary game snapshot file (`Market`, `Cargo`, `NavRoute`
 
 ---
 
-### 2.4 Journal Events Plane
+### 2.4 Journal Plane
+
+The Journal Plane strictly isolates Frontier Developments `Journal.*.log` records and physical active journal log tails. It guarantees zero auxiliary file deltas or system lifecycle records.
 
 #### `GET /api/v1/journal/latest`
-Retrieves the most recent journal event from the active log tail.
+Retrieves the most recent journal event parsed directly from the active log tail.
 * **Storage Source:** `X-Telemetry-Source: memory-buffer`
 * **Plane:** `X-Telemetry-Plane: journal`
 * **Status:** `200 OK`
 
-#### `GET /api/v1/journal/query`
-Queries historical telemetry events persisted in SQLite.
+#### `GET /api/v1/journal/events`
+Queries historical Frontier Developments journal events persisted in SQLite. Automatically excludes internal daemon topics (`topic NOT LIKE 'telemetry.%'`).
 * **Storage Source:** `X-Telemetry-Source: sqlite-wal`
 * **Plane:** `X-Telemetry-Plane: journal`
-* **Legacy Alias (Deprecated):** `GET /api/v1/events`
+* **Legacy / Deprecated Aliases:** `GET /api/v1/journal/query`
 * **Query Parameters:**
   * `since_id` (integer, optional): Only events with `id > since_id`.
-  * `topic` (string, optional): Filter by topic (`telemetry.journal`, `telemetry.status`, `telemetry.snapshot`, `telemetry.audit`).
+  * `topic` (string, optional): Filter by journal event topic (e.g. `FSDJump`, `Docked`).
   * `limit` (integer, optional, default: `100`, max: `500`): Maximum events returned.
   * `order` (string, optional, default: `asc`): Sort order by record ID (`asc` or `desc`).
 * **Status:** `200 OK`
 * **Response:** Array of `TelemetryRecordDTO` objects.
 
-#### `GET /api/v1/journal/stream`
-Continuous Server-Sent Events (SSE) feed transmitting live telemetry and file delta events.
-* **Plane:** `X-Telemetry-Plane: journal`
-* **Legacy Alias (Deprecated):** `GET /api/v1/stream`
+---
+
+### 2.5 Events Plane
+
+The Events Plane provides cross-cutting access across the unified multi-topic event store, outbound queue buffer, and real-time Server-Sent Events (SSE) transmitter.
+
+#### `GET /api/v1/events/query`
+Queries the complete historical event store across all ingested topics (`journal.*`, `telemetry.file_delta`).
+* **Storage Source:** `X-Telemetry-Source: sqlite-wal`
+* **Plane:** `X-Telemetry-Plane: events`
+* **Legacy Alias (Deprecated):** `GET /api/v1/events`
+* **Query Parameters:**
+  * `since_id` (integer, optional): Only events with `id > since_id`.
+  * `topic` (string, optional): Filter by event topic.
+  * `limit` (integer, optional, default: `100`, max: `500`): Maximum events returned.
+  * `order` (string, optional, default: `asc`): Sort order by record ID (`asc` or `desc`).
+* **Status:** `200 OK`
+* **Response:** Array of `TelemetryRecordDTO` objects.
+
+#### `GET /api/v1/events/stream`
+Continuous Server-Sent Events (SSE) feed transmitting live telemetry and file delta events across all planes.
+* **Plane:** `X-Telemetry-Plane: events`
+* **Legacy / Deprecated Aliases:** `GET /api/v1/events/stream`, `GET /api/v1/journal/stream`, `GET /api/v1/stream`
 * **Headers:** `Content-Type: text/event-stream`, `Cache-Control: no-cache`.
 * **Payload Examples:**
   * **Initial Handshake:**
@@ -201,18 +222,19 @@ Continuous Server-Sent Events (SSE) feed transmitting live telemetry and file de
     data: {"topic": "telemetry.file_delta", "target": "Journal.2026-11-09T010000.02.log", "action": "rollover", "raw_hash": "", "timestamp": "2026-11-09T03:45:00+00:00"}
     ```
 
-#### `GET /api/v1/journal/queue`
-Retrieves and drains telemetry events currently buffered in the outbound in-memory ring queue.
+#### `GET /api/v1/events/queue`
+Retrieves and drains telemetry events currently buffered in the outbound in-memory ring queue across all topics.
 * **Storage Source:** `X-Telemetry-Source: memory-buffer`
-* **Plane:** `X-Telemetry-Plane: journal`
-* **Legacy Alias (Deprecated):** `GET /api/v1/events/buffer`
+* **Plane:** `X-Telemetry-Plane: events`
+* **Legacy / Deprecated Aliases:** `GET /api/v1/events/buffer`, `GET /api/v1/journal/queue`
 * **Query Parameters:**
   * `limit` (integer, optional, default: `100`, max: `500`): Maximum events to drain.
 * **Status:** `200 OK`
 
+
 ---
 
-### 2.5 System Plane
+### 2.6 System Plane
 
 #### `GET /api/v1/system/health`
 Health check endpoint reporting service operational status.

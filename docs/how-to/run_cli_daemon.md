@@ -181,7 +181,7 @@ ed-telemetry stream --topic telemetry.audit
 ed-telemetry stream --json
 ```
 
-* **When Daemon is Online:** Connects to the HTTP/SSE streaming endpoint (`/api/v1/journal/stream`, with backward-compatible alias `/api/v1/stream`) and yields inbound events in real time.
+* **When Daemon is Online:** Connects to the HTTP/SSE streaming endpoint (`/api/v1/events/stream`, with backward-compatible aliases `/api/v1/journal/stream` and `/api/v1/stream`) and yields inbound events in real time.
 * **When Daemon is Offline:** Activates a local, standalone `FileSystemWatcher` streaming lifecycle, streaming events directly from the journal files until terminated with `Ctrl+C`.
 
 ---

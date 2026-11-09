@@ -23,9 +23,10 @@ The architecture implements a dual-plane model decoupling the in-memory state sy
 | `/api/v1/snapshots` | `GET` | `snapshots` | `memory-buffer` | N/A | Dictionary of all 9 registered auxiliary snapshots (`Market`, `Cargo`, `NavRoute`, `ModulesInfo`, `Outfitting`, `Shipyard`, `Backpack`, `ShipLocker`, `FCMaterials`). |
 | `/api/v1/snapshots/{name}` | `GET` | `snapshots` | `memory-buffer` | `404` | Single auxiliary game snapshot payload, `is_live_session` freshness indicator, and SHA-256 hash. |
 | `/api/v1/journal/latest` | `GET` | `journal` | `memory-buffer` | N/A | Most recent journal event read directly from the active log tail buffer. |
-| `/api/v1/journal/query` | `GET` | `journal` | `sqlite-wal` | `400` | Historical persisted telemetry query across SQLite WAL index (`since_id`, `topic`, `limit`, `order`). |
-| `/api/v1/journal/stream` | `GET` | `journal` | `memory-buffer` | `429` | Server-Sent Events (SSE) live push stream for journal lines (`telemetry.journal`) and file delta events (`telemetry.file_delta`). Enforces connection tracker guardrail (`429 Too Many Requests`). |
-| `/api/v1/journal/queue` | `GET` | `journal` | `memory-buffer` | N/A | Drains outbound in-memory ring queue buffer. |
+| `/api/v1/journal/events` | `GET` | `journal` | `sqlite-wal` | `400` | Historical journal event query across SQLite WAL index (`since_id`, `topic`, `limit`, `order`). Strictly excludes internal system notifications and auxiliary file deltas. |
+| `/api/v1/events/query` | `GET` | `events` | `sqlite-wal` | `400` | Unified event query across SQLite WAL index covering all ingestion topics (`journal.*`, `telemetry.file_delta`). |
+| `/api/v1/events/queue` | `GET` | `events` | `memory-buffer` | N/A | Drains uncommitted batch events from the transmission ring buffer across all topics. |
+| `/api/v1/events/stream` | `GET` | `events` | `memory-buffer` | `429` | Server-Sent Events (SSE) live push stream for journal lines (`telemetry.journal`) and file delta events (`telemetry.file_delta`). Enforces connection tracker guardrail (`429 Too Many Requests`). |
 | `/api/v1/system/health` | `GET` | `system` | `memory-buffer` | N/A | Unauthenticated service liveness check (`{"status": "ok", "service": "ed-telemetry"}`). |
 | `/api/v1/system/watcher` | `GET` | `system` | `memory-buffer` | `503` | Ingestion watcher operational metrics (active journal file, monitored directory, active status). |
 | `/api/v1/system/logs` | `GET` | `system` | `memory-buffer` | N/A | Queries thread-safe in-memory diagnostic log ring buffer (`min_level`, `limit`). |
@@ -41,9 +42,12 @@ For seamless backward compatibility with v0.x clients, all legacy routes are mai
 | :--- | :--- | :--- |
 | `GET /api/v1/telemetry/head` | `GET /api/v1/state` | Directly dispatches to state hydration handler with zero DB calls. |
 | `GET /api/v1/status/game` | `GET /api/v1/status` | Dispatches to cockpit status handler. |
-| `GET /api/v1/events` | `GET /api/v1/journal/query` | Dispatches to SQLite historical query handler. |
-| `GET /api/v1/events/buffer` | `GET /api/v1/journal/queue` | Dispatches to in-memory queue drain handler. |
-| `GET /api/v1/stream` | `GET /api/v1/journal/stream` | Dispatches to SSE streaming handler. |
+| `GET /api/v1/journal/query` | `GET /api/v1/journal/events` | Dispatches to journal events query handler with internal topic exclusion. |
+| `GET /api/v1/journal/queue` | `GET /api/v1/events/queue` | Dispatches to unified queue drain handler. |
+| `GET /api/v1/journal/stream` | `GET /api/v1/events/stream` | Dispatches to unified SSE streaming handler. |
+| `GET /api/v1/events` | `GET /api/v1/events/query` | Dispatches to SQLite unified historical query handler. |
+| `GET /api/v1/events/buffer` | `GET /api/v1/events/queue` | Dispatches to in-memory queue drain handler. |
+| `GET /api/v1/stream` | `GET /api/v1/events/stream` | Dispatches to SSE streaming handler. |
 | `GET /api/v1/health` | `GET /api/v1/system/health` | Dispatches to system health check. |
 | `GET /api/v1/diagnostics/logs` | `GET /api/v1/system/logs` | Dispatches to diagnostic logs handler. |
 | `POST /api/v1/control/watch` | `POST /api/v1/system/control` | Dispatches to system control handler. |
