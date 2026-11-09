@@ -417,8 +417,9 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # 8. Journal Query: /api/v1/journal/query (Canonical) & /api/v1/events (Legacy)
-        if path in ("/api/v1/journal/query", "/api/v1/events"):
+        # 8a. Journal Events (Strict Frontier Journal Records)
+        # Canonical: /api/v1/journal/events | Deprecated: /api/v1/journal/query
+        if path in ("/api/v1/journal/events", "/api/v1/journal/query"):
             since_id = int(query["since_id"][0]) if "since_id" in query else None
             topic = query["topic"][0] if "topic" in query else None
             order = (
@@ -427,7 +428,13 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                 else "asc"
             )
             limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
-            q_dto = TelemetryQueryDTO(since_id=since_id, topic=topic, limit=limit, order=order)
+            q_dto = TelemetryQueryDTO(
+                since_id=since_id,
+                topic=topic,
+                limit=limit,
+                order=order,
+                exclude_internal_topics=True,
+            )
             records = self.find_events_port.find_events(q_dto)
             self._send_json(
                 200,
@@ -437,20 +444,47 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # 9. Journal Queue: /api/v1/journal/queue (Canonical) & /api/v1/events/buffer (Legacy)
-        if path in ("/api/v1/journal/queue", "/api/v1/events/buffer"):
+        # 8b. Events Query (Unified Multi-Topic Ingestion History)
+        # Canonical: /api/v1/events/query | Legacy: /api/v1/events
+        if path in ("/api/v1/events/query", "/api/v1/events"):
+            since_id = int(query["since_id"][0]) if "since_id" in query else None
+            topic = query["topic"][0] if "topic" in query else None
+            order = (
+                query["order"][0].lower()
+                if "order" in query and query["order"][0].lower() in ("asc", "desc")
+                else "asc"
+            )
+            limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
+            q_dto = TelemetryQueryDTO(
+                since_id=since_id,
+                topic=topic,
+                limit=limit,
+                order=order,
+                exclude_internal_topics=False,
+            )
+            records = self.find_events_port.find_events(q_dto)
+            self._send_json(
+                200,
+                [asdict(r) for r in records],
+                source="sqlite-wal",
+                plane="events",
+            )
+            return
+
+        # 9. Events Queue: /api/v1/events/queue (Canonical), /api/v1/journal/queue, & /api/v1/events/buffer
+        if path in ("/api/v1/events/queue", "/api/v1/journal/queue", "/api/v1/events/buffer"):
             limit = _parse_clamped_limit(query, default=100, min_val=1, max_val=500)
             batch = self.get_events_port.get_events(limit=limit)
             self._send_json(
                 200,
                 asdict(batch),
                 source="memory-buffer",
-                plane="journal",
+                plane="events",
             )
             return
 
-        # 10. Journal Stream: /api/v1/journal/stream (Canonical) & /api/v1/stream (Legacy)
-        if path in ("/api/v1/journal/stream", "/api/v1/stream"):
+        # 10. Events Stream: /api/v1/events/stream (Canonical), /api/v1/journal/stream, & /api/v1/stream
+        if path in ("/api/v1/events/stream", "/api/v1/journal/stream", "/api/v1/stream"):
             self._handle_sse_stream()
             return
 

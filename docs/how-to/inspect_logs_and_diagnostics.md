@@ -99,9 +99,9 @@ ed-telemetry stream --topic telemetry.audit
 ```
 
 ### Live SSE HTTP Subscription
-Subscribe using `curl` via the canonical `/api/v1/journal/stream` endpoint (legacy alias `/api/v1/stream` is also supported):
+Subscribe using `curl` via the canonical `/api/v1/events/stream` endpoint (legacy aliases `/api/v1/journal/stream` and `/api/v1/stream` are also supported):
 ```bash
-curl -N http://127.0.0.1:8080/api/v1/journal/stream
+curl -N http://127.0.0.1:8080/api/v1/events/stream
 ```
 
 Example SSE frame:

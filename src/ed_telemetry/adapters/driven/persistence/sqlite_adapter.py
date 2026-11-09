@@ -153,6 +153,8 @@ class SqliteRepositoryAdapter(TelemetryRepositoryPort):
         if query.topic is not None:
             clauses.append("topic = ?")
             params.append(query.topic)
+        elif query.exclude_internal_topics:
+            clauses.append("topic NOT LIKE 'telemetry.%'")
 
         where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         order_dir = "DESC" if getattr(query, "order", "asc").lower() == "desc" else "ASC"

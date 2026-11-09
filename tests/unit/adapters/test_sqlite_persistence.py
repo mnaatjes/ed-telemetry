@@ -59,6 +59,18 @@ class TestSqlitePersistence:
             assert len(since_records) == 1
             assert since_records[0].id == 2
 
+            # Query with exclude_internal_topics
+            journal_only = repo.find_events(TelemetryQueryDTO(exclude_internal_topics=True))
+            # Neither telemetry.journal nor telemetry.status match topic NOT LIKE 'telemetry.%'
+            assert len(journal_only) == 0
+
+            # Insert an authentic journal event topic (e.g. FSDJump)
+            t_journal = datetime(2026, 10, 25, 12, 0, 2, tzinfo=UTC)
+            egress.send(TelemetryPayloadDTO(topic="FSDJump", timestamp=t_journal, payload_bytes=b'{"event":"FSDJump"}'))
+            journal_only_2 = repo.find_events(TelemetryQueryDTO(exclude_internal_topics=True))
+            assert len(journal_only_2) == 1
+            assert journal_only_2[0].topic == "FSDJump"
+
             # Query latest event
             latest = repo.get_latest_event("telemetry.status")
             assert latest is not None

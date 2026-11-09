@@ -89,16 +89,16 @@ ETag: W/"14"
 > [!TIP]
 > The `is_live_session` boolean indicates whether a snapshot was updated during active gameplay (`true`) or preloaded cold from disk before gameplay began (`false`).
 
-### Phase 2: Reactive Push Stream (`GET /api/v1/journal/stream`)
+### Phase 2: Reactive Push Stream (`GET /api/v1/events/stream`)
 Subscribe to the continuous Server-Sent Events (SSE) stream for live updates:
 
 ```bash
-curl -N http://127.0.0.1:8080/api/v1/journal/stream
+curl -N http://127.0.0.1:8080/api/v1/events/stream
 ```
 
 JavaScript browser/desktop example:
 ```javascript
-const eventSource = new EventSource("http://127.0.0.1:8080/api/v1/journal/stream");
+const eventSource = new EventSource("http://127.0.0.1:8080/api/v1/events/stream");
 
 eventSource.onmessage = (event) => {
   const telemetry = JSON.parse(event.data);
@@ -182,19 +182,32 @@ Response:
 
 ---
 
-## 4. Querying Historical Telemetry (`GET /api/v1/journal/query`)
+## 4. Querying Historical Telemetry
 
-Query persisted SQLite records with filtering:
+### 4.1 Frontier Journal Events (`GET /api/v1/journal/events`)
+
+Query persisted SQLite records strictly for Frontier Developments journal events (automatically filtering out internal system records and auxiliary file deltas):
 
 ```bash
-# Query latest 10 events
-curl "http://127.0.0.1:8080/api/v1/journal/query?limit=10"
+# Query latest 10 journal events
+curl "http://127.0.0.1:8080/api/v1/journal/events?limit=10"
 
-# Filter by topic
-curl "http://127.0.0.1:8080/api/v1/journal/query?topic=telemetry.journal&limit=50"
+# Filter by journal topic
+curl "http://127.0.0.1:8080/api/v1/journal/events?topic=FSDJump&limit=5"
 
 # Fetch events newer than sequential ID 42
-curl "http://127.0.0.1:8080/api/v1/journal/query?since_id=42&limit=50"
+curl "http://127.0.0.1:8080/api/v1/journal/events?since_id=42&limit=50"
+```
+
+*(Note: Legacy alias `GET /api/v1/journal/query` remains supported for backward compatibility).*
+
+### 4.2 Unified Event Store (`GET /api/v1/events/query`)
+
+Query the entire ingestion event log across all topics, including companion file deltas (`telemetry.file_delta`):
+
+```bash
+# Query all historical records across all planes
+curl "http://127.0.0.1:8080/api/v1/events/query?limit=20&order=desc"
 ```
 
 *(Note: Legacy alias `GET /api/v1/events` remains supported).*

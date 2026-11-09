@@ -143,10 +143,56 @@ paths:
                 $ref: '#/components/schemas/TelemetryRecord'
                 nullable: true
 
-  /api/v1/journal/query:
+  /api/v1/journal/events:
     get:
       summary: Query historical journal events
-      description: Queries the persistent SQLite database in WAL mode with indexing.
+      description: |
+        Queries the persistent SQLite database strictly for Frontier Developments journal events.
+        Automatically excludes internal system notifications and auxiliary file deltas.
+      parameters:
+        - name: topic
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by journal event topic (e.g. FSDJump, Docked).
+        - name: since_id
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Filter records with ID greater than this value.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+          description: Maximum number of records to return.
+        - name: order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+          description: Sort ordering by record ID.
+      responses:
+        '200':
+          description: Array of journal telemetry records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TelemetryRecord'
+
+  /api/v1/events/query:
+    get:
+      summary: Query unified historical telemetry event store
+      description: |
+        Queries the persistent SQLite database across all ingestion topics, including journal lines
+        and system/watcher file delta notifications (`telemetry.file_delta`).
       parameters:
         - name: topic
           in: query
@@ -185,10 +231,10 @@ paths:
                 items:
                   $ref: '#/components/schemas/TelemetryRecord'
 
-  /api/v1/journal/queue:
+  /api/v1/events/queue:
     get:
-      summary: Read and drain buffered queue
-      description: Retrieves and drains events currently held in the in-memory ring buffer.
+      summary: Read and drain buffered events queue
+      description: Retrieves and drains uncommitted events currently held in the in-memory ring buffer across all topics.
       parameters:
         - name: limit
           in: query
@@ -204,7 +250,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TelemetryBatch'
 
-  /api/v1/journal/stream:
+  /api/v1/events/stream:
     get:
       summary: Real-time Server-Sent Events (SSE) feed
       description: |
@@ -213,7 +259,7 @@ paths:
         and file delta notifications (`telemetry.file_delta`).
       responses:
         '200':
-          description: Live SSE event stream.
+          description: Live SSE event stream across all planes.
           content:
             text/event-stream:
               schema:
