@@ -196,6 +196,10 @@ Continuous Server-Sent Events (SSE) feed transmitting live telemetry and file de
     ```text
     data: {"topic": "telemetry.file_delta", "target": "ModulesInfo.json", "action": "modified", "raw_hash": "43ef64b8e02f00b2", "timestamp": "2026-11-09T00:20:00+00:00"}
     ```
+  * **Journal Rollover Notification (`telemetry.file_delta`):**
+    ```text
+    data: {"topic": "telemetry.file_delta", "target": "Journal.2026-11-09T010000.02.log", "action": "rollover", "raw_hash": "", "timestamp": "2026-11-09T03:45:00+00:00"}
+    ```
 
 #### `GET /api/v1/journal/queue`
 Retrieves and drains telemetry events currently buffered in the outbound in-memory ring queue.

@@ -147,6 +147,35 @@ class TestProcessTelemetryStreamUseCase:
         assert b"Rotated to new segment" in payload.payload_bytes
         assert ("action", "file_rotation") in payload.metadata
 
+    def test_journal_rollover_emits_file_delta(self) -> None:
+        import json
+
+        from ed_telemetry.core.ports.dto.telemetry_dto import WatcherAuditEventDTO
+
+        watcher = FakeWatcherAdapter()
+        egress = FakeEgressAdapter()
+        _use_case = ProcessTelemetryStreamUseCase(watcher=watcher, egress=egress)
+
+        now = datetime.now(UTC)
+        audit_event = WatcherAuditEventDTO(
+            timestamp=now,
+            action="part_rollover",
+            target_path="/tmp/Journal.2026-11-09T010000.02.log",
+            detail="Rotated to part 2",
+        )
+
+        watcher.emit_test_audit(audit_event)
+
+        assert len(egress.sent_payloads) == 2
+        audit_payload = egress.sent_payloads[0]
+        assert audit_payload.topic == "telemetry.audit"
+
+        delta_payload = egress.sent_payloads[1]
+        assert delta_payload.topic == "telemetry.file_delta"
+        delta_data = json.loads(delta_payload.payload_bytes.decode("utf-8"))
+        assert delta_data["target"] == "Journal.2026-11-09T010000.02.log"
+        assert delta_data["action"] == "rollover"
+
 
 class TestSyncJournalSnapshotUseCase:
     """Verifies SyncJournalSnapshotUseCase executes snapshot sync."""
