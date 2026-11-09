@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-09
+
 ### Fixed
 - Routed canonical `/api/v1/status` endpoint directly to `Status.json` cockpit telemetry (`GetLatestGameStatusPort`), correcting a routing regression where it formerly resolved to watcher operational metrics (`#106`).
 - Retained `/api/v1/status/game` as a backward-compatible alias and ensured `/api/v1/system/watcher` strictly serves watcher operational status (`#106`).
