@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-09
+
 ### Added
 - Lightweight Server-Sent Events (SSE) push notification stream (`telemetry.file_delta`) on `/api/v1/stream` and `/api/v1/journal/stream` for companion status and auxiliary snapshot files (ADR 0039, SDD-034, #103).
 - Implemented claim-check notification pattern broadcasting `target`, `action`, and `raw_hash` metadata over the event stream with zero payload bloat (ADR 0039, SDD-034, #103).
