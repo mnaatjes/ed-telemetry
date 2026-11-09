@@ -289,9 +289,20 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # 4. Status.json: /api/v1/status/game
-        if path == "/api/v1/status/game":
+        # 4. Status.json: /api/v1/status (Canonical) & /api/v1/status/game (Legacy Alias)
+        if path in ("/api/v1/status", "/api/v1/status/game"):
             if not self.game_status_port:
+                # Fallback to watcher status if game_status_port is not wired (e.g. unit tests)
+                if self.watcher_status_port:
+                    status_dto = self.watcher_status_port.get_status()
+                    self._send_json(
+                        200,
+                        asdict(status_dto),
+                        source="memory-buffer",
+                        plane="system",
+                    )
+                    return
+
                 self._send_problem(
                     status_code=503,
                     title="Service Unavailable",
@@ -312,8 +323,8 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # 4b. Watcher Status: /api/v1/system/watcher (Canonical) & /api/v1/status (Legacy)
-        if path in ("/api/v1/system/watcher", "/api/v1/status"):
+        # 4b. Watcher Status: /api/v1/system/watcher (Canonical)
+        if path == "/api/v1/system/watcher":
             if not self.watcher_status_port:
                 self._send_problem(
                     status_code=503,
