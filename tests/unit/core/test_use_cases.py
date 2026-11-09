@@ -86,6 +86,42 @@ class TestProcessTelemetryStreamUseCase:
         assert payload.payload_bytes == b'{"event":"Docked"}'
         assert payload.timestamp == now
 
+    def test_snapshot_event_emits_file_delta_notification(self) -> None:
+        import json
+
+        watcher = FakeWatcherAdapter()
+        egress = FakeEgressAdapter()
+        _use_case = ProcessTelemetryStreamUseCase(watcher=watcher, egress=egress)
+
+        now = datetime.now(UTC)
+        event = FileIngestionEventDTO(
+            event_id=uuid4(),
+            timestamp=now,
+            file_kind="snapshot",
+            target_path="/tmp/ModulesInfo.json",
+            raw_payload=b'{"event":"ModuleInfo"}',
+            start_offset=0,
+            end_offset=22,
+            line_number=None,
+            part=None,
+            raw_hash="hash_modules_42",
+        )
+
+        watcher.emit_test_event(event)
+
+        # Emits raw snapshot payload plus lightweight telemetry.file_delta
+        assert len(egress.sent_payloads) == 2
+        raw_payload = egress.sent_payloads[0]
+        assert raw_payload.topic == "telemetry.snapshot"
+
+        delta_payload = egress.sent_payloads[1]
+        assert delta_payload.topic == "telemetry.file_delta"
+        delta_data = json.loads(delta_payload.payload_bytes.decode("utf-8"))
+        assert delta_data["topic"] == "telemetry.file_delta"
+        assert delta_data["target"] == "ModulesInfo.json"
+        assert delta_data["action"] == "modified"
+        assert delta_data["raw_hash"] == "hash_modules_42"
+
     def test_audit_handler_transforms_and_forwards_to_egress(self) -> None:
         from ed_telemetry.core.ports.dto.telemetry_dto import WatcherAuditEventDTO
 

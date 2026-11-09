@@ -179,14 +179,23 @@ Queries historical telemetry events persisted in SQLite.
 * **Response:** Array of `TelemetryRecordDTO` objects.
 
 #### `GET /api/v1/journal/stream`
-Continuous Server-Sent Events (SSE) feed transmitting live telemetry and audit events.
+Continuous Server-Sent Events (SSE) feed transmitting live telemetry and file delta events.
 * **Plane:** `X-Telemetry-Plane: journal`
 * **Legacy Alias (Deprecated):** `GET /api/v1/stream`
 * **Headers:** `Content-Type: text/event-stream`, `Cache-Control: no-cache`.
-* **Payload:**
-  ```text
-  data: {"topic": "telemetry.journal", "timestamp": "2026-10-25T16:00:00+00:00", "payload": "{\"event\":\"FSDJump\"}"}
-  ```
+* **Payload Examples:**
+  * **Initial Handshake:**
+    ```text
+    data: {"event":"connected"}
+    ```
+  * **Journal Line Append (`telemetry.journal`):**
+    ```text
+    data: {"topic": "telemetry.journal", "timestamp": "2026-10-25T16:00:00+00:00", "payload": "{\"event\":\"FSDJump\"}"}
+    ```
+  * **File Delta Notification (`telemetry.file_delta`):**
+    ```text
+    data: {"topic": "telemetry.file_delta", "target": "ModulesInfo.json", "action": "modified", "raw_hash": "43ef64b8e02f00b2", "timestamp": "2026-11-09T00:20:00+00:00"}
+    ```
 
 #### `GET /api/v1/journal/queue`
 Retrieves and drains telemetry events currently buffered in the outbound in-memory ring queue.

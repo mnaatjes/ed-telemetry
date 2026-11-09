@@ -43,6 +43,26 @@ class ProcessTelemetryStreamUseCase(ProcessTelemetryStreamPort):
         )
         self._egress.send(payload)
 
+        # Emit lightweight claim-check delta notification for companion files
+        if event.file_kind in ("status", "snapshot"):
+            from pathlib import Path
+
+            target_filename = Path(event.target_path).name
+            delta_dict = {
+                "topic": "telemetry.file_delta",
+                "target": target_filename,
+                "action": "modified",
+                "raw_hash": event.raw_hash,
+                "timestamp": event.timestamp.isoformat(),
+            }
+            delta_payload = TelemetryPayloadDTO(
+                topic="telemetry.file_delta",
+                timestamp=event.timestamp,
+                payload_bytes=json.dumps(delta_dict).encode("utf-8"),
+                metadata=(("target", target_filename), ("hash", event.raw_hash)),
+            )
+            self._egress.send(delta_payload)
+
     def _handle_audit_event(self, event: WatcherAuditEventDTO) -> None:
         """Normalize watcher audit/error event into telemetry.audit payload."""
         event_dict = {
