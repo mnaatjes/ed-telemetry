@@ -207,7 +207,10 @@ paths:
   /api/v1/journal/stream:
     get:
       summary: Real-time Server-Sent Events (SSE) feed
-      description: Yields real-time events as they are emitted by the ingestion pipeline.
+      description: |
+        Yields real-time events as they are emitted by the ingestion pipeline.
+        Transmits initial handshake (`connected`), live journal entries (`telemetry.journal`),
+        and file delta notifications (`telemetry.file_delta`).
       responses:
         '200':
           description: Live SSE event stream.

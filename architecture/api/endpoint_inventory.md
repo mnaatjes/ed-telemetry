@@ -24,7 +24,7 @@ The architecture implements a dual-plane model decoupling the in-memory state sy
 | `/api/v1/snapshots/{name}` | `GET` | `snapshots` | `memory-buffer` | `404` | Single auxiliary game snapshot payload, `is_live_session` freshness indicator, and SHA-256 hash. |
 | `/api/v1/journal/latest` | `GET` | `journal` | `memory-buffer` | N/A | Most recent journal event read directly from the active log tail buffer. |
 | `/api/v1/journal/query` | `GET` | `journal` | `sqlite-wal` | `400` | Historical persisted telemetry query across SQLite WAL index (`since_id`, `topic`, `limit`, `order`). |
-| `/api/v1/journal/stream` | `GET` | `journal` | `memory-buffer` | `429` | Server-Sent Events (SSE) live push stream. Enforces connection tracker guardrail (`429 Too Many Requests`). |
+| `/api/v1/journal/stream` | `GET` | `journal` | `memory-buffer` | `429` | Server-Sent Events (SSE) live push stream for journal lines (`telemetry.journal`) and file delta events (`telemetry.file_delta`). Enforces connection tracker guardrail (`429 Too Many Requests`). |
 | `/api/v1/journal/queue` | `GET` | `journal` | `memory-buffer` | N/A | Drains outbound in-memory ring queue buffer. |
 | `/api/v1/system/health` | `GET` | `system` | `memory-buffer` | N/A | Unauthenticated service liveness check (`{"status": "ok", "service": "ed-telemetry"}`). |
 | `/api/v1/system/watcher` | `GET` | `system` | `memory-buffer` | `503` | Ingestion watcher operational metrics (active journal file, monitored directory, active status). |

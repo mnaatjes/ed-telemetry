@@ -584,11 +584,21 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
 
             try:
                 for payload in self.stream_events_port.stream_events(timeout=0.5):
-                    msg = {
-                        "topic": payload.topic,
-                        "timestamp": payload.timestamp.isoformat(),
-                        "payload": payload.payload_bytes.decode("utf-8", errors="replace"),
-                    }
+                    if payload.topic == "telemetry.file_delta":
+                        try:
+                            msg = json.loads(payload.payload_bytes.decode("utf-8"))
+                        except Exception:
+                            msg = {
+                                "topic": payload.topic,
+                                "timestamp": payload.timestamp.isoformat(),
+                                "payload": payload.payload_bytes.decode("utf-8", errors="replace"),
+                            }
+                    else:
+                        msg = {
+                            "topic": payload.topic,
+                            "timestamp": payload.timestamp.isoformat(),
+                            "payload": payload.payload_bytes.decode("utf-8", errors="replace"),
+                        }
                     data_line = f"data: {json.dumps(msg)}\n\n".encode()
                     self.wfile.write(data_line)
                     self.wfile.flush()
