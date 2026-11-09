@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Emitted `telemetry.file_delta` stream notifications for journal lifecycle binding (`action: "created"`) and multi-part rollover rotations (`action: "rollover"`) on `/api/v1/stream` and `/api/v1/journal/stream` (ADR 0040, #104).
+
+### Documentation
+- Authored ADR 0040: Journal Lifecycle and Part Rollover File Delta Stream Events (`architecture/adr/0040_journal_lifecycle_file_delta_events.md`) detailing the claim-check notification pattern for journal rotations without payload bloating (ADR 0040, #104).
+- Updated operator reference manual (`docs/reference/http_api_endpoints.md`) with SSE stream payload contracts for journal file deltas (ADR 0040, #104).
+
+
 ## [0.10.0] - 2026-11-09
 
 ### Added
