@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-09
+
 ### Added
 - Emitted `telemetry.file_delta` stream notifications for journal lifecycle binding (`action: "created"`) and multi-part rollover rotations (`action: "rollover"`) on `/api/v1/stream` and `/api/v1/journal/stream` (ADR 0040, #104).
 
