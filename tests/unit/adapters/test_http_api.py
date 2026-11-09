@@ -39,17 +39,27 @@ class TestHttpApiAdapter:
                     data = json.loads(resp.read().decode("utf-8"))
                     assert data["status"] == "ok"
 
-                # 2. /api/v1/status
+                # 2. Canonical /api/v1/status (Cockpit Status.json)
                 with urllib.request.urlopen(f"{base_url}/api/v1/status") as resp:
                     assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Plane") == "status"
                     status_data = json.loads(resp.read().decode("utf-8"))
-                    assert status_data["is_active"] is False
+                    assert status_data["exists"] is True
+                    assert "Flags" in status_data["raw_payload"]
 
-                # 3. /api/v1/status/game
+                # 3. Legacy /api/v1/status/game (Cockpit Status.json alias)
                 with urllib.request.urlopen(f"{base_url}/api/v1/status/game") as resp:
                     assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Plane") == "status"
                     game_data = json.loads(resp.read().decode("utf-8"))
                     assert game_data["exists"] is True
+
+                # 3b. Canonical /api/v1/system/watcher (Watcher Operational Metrics)
+                with urllib.request.urlopen(f"{base_url}/api/v1/system/watcher") as resp:
+                    assert resp.status == 200
+                    assert resp.headers.get("X-Telemetry-Plane") == "system"
+                    watcher_data = json.loads(resp.read().decode("utf-8"))
+                    assert watcher_data["is_active"] is False
 
                 # 4. /api/v1/control/watch (start)
                 req = urllib.request.Request(
