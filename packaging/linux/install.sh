@@ -20,13 +20,14 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 if curl -fsSL "$RELEASE_URL" -o "${TMP_DIR}/ed-telemetry.tar.gz" 2>/dev/null; then
+  rm -f "${BIN_DIR}/ed-telemetry"
   tar -xzf "${TMP_DIR}/ed-telemetry.tar.gz" -C "$BIN_DIR"
   chmod +x "${BIN_DIR}/ed-telemetry"
 else
   if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
   fi
-  uv tool install --upgrade git+https://github.com/mnaatjes/ed-telemetry.git
+  uv tool install --upgrade --force git+https://github.com/mnaatjes/ed-telemetry.git
 fi
 
 # 3. Register & 4. Start
