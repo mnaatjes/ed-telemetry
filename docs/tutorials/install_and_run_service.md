@@ -28,7 +28,7 @@ This tutorial walks through installing `ed-telemetry` (`v1.0.0+`) as a persisten
 ## 2. Windows
 
 1. Download and run `ed-telemetry-setup.exe` from the GitHub Release (built from `packaging/windows/ed-telemetry.iss`).
-2. The installer places `ed-telemetry.exe` in `%LOCALAPPDATA%\Programs\ed-telemetry` and registers the `ed-telemetry` logon task (`ed-telemetry --no-auth`).
+2. The installer places `ed-telemetry.exe` in `%LOCALAPPDATA%\Programs\ed-telemetry` and registers the `ed-telemetry` logon task (`ed-telemetry serve --host 0.0.0.0 --allow-insecure`).
 
 ## 3. Managing the Service
 
