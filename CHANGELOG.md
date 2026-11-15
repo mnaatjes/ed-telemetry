@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.2] - 2026-11-09
+## [1.0.3] - 2026-11-15
+
+### Fixed
+- Wired `ed-telemetry service {install,start,stop,status,uninstall}` into `CliDrivingAdapter` (`#111`).
+- Added `scripts/test_installers.py` to verify Linux/Windows installer artifacts and `service` CLI wiring.
 
 ## [1.0.2] - 2026-11-15
 
