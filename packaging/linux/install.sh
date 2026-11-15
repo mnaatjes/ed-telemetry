@@ -32,4 +32,30 @@ fi
 
 # 3. Register & 4. Start
 ed-telemetry service install
-echo "ed-telemetry installed and started."
+
+# 5. Post-install health check & summary
+HEALTH_JSON=""
+for _ in $(seq 1 10); do
+  if HEALTH_JSON="$(curl -fsS "$HEALTH_URL" 2>/dev/null)"; then
+    break
+  fi
+  sleep 0.5
+done
+
+if [[ -z "$HEALTH_JSON" ]]; then
+  echo "ERROR: ed-telemetry failed to respond at $HEALTH_URL" >&2
+  echo "Check logs: journalctl --user -u ed-telemetry.service -n 20 --no-pager" >&2
+  exit 1
+fi
+
+LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+echo ""
+echo "ed-telemetry installed and running!"
+echo "  Health:   $HEALTH_JSON"
+echo "  Local:    http://127.0.0.1:8080"
+if [[ -n "$LAN_IP" ]]; then
+  echo "  LAN:      http://${LAN_IP}:8080"
+fi
+echo "  Security: --allow-insecure (no API key required)"
+echo "  Status:   systemctl --user status ed-telemetry.service"
+echo "  Logs:     journalctl --user -u ed-telemetry.service -f"

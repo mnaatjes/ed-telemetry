@@ -239,6 +239,7 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
                     "status": "ok",
                     "service": "ed-telemetry",
                     "version": __version__,
+                    "db": {"ok": True},
                     "journal_dir": {"configured": True},
                 },
                 source="memory-buffer",
