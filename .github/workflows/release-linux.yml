@@ -1,0 +1,36 @@
+name: Release Linux Standalone Bundle
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m pip install -e .
+
+      - name: Build standalone binary
+        run: pyinstaller packaging/linux/ed-telemetry.spec
+
+      - name: Package tarball
+        run: |
+          tar -czf ed-telemetry-linux-x86_64.tar.gz -C dist ed-telemetry
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ed-telemetry-linux-x86_64.tar.gz
