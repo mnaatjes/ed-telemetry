@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.6] - 2026-11-09
+## [1.0.7] - 2026-11-15
+
+### Added
+- Authored [ADR 0044](architecture/adr/0044_installer_post_install_verification_and_ux.md) and [SDD 0038](architecture/designs/0038_installer_post_install_verification_and_ux.md) for installer post-install verification and operator UX (`#116`).
+- Added `"db": {"ok": True}` readiness reporting to `/api/v1/system/health` and `/api/v1/health`.
+- Added post-install health polling and summary banner (local/LAN URLs, `--allow-insecure` notice, status/log commands) to `packaging/linux/install.sh`.
 
 ## [1.0.6] - 2026-11-15
 
