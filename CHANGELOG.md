@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-11-09
+## [1.0.1] - 2026-11-15
+
+### Added
+- Authored [ADR 0043](architecture/adr/0043_linux_standalone_bundle_and_release_pipeline.md) and [SDD 0037](architecture/designs/0037_linux_standalone_bundle_and_installer.md) for Linux standalone executable bundling (`#109`).
+- Added PyInstaller spec (`packaging/linux/ed-telemetry.spec`) and GitHub Actions workflow (`.github/workflows/release-linux.yml`) to build and attach `ed-telemetry-linux-x86_64.tar.gz` on `v*` tags.
+- Updated `packaging/linux/install.sh` to download the standalone Linux release tarball or automatically bootstrap `uv` if missing.
 
 ## [1.0.0] - 2026-11-15
 
