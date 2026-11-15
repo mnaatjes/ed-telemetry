@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.5] - 2026-11-09
+## [1.0.6] - 2026-11-15
+
+### Fixed
+- Configured `install_service()` to launch `ed-telemetry serve --host 0.0.0.0 --allow-insecure` and use `sys.executable` when frozen (`#115`).
+- Updated `docs/tutorials/install_and_run_service.md` with the `serve --host 0.0.0.0 --allow-insecure` flags.
 
 ## [1.0.5] - 2026-11-15
 
