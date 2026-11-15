@@ -30,7 +30,10 @@ def install_service(exec_start: str | None = None) -> list[str]:
     import shutil
 
     if exec_start is None:
-        exe = shutil.which("ed-telemetry") or str(Path.home() / ".local" / "bin" / "ed-telemetry")
+        if getattr(sys, "frozen", False):
+            exe = sys.executable
+        else:
+            exe = shutil.which("ed-telemetry") or str(Path.home() / ".local" / "bin" / "ed-telemetry")
         exec_start = f"{exe} serve --host 0.0.0.0 --allow-insecure"
 
     if sys.platform == "win32":
