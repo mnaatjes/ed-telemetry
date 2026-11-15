@@ -65,9 +65,17 @@ src/ed_telemetry/
 
 ## 2. Installation & Quick Start
 
-Requires **Python 3.11+** with **zero runtime third-party dependencies**.
+Requires **Python 3.11+** with **zero runtime third-party dependencies** (or use the standalone OS installers below).
 
-### Option A: Install via Pip Directly from GitHub (Recommended for Operators)
+### One-Click OS Service Installers (Recommended for End Users)
+- **Linux / SteamOS:**
+  ```bash
+  bash packaging/linux/install.sh
+  ```
+  Probes for an existing instance, installs via `uv tool install`, and registers/starts `systemd --user` (`ed-telemetry --no-auth` by default).
+- **Windows:** Run `ed-telemetry-setup.exe` (built from `packaging/windows/ed-telemetry.iss`) to install and register the `ed-telemetry` logon task.
+
+### Option A: Install via Pip Directly from GitHub (Operators / Developers)
 Install the latest release directly into your active Python environment or toolchain:
 ```bash
 pip install git+https://github.com/mnaatjes/ed-telemetry.git@v1.0.0
