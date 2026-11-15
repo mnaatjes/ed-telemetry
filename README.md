@@ -1,6 +1,6 @@
 # Elite Dangerous Telemetry (`ed-telemetry`)
 
-**Version:** `v1.0.0` (Beta - Host Testing Candidate)
+**Version:** `v1.0.1` (Beta - Host Testing Candidate)
 
 A modern, decoupled Elite Dangerous telemetry daemon, persistent event store, and multi-adapter interface (CLI, HTTP REST, Server-Sent Events) engineered strictly according to Hexagonal Architecture (Ports and Adapters).
 
@@ -78,7 +78,7 @@ Requires **Python 3.11+** with **zero runtime third-party dependencies** (or use
 ### Option A: Install via Pip Directly from GitHub (Operators / Developers)
 Install the latest release directly into your active Python environment or toolchain:
 ```bash
-pip install git+https://github.com/mnaatjes/ed-telemetry.git@v1.0.0
+pip install git+https://github.com/mnaatjes/ed-telemetry.git@v1.0.1
 ```
 
 ### Option B: Isolated CLI Execution via `pipx` (Recommended for Headless Systems & Steam Deck)
