@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-15
+
+### Added
+- Authored [ADR 0042](architecture/adr/0042_os_service_packaging_single_instance_and_discovery.md) and [SDD 0036](architecture/designs/0036_os_service_packaging_single_instance_and_discovery.md) for OS service packaging, single-instance guard, and LAN discovery (`#107`).
+- Implemented `SingleInstanceLock` PID guard in `src/ed_telemetry/bootstrap/lockfile.py`.
+- Implemented OS service lifecycle CLI (`install_service`, `control_service` for `systemd --user` and Windows `schtasks`, defaulting to `ed-telemetry --no-auth`) in `src/ed_telemetry/adapters/driving/cli/service.py`.
+- Expanded `/api/v1/system/health` and `/api/v1/health` payloads to include `version` and `journal_dir` readiness.
+- Added cross-platform installer definitions in `packaging/linux/install.sh` and `packaging/windows/ed-telemetry.iss`.
+
 ## [0.12.1] - 2026-11-09
 
 ### Fixed
