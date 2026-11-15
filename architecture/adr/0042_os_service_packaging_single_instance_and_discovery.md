@@ -56,6 +56,17 @@ packaging/
 └── linux/     # systemd user unit template + .deb / AppImage / install.sh
 ```
 
+### 2.3 Documentation & API Contract Requirements (Post-Implementation)
+
+Upon completion of implementation, the following documentation and interface contracts must be updated:
+- **Diataxis Operator Documentation (`docs/`):**
+  - `docs/tutorials/`: Step-by-step quickstart for installing `ed-telemetry` on Windows and Linux.
+  - `docs/how-to/`: Guides for managing the background service (`ed-telemetry service ...`), configuring LAN binding (`--host 0.0.0.0`), and bundling `ed-telemetry` in downstream app installers.
+  - `docs/reference/`: CLI reference for `ed-telemetry service` subcommands, lockfile paths, and mDNS service type (`_ed-telemetry._tcp.local.`).
+  - `docs/explanation/`: Architectural overview of the single-producer / multi-consumer host daemon model.
+- **API Contracts (`architecture/api/`):**
+  - Update the OpenAPI YAML specification and API documentation to reflect the expanded `/api/v1/system/health` and `/api/v1/health` response schemas (`status`, `service`, `version`, `journal_dir`).
+
 ## 3. Consequences
 
 - **Positive:**
