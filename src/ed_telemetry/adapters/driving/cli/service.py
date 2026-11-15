@@ -31,7 +31,7 @@ def install_service(exec_start: str | None = None) -> list[str]:
 
     if exec_start is None:
         exe = shutil.which("ed-telemetry") or str(Path.home() / ".local" / "bin" / "ed-telemetry")
-        exec_start = f"{exe} serve --no-auth"
+        exec_start = f"{exe} serve"
 
     if sys.platform == "win32":
         cmd = [
