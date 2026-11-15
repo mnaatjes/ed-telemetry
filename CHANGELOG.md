@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.4] - 2026-11-09
+## [1.0.5] - 2026-11-15
+
+### Fixed
+- Resolved absolute executable path and passed `serve --no-auth` in `install_service()` to fix `systemd` `203/EXEC` startup failure (`#113`).
 
 ## [1.0.4] - 2026-11-15
 
