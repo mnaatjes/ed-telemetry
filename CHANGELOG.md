@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.1] - 2026-11-09
+## [1.0.2] - 2026-11-15
+
+### Fixed
+- Fixed PyInstaller `ImportError: attempted relative import with no known parent package` by adding `packaging/linux/entrypoint.py` and updating `packaging/linux/ed-telemetry.spec` (`#110`).
 
 ## [1.0.1] - 2026-11-15
 
