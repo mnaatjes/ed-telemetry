@@ -231,9 +231,16 @@ class TelemetryHttpHandler(BaseHTTPRequestHandler):
 
         # 1. System Health: /api/v1/system/health (Canonical) & /api/v1/health (Legacy)
         if path in ("", "/api/v1/health", "/api/v1/system/health"):
+            from ed_telemetry import __version__
+
             self._send_json(
                 200,
-                {"status": "ok", "service": "ed-telemetry"},
+                {
+                    "status": "ok",
+                    "service": "ed-telemetry",
+                    "version": __version__,
+                    "journal_dir": {"configured": True},
+                },
                 source="memory-buffer",
                 plane="system",
             )
