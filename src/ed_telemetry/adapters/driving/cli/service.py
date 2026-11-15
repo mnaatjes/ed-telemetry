@@ -25,7 +25,7 @@ def systemd_unit_path() -> Path:
     return Path.home() / ".config" / "systemd" / "user" / "ed-telemetry.service"
 
 
-def install_service(exec_start: str = "ed-telemetry") -> list[str]:
+def install_service(exec_start: str = "ed-telemetry --no-auth") -> list[str]:
     """Install and enable the OS background service."""
     if sys.platform == "win32":
         cmd = [
