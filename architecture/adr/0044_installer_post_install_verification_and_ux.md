@@ -19,8 +19,9 @@ The `v1.0.6` installer successfully installs `ed-telemetry` and registers the OS
 
 Enhance the installer and post-install UX with three standard verification and reporting steps:
 
-1. **Automated Post-Install Health Check:**
+1. **Automated Post-Install Health Check & Infrastructure Readiness:**
    - Poll `http://127.0.0.1:8080/api/v1/system/health` (e.g., up to 5–10 retries at 0.5s intervals) after `ed-telemetry service install`.
+   - Expand `/api/v1/system/health` to report `"db": {"ok": bool}` so the installer can surface SQLite initialization status without touching the database directly.
    - Fail loudly with service log instructions (`journalctl --user -u ed-telemetry.service`) if the daemon does not become healthy.
 2. **Journal Directory Status Reporting (No Installer-Side Discovery):**
    - **Journal path discovery must NOT live in the installer itself** (`ed-telemetry` owns cross-platform journal discovery at runtime).
