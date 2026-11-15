@@ -25,8 +25,14 @@ def systemd_unit_path() -> Path:
     return Path.home() / ".config" / "systemd" / "user" / "ed-telemetry.service"
 
 
-def install_service(exec_start: str = "ed-telemetry --no-auth") -> list[str]:
+def install_service(exec_start: str | None = None) -> list[str]:
     """Install and enable the OS background service."""
+    import shutil
+
+    if exec_start is None:
+        exe = shutil.which("ed-telemetry") or str(Path.home() / ".local" / "bin" / "ed-telemetry")
+        exec_start = f"{exe} serve --no-auth"
+
     if sys.platform == "win32":
         cmd = [
             "schtasks",
