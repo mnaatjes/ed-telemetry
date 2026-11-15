@@ -2,7 +2,7 @@
 """PyInstaller spec for standalone Linux ed-telemetry executable."""
 
 a = Analysis(
-    ["../../src/ed_telemetry/bootstrap/container.py"],
+    ["entrypoint.py"],
     pathex=["../../src"],
     binaries=[],
     datas=[],
