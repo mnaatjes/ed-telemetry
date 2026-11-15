@@ -311,6 +311,14 @@ class CliTelemetryAdapter:
         )
         tail_parser.add_argument("--json", action="store_true", help="Format output as JSON")
 
+        # Subcommand: service (OS background service lifecycle)
+        service_parser = subparsers.add_parser("service", help="Manage OS background service")
+        service_parser.add_argument(
+            "service_action",
+            choices=["install", "start", "stop", "status", "uninstall"],
+            help="Service lifecycle action",
+        )
+
         return parser
 
     def run(self, argv: Sequence[str] | None = None) -> tuple[int, dict[str, Any]]:
@@ -337,6 +345,15 @@ class CliTelemetryAdapter:
 
         if args.subcommand == "db":
             return self._handle_db(args)
+
+        if args.subcommand == "service":
+            from .service import control_service, install_service
+
+            if args.service_action == "install":
+                cmd = install_service()
+            else:
+                cmd = control_service(args.service_action)
+            return 0, {"status": "ok", "action": args.service_action, "command": cmd}
 
         if args.subcommand in ("stream", "tail"):
             return self._handle_stream(args)
