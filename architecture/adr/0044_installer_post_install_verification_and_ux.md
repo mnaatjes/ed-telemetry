@@ -22,9 +22,9 @@ Enhance the installer and post-install UX with three standard verification and r
 1. **Automated Post-Install Health Check:**
    - Poll `http://127.0.0.1:8080/api/v1/system/health` (e.g., up to 5–10 retries at 0.5s intervals) after `ed-telemetry service install`.
    - Fail loudly with service log instructions (`journalctl --user -u ed-telemetry.service`) if the daemon does not become healthy.
-2. **Journal Directory Discovery & Reporting:**
-   - Report whether the Elite Dangerous journal/snapshot directory was auto-discovered and readable (surfaced via `/api/v1/system/health` `journal_dir` metadata).
-   - If not found (e.g., custom Steam/Proton prefix or Elite Dangerous not yet launched), display a non-fatal warning explaining how to set `ED_JOURNAL_DIR` or `--journal-dir`.
+2. **Journal Directory Status Reporting (No Installer-Side Discovery):**
+   - **Journal path discovery must NOT live in the installer itself** (`ed-telemetry` owns cross-platform journal discovery at runtime).
+   - The installer simply reads the `journal_dir` status returned by `/api/v1/system/health` and surfaces it to the user, printing a non-fatal warning with `ED_JOURNAL_DIR` / `--journal-dir` guidance if not yet configured.
 3. **Clear Post-Install Summary Banner:**
    - Display installed version, active local (`http://127.0.0.1:8080`) and LAN (`http://<lan-ip>:8080`) URLs, security mode (`--allow-insecure` notice), and quick management commands (`status`, `logs`, `uninstall`).
 
