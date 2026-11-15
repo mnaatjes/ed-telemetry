@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.3] - 2026-11-09
+## [1.0.4] - 2026-11-15
+
+### Fixed
+- Made `packaging/linux/install.sh` idempotent across tarball and `uv tool` installs (`rm -f` before extraction + `--force` on `uv tool install`) (`#112`).
 
 ## [1.0.3] - 2026-11-15
 
